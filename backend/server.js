@@ -1,0 +1,360 @@
+/**
+ * DevOps Monitoring Dashboard - Enhanced Backend
+ * Real-time server monitoring with alerting
+ */
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const http = require('http');
+const WebSocket = require('ws');
+
+const Metric = require('./models/Metric');
+const Server = require('./models/Server');
+const Alert = require('./models/Alert');
+const Threshold = require('./models/Threshold');
+
+const StatusService = require('./services/statusService');
+const AlertService = require('./services/alertService');
+const CpuAlertService = require('./services/cpuAlertService');
+const EmailService = require('./services/emailService');
+
+const serverRoutes = require('./routes/servers');
+const alertRoutes = require('./routes/alerts');
+const metricsRoutes = require('./routes/metrics');
+
+// Initialize Express
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// MongoDB Connection
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pfe-monitoring';
+
+mongoose.connect(MONGODB_URI).then(() => {
+  console.log('[Backend] Connected to MongoDB');
+  initializeDefaultThresholds();
+}).catch(err => {
+  console.error('[Backend] MongoDB connection error:', err);
+  process.exit(1);
+});
+
+// Initialize default thresholds if not exist
+async function initializeDefaultThresholds() {
+  try {
+    const count = await Threshold.countDocuments();
+    if (count === 0) {
+      const defaults = [
+        { metric_name: 'cpu', warning_level: 70, critical_level: 90 },
+        { metric_name: 'ram', warning_level: 80, critical_level: 95 },
+        { metric_name: 'disk', warning_level: 85, critical_level: 95 }
+      ];
+      await Threshold.insertMany(defaults);
+      console.log('[Backend] Default thresholds initialized');
+    }
+  } catch (error) {
+    console.error('[Backend] Error initializing thresholds:', error);
+  }
+}
+
+// WebSocket connection handler
+const connectedClients = new Set();
+
+wss.on('connection', (ws) => {
+  console.log('[WebSocket] New client connected');
+  connectedClients.add(ws);
+
+  ws.on('close', () => {
+    console.log('[WebSocket] Client disconnected');
+    connectedClients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    console.error('[WebSocket] Error:', error);
+  });
+});
+
+// Broadcast to all connected WebSocket clients
+function broadcastUpdate(data) {
+  const message = JSON.stringify({
+    type: 'update',
+    timestamp: new Date(),
+    data
+  });
+
+  connectedClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Health check
+app.get('/', async (req, res) => {
+  try {
+    const serverCount = await Server.countDocuments();
+    const metricCount = await Metric.countDocuments();
+    const activeAlerts = await Alert.countDocuments({ status: 'ACTIVE' });
+    
+    res.json({
+      status: 'healthy',
+      timestamp: new Date(),
+      database: 'connected',
+      servers_monitored: serverCount,
+      total_metrics: metricCount,
+      active_alerts: activeAlerts,
+      version: '2.0.0'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message
+    });
+  }
+});
+
+// Receive metrics from agent
+app.post('/metrics', async (req, res) => {
+  try {
+    const metric = req.body;
+
+    // Prepare metric object - normalize server_id and serverId
+    const serverId = metric.server_id || metric.serverId;
+    
+    // Validate required fields
+    if (!serverId || metric.cpu_percent === undefined) {
+      return res.status(400).json({ error: 'Missing required fields: server_id and cpu_percent' });
+    }
+
+    // Normalize the metric object
+    metric.server_id = serverId;
+    metric.serverId = serverId;
+
+    // Find or create server
+    let server = await Server.findOne({ server_id: serverId });
+    if (!server) {
+      server = new Server({
+        server_id: serverId,
+        name: metric.server_name || serverId,
+        location: metric.location || 'Unknown'
+      });
+      await server.save();
+      console.log(`[Backend] New server registered: ${serverId}`);
+    }
+
+    // Calculate status
+    const statusResult = await StatusService.calculateStatus(metric);
+    metric.status = statusResult.status;
+
+    // Save metric to database
+    const newMetric = new Metric(metric);
+    await newMetric.save();
+
+    // Update server's last metric time
+    server.last_metric_time = new Date();
+    server.status = statusResult.status;
+    server.current_metrics = {
+      cpu_percent: metric.cpu_percent,
+      ram_percent: metric.ram_percent,
+      disk_percent: metric.disk_percent
+    };
+    await server.save();
+
+    // Check and generate alerts
+    await AlertService.checkAndGenerateAlerts(metric, server, statusResult);
+    
+    // Check CPU and send email alerts if needed
+    await CpuAlertService.checkCpuAndAlert(metric, 'mariemchaabani39@gmail.com');
+
+    // Broadcast update to WebSocket clients
+    broadcastUpdate({
+      server_id: metric.server_id,
+      serverId: metric.serverId,
+      server_name: metric.server_name,
+      status: metric.status,
+      metrics: {
+        cpu: metric.cpu_percent,
+        ram: metric.ram_percent,
+        disk: metric.disk_percent
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Metric received',
+      status: metric.status,
+      timestamp: new Date()
+    });
+
+  } catch (error) {
+    console.error('[Backend] Error saving metric:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API Routes
+app.use('/api/servers', serverRoutes);
+app.use('/api/alerts', alertRoutes);
+app.use('/api/metrics', metricsRoutes);
+
+// Dashboard summary endpoint
+app.get('/api/dashboard/summary', async (req, res) => {
+  try {
+    const servers = await Server.find({ is_active: true });
+    const healthSummary = await StatusService.getHealthSummary(servers);
+    const alertStats = await Alert.aggregate([
+      {
+        $match: { status: 'ACTIVE' }
+      },
+      {
+        $group: {
+          _id: '$severity',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const metrics24h = await Metric.countDocuments({
+      timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    res.json({
+      health: healthSummary,
+      alerts: {
+        total: alertStats.reduce((sum, item) => sum + item.count, 0),
+        by_severity: Object.fromEntries(
+          alertStats.map(item => [item._id, item.count])
+        )
+      },
+      metrics_24h: metrics24h,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    console.error('[Backend] Error getting dashboard summary:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Thresholds management
+app.get('/api/thresholds', async (req, res) => {
+  try {
+    const thresholds = await Threshold.find();
+    res.json(thresholds);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/thresholds/:metric_name', async (req, res) => {
+  try {
+    const { metric_name } = req.params;
+    const { warning_level, critical_level } = req.body;
+
+    const threshold = await Threshold.findOneAndUpdate(
+      { metric_name },
+      { warning_level, critical_level },
+      { new: true }
+    );
+
+    res.json(threshold);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Alert endpoints
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const { serverId, limit = 100 } = req.query;
+    
+    const query = serverId ? { serverId } : {};
+    const alerts = await Alert.find(query)
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    res.json(alerts);
+  } catch (error) {
+    console.error('[Backend] Error fetching alerts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/alerts/:serverId', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const { limit = 50 } = req.query;
+    
+    const alerts = await CpuAlertService.getAlerts(serverId, parseInt(limit));
+    res.json(alerts);
+  } catch (error) {
+    console.error('[Backend] Error fetching server alerts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/alerts/stats/summary', async (req, res) => {
+  try {
+    const stats = await CpuAlertService.getAlertStats();
+    const recent = await CpuAlertService.getRecentAlerts(10);
+    
+    res.json({
+      summary: stats,
+      recent
+    });
+  } catch (error) {
+    console.error('[Backend] Error getting alert stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Periodic tasks
+setInterval(async () => {
+  try {
+    await AlertService.checkAgentConnectivity();
+  } catch (error) {
+    console.error('[Backend] Error in connectivity check:', error);
+  }
+}, 15000); // Check every 15 seconds
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('[Backend] Error:', err);
+  res.status(500).json({ error: err.message });
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`
+[OK] DevOps Monitoring Dashboard - Backend
+API Server:       http://localhost:${PORT}
+WebSocket:        ws://localhost:${PORT}
+Database:         MongoDB
+Status:           Running
+  `);
+
+  console.log('Available endpoints:');
+  console.log('  GET  /                              - Health check');
+  console.log('  POST /metrics                       - Receive metrics from agents');
+  console.log('  GET  /api/servers                   - List all servers');
+  console.log('  GET  /api/servers/:id               - Get server details');
+  console.log('  GET  /api/servers/:id/metrics       - Get server metrics');
+  console.log('  GET  /api/servers/:id/alerts        - Get server alerts');
+  console.log('  GET  /api/metrics/latest            - Get latest metrics per server (grouped)');
+  console.log('  GET  /api/metrics/history/:serverId - Get metric history for specific server');
+  console.log('  GET  /api/metrics/stats             - Get aggregated stats across servers');
+  console.log('  GET  /api/alerts                    - List all alerts');
+  console.log('  PUT  /api/alerts/:id/acknowledge    - Acknowledge alert');
+  console.log('  GET  /api/dashboard/summary         - Dashboard summary');
+  console.log('  GET  /api/thresholds                - Get thresholds');
+  console.log('');
+});
+
+module.exports = { app, wss };
