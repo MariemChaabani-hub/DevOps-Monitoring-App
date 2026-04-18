@@ -1,10 +1,10 @@
 /**
  * Alert Service
  * Checks CPU thresholds and manages alerts
- * Rules:
- *   - CPU > 80% → WARNING
- *   - CPU > 90% → CRITICAL
- *   - Avoid duplicate alerts (1 minute cooldown)
+ * Production Rules:
+ *   - CPU > 80% → WARNING alert
+ *   - CPU > 90% → CRITICAL alert (triggers email notification)
+ *   - Auto-resolves when CPU returns to normal
  */
 
 const Alert = require('../models/Alert');
@@ -12,22 +12,26 @@ const EmailService = require('./emailService');
 
 class AlertService {
   /**
-   * Check if recent alert exists for this server and type
-   * (within last 60 seconds)
+   * Check if an active (unresolved) alert exists for this server and type
+   * Only skip if alert is already ACTIVE - allow new alerts for resolved cases
    */
-  static async hasRecentAlert(serverId, type) {
+  static async hasActiveAlert(serverId, type) {
     try {
-      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
-      
-      const recentAlert = await Alert.findOne({
+      const activeAlert = await Alert.findOne({
         serverId,
         type,
-        timestamp: { $gte: oneMinuteAgo }
+        status: 'ACTIVE'  // Only check for ACTIVE alerts
       });
 
-      return !!recentAlert;
+      if (activeAlert) {
+        console.log(`[AlertService] ✓ Found existing ACTIVE ${type} alert for ${serverId} (created ${new Date(activeAlert.timestamp).toISOString()})`);
+        return true;
+      }
+      
+      console.log(`[AlertService] ✓ No existing ACTIVE ${type} alert for ${serverId} - will create new alert`);
+      return false;
     } catch (error) {
-      console.error('[AlertService] Error checking recent alert:', error);
+      console.error('[AlertService] Error checking active alert:', error);
       return false;
     }
   }
@@ -44,6 +48,7 @@ class AlertService {
       let alertType = null;
       let threshold = null;
 
+      // Production thresholds
       if (cpuPercent > 90) {
         alertType = 'CRITICAL';
         threshold = 90;
@@ -54,13 +59,34 @@ class AlertService {
 
       // No alert needed if CPU is OK
       if (!alertType) {
+        // Auto-resolve any ACTIVE CRITICAL alerts when CPU returns to normal
+        const resolvedCritical = await Alert.updateMany(
+          { serverId, type: 'CRITICAL', status: 'ACTIVE' },
+          { status: 'RESOLVED', resolvedAt: new Date() }
+        );
+        
+        if (resolvedCritical.modifiedCount > 0) {
+          console.log(`[AlertService] ✓ Auto-resolved ${resolvedCritical.modifiedCount} CRITICAL alert(s) for ${serverId} - CPU returned to normal (${cpuPercent}%)`);
+        }
+
+        // Auto-resolve any ACTIVE WARNING alerts when CPU returns to normal
+        const resolvedWarning = await Alert.updateMany(
+          { serverId, type: 'WARNING', status: 'ACTIVE' },
+          { status: 'RESOLVED', resolvedAt: new Date() }
+        );
+        
+        if (resolvedWarning.modifiedCount > 0) {
+          console.log(`[AlertService] ✓ Auto-resolved ${resolvedWarning.modifiedCount} WARNING alert(s) for ${serverId} - CPU returned to normal (${cpuPercent}%)`);
+        }
+
         return null;
       }
 
-      // Check if we already sent alert recently
-      const hasRecent = await this.hasRecentAlert(serverId, alertType);
-      if (hasRecent) {
-        console.log(`[AlertService] Skipping duplicate alert for ${serverId} - ${alertType}`);
+      // Check if we already have an ACTIVE alert for this type
+      const hasActive = await this.hasActiveAlert(serverId, alertType);
+      if (hasActive) {
+        console.log(`[AlertService] ⊘ Skipping duplicate: ACTIVE ${alertType} alert already exists for ${serverId}`);
+        console.log(`[AlertService]   (Will create new alert only if current alert is RESOLVED)`);
         return null;
       }
 
@@ -68,6 +94,8 @@ class AlertService {
       const alertDoc = new Alert({
         serverId,
         type: alertType,
+        severity: alertType,  // Map type to severity for frontend compatibility
+        status: 'ACTIVE',     // New alerts are always ACTIVE
         metric: 'cpu_percent',
         value: cpuPercent,
         threshold,
@@ -75,9 +103,13 @@ class AlertService {
       });
 
       await alertDoc.save();
-      console.log(`[AlertService] Alert saved: ${serverId} - ${alertType} (CPU: ${cpuPercent}%)`);
+      console.log(`\n[AlertService] ✅ ALERT SAVED TO DATABASE`);
+      console.log(`[AlertService]    ID: ${alertDoc._id}`);
+      console.log(`[AlertService]    Server: ${serverId}`);
+      console.log(`[AlertService]    Severity: ${alertDoc.severity} | Status: ${alertDoc.status}`);
+      console.log(`[AlertService]    CPU: ${cpuPercent}% (threshold: ${threshold}%)`);
+      console.log(`[AlertService]    Time: ${new Date(alertDoc.timestamp).toISOString()}\n`);
 
-      // Send email notification
       const emailData = {
         serverId,
         type: alertType,
@@ -95,6 +127,7 @@ class AlertService {
         alertDoc.emailSent = true;
         alertDoc.emailSentAt = new Date();
         await alertDoc.save();
+        console.log(`[AlertService] Email notification sent and logged in alert record`);
       }
 
       return alertDoc;

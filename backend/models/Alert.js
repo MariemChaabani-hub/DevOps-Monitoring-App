@@ -12,6 +12,18 @@ const AlertSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  severity: {
+    type: String,
+    enum: ['WARNING', 'CRITICAL'],
+    required: true,
+    index: true
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'ACKNOWLEDGED', 'RESOLVED'],
+    default: 'ACTIVE',
+    index: true
+  },
   metric: {
     type: String,
     required: true,
@@ -25,14 +37,18 @@ const AlertSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  message: {
+    type: String,
+    required: false
+  },
   timestamp: {
     type: Date,
     default: Date.now,
     index: true
   },
-  message: {
-    type: String,
-    required: false
+  resolvedAt: {
+    type: Date,
+    default: null  // Set when alert is resolved
   },
   emailSent: {
     type: Boolean,
@@ -49,5 +65,6 @@ const AlertSchema = new mongoose.Schema({
 
 // Index for efficient lookups
 AlertSchema.index({ serverId: 1, type: 1, timestamp: -1 });
+AlertSchema.index({ status: 1, severity: 1, timestamp: -1 });
 
 module.exports = mongoose.model('Alert', AlertSchema);

@@ -15,12 +15,19 @@ router.get('/', async (req, res) => {
     const query = {};
     if (status) query.status = status;
     if (severity) query.severity = severity;
-    if (server_id) query.server_id = server_id;
+    if (server_id) query.serverId = server_id;  // Map server_id to serverId
+
+    console.log('[Alerts API] GET /api/alerts - Query:', query);
 
     const alerts = await Alert.find(query)
-      .sort({ severity: -1, created_at: -1 })
+      .sort({ severity: -1, timestamp: -1 })
       .limit(parseInt(limit))
       .exec();
+
+    console.log(`[Alerts API] Found ${alerts.length} alerts matching query`);
+    if (alerts.length > 0) {
+      console.log('[Alerts API] Sample alert:', alerts[0]);
+    }
 
     res.json(alerts);
   } catch (error) {
