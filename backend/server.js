@@ -12,20 +12,24 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const http = require('http');
 const WebSocket = require('ws');
+const cron = require('node-cron');
 
 const Metric = require('./models/Metric');
 const Server = require('./models/Server');
 const Alert = require('./models/Alert');
 const Threshold = require('./models/Threshold');
+const Backup = require('./models/Backup');
 
 const StatusService = require('./services/statusService');
 const AlertService = require('./services/alertService');
 const CpuAlertService = require('./services/cpuAlertService');
 const EmailService = require('./services/emailService');
+const BackupService = require('./services/backupService');
 
 const serverRoutes = require('./routes/servers');
 const alertRoutes = require('./routes/alerts');
 const metricsRoutes = require('./routes/metrics');
+const backupRoutes = require('./routes/backups');
 
 // Initialize Express
 const app = express();
@@ -43,6 +47,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pfe-mo
 mongoose.connect(MONGODB_URI).then(() => {
   console.log('[Backend] Connected to MongoDB');
   initializeDefaultThresholds();
+  initializeDailyBackupCheck();
 }).catch(err => {
   console.error('[Backend] MongoDB connection error:', err);
   process.exit(1);
@@ -64,6 +69,25 @@ async function initializeDefaultThresholds() {
   } catch (error) {
     console.error('[Backend] Error initializing thresholds:', error);
   }
+}
+
+// Initialize daily backup check cron job
+function initializeDailyBackupCheck() {
+  // Schedule job to run every day at 02:00 AM
+  // Cron format: minute hour day month dayOfWeek
+  // 0 2 * * * = every day at 02:00 AM
+  const task = cron.schedule('0 2 * * *', async () => {
+    try {
+      console.log('[Cron Job] Executing daily backup check at', new Date().toLocaleString());
+      await BackupService.runDailyBackupCheck();
+      console.log('[Cron Job] Daily backup check completed successfully');
+    } catch (error) {
+      console.error('[Cron Job] Error executing daily backup check:', error);
+    }
+  });
+
+  console.log('[Backend] Daily backup check scheduled for 02:00 AM every day');
+  return task;
 }
 
 // WebSocket connection handler
@@ -205,6 +229,7 @@ app.post('/metrics', async (req, res) => {
 app.use('/api/servers', serverRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/metrics', metricsRoutes);
+app.use('/api/backups', backupRoutes);
 
 // Dashboard summary endpoint
 app.get('/api/dashboard/summary', async (req, res) => {
