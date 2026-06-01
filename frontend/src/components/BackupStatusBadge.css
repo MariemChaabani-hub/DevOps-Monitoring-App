@@ -1,0 +1,172 @@
+/**
+ * Backup Status Badge Component Styles
+ */
+
+.backup-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+  cursor: default;
+  user-select: none;
+}
+
+/* Badge Icon */
+.badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 900;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Size Variants */
+.backup-status-badge.size-small {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.backup-status-badge.size-small .badge-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+}
+
+.backup-status-badge.size-large {
+  padding: 12px 20px;
+  font-size: 15px;
+  border-radius: 25px;
+}
+
+.backup-status-badge.size-large .badge-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+}
+
+/* OK Status - Green */
+.backup-status-badge.badge-ok {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border: 2px solid #4caf50;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.15);
+}
+
+.backup-status-badge.badge-ok .badge-icon {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: #2e7d32;
+}
+
+.backup-status-badge.badge-ok:hover {
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.25);
+  transform: translateY(-2px);
+}
+
+/* FAILED Status - Red */
+.backup-status-badge.badge-failed {
+  background-color: #ffebee;
+  color: #c62828;
+  border: 2px solid #f44336;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.15);
+}
+
+.backup-status-badge.badge-failed .badge-icon {
+  background-color: rgba(244, 67, 54, 0.15);
+  color: #c62828;
+}
+
+.backup-status-badge.badge-failed:hover {
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.25);
+  transform: translateY(-2px);
+}
+
+.backup-status-badge.badge-failed .badge-icon {
+  animation: pulse-failed 2s infinite;
+}
+
+@keyframes pulse-failed {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* LATE Status - Orange */
+.backup-status-badge.badge-late {
+  background-color: #fff3e0;
+  color: #e65100;
+  border: 2px solid #ff9800;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.15);
+}
+
+.backup-status-badge.badge-late .badge-icon {
+  background-color: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+}
+
+.backup-status-badge.badge-late:hover {
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.25);
+  transform: translateY(-2px);
+}
+
+.backup-status-badge.badge-late .badge-icon {
+  animation: pulse-late 1s infinite;
+}
+
+@keyframes pulse-late {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* UNKNOWN Status - Gray */
+.backup-status-badge.badge-unknown {
+  background-color: #f5f5f5;
+  color: #666;
+  border: 2px solid #d0d0d0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.backup-status-badge.badge-unknown .badge-icon {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #999;
+}
+
+/* Text */
+.badge-text {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Pulse Animation for Status Updates */
+@keyframes status-update {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.backup-status-badge.updating {
+  animation: status-update 0.6s ease-out;
+}

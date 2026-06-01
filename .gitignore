@@ -1,0 +1,12 @@
+node_modules/ 
+backend/node_modules/ 
+frontend/node_modules/ 
+mobile-app/node_modules/ 
+backend/.env 
+*.log 
+dist/ 
+build/ 
+node_modules/ 
+agent/agent.log 
+backend/.env 
+agent/agent.log 

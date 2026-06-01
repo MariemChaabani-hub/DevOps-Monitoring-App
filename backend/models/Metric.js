@@ -89,7 +89,7 @@ const MetricSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['OK', 'WARNING', 'CRITICAL'],
+    enum: ['OK', 'WARNING', 'CRITICAL', 'OFFLINE'],
     default: 'OK'
   },
   location: {

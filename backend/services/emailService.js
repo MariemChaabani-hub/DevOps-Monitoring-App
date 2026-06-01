@@ -191,6 +191,172 @@ class EmailService {
   }
 
   /**
+   * Send CRITICAL backup failure alert email
+   */
+  async sendBackupAlertEmail(alertData) {
+    try {
+      const {
+        serverId,
+        type,
+        severity,
+        status,
+        duration,
+        size,
+        date,
+        message,
+        timestamp,
+        adminEmail
+      } = alertData;
+
+      const timeStr = new Date(timestamp).toISOString();
+      const dateStr = new Date(date).toISOString();
+
+      // Only send real emails for CRITICAL alerts
+      if (severity !== 'CRITICAL') {
+        console.log(`[Email] Skipping non-CRITICAL backup alert (${severity}) - logging only`);
+        console.log(`  Server: ${serverId} | Status: ${status} | Message: ${message}`);
+        return { success: true, mode: 'demo', severity: severity, reason: 'non-critical' };
+      }
+
+      // If not configured, log to console instead
+      if (!this.isConfigured) {
+        console.log(`[Email] CRITICAL Backup Alert - DEMO MODE (real email disabled):`);
+        console.log(`  To: ${adminEmail}`);
+        console.log(`  Server: ${serverId}`);
+        console.log(`  Status: ${status}`);
+        console.log(`  Message: ${message}`);
+        console.log(`  Time: ${timeStr}`);
+        return { success: true, mode: 'demo', severity: 'CRITICAL' };
+      }
+
+      // Determine alert emoji and color based on type
+      const isLate = type === 'BACKUP_LATE';
+      const alertEmoji = isLate ? '⏰' : '✕';
+      const headerColor = isLate ? '#ff9800' : '#d32f2f';
+      const statusText = isLate ? 'Missing or Late' : 'Failed';
+
+      // Send real email via Gmail SMTP
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: adminEmail,
+        subject: `🚨 [CRITICAL] Backup ${statusText} on Server ${serverId} - IMMEDIATE ACTION REQUIRED`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <!-- Header -->
+            <div style="background-color: ${headerColor}; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
+              <h1 style="margin: 0; font-size: 24px;">🚨 CRITICAL ALERT - BACKUP ${isLate ? 'MISSING/LATE' : 'FAILURE'}</h1>
+              <p style="margin: 10px 0 0 0; font-size: 14px;">Data Protection System Requires Immediate Attention</p>
+            </div>
+
+            <!-- Main Content -->
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 5px 5px;">
+              
+              <!-- Alert Details -->
+              <h2 style="color: ${headerColor}; margin-top: 0;">Alert Details</h2>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; width: 30%;">Server:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${serverId}</td>
+                </tr>
+                <tr style="background-color: #fafafa;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Status:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;"><span style="color: ${headerColor}; font-weight: bold; font-size: 18px;">${alertEmoji} ${statusText}</span></td>
+                </tr>
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Time:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${dateStr}</td>
+                </tr>
+                ${status === 'FAILED' ? `
+                <tr style="background-color: #fafafa;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Duration:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${duration}s</td>
+                </tr>
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Size:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${size} MB</td>
+                </tr>
+                ` : ''}
+                <tr style="background-color: #fafafa;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Alert Time:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${timeStr}</td>
+                </tr>
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Severity:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;"><span style="background-color: ${headerColor}; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold;">CRITICAL</span></td>
+                </tr>
+              </table>
+
+              <!-- Problem Description -->
+              <h2 style="color: ${headerColor}; margin-top: 25px;">What is the Problem?</h2>
+              <p style="background-color: ${isLate ? '#fff3cd' : '#ffebee'}; border-left: 4px solid ${headerColor}; padding: 12px; border-radius: 3px; margin: 10px 0;">
+                <strong>${isLate ? 'Backup Missing or Late:' : 'Backup Failed:'}</strong> 
+                ${isLate 
+                  ? `Today's backup has not been completed. Your data is not being protected and you are at risk of data loss.`
+                  : `The backup process failed to complete successfully. Your latest data has not been backed up and you are at risk of data loss.`
+                }
+              </p>
+
+              <!-- Dangers & Impact -->
+              <h2 style="color: ${headerColor}; margin-top: 25px;">⚠️ Dangers Threatening Your Data</h2>
+              <ul style="background-color: ${isLate ? '#fff3cd' : '#ffebee'}; border-left: 4px solid ${headerColor}; padding: 15px 15px 15px 40px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
+                <li><strong>Data Loss Risk:</strong> Without a successful backup, any data loss is permanent and unrecoverable</li>
+                <li><strong>System Failure Impact:</strong> In case of hardware failure, you have no recovery mechanism</li>
+                <li><strong>Ransomware Vulnerability:</strong> You have no clean backup to restore from if attacked</li>
+                <li><strong>Business Continuity:</strong> Your disaster recovery plan is compromised</li>
+                <li><strong>Compliance Issues:</strong> Regulatory requirements for data backup may be violated</li>
+                <li><strong>Recovery Time:</strong> Recovery will be slow or impossible if backups are outdated</li>
+              </ul>
+
+              <!-- Actions to Take -->
+              <h2 style="color: #1565c0; margin-top: 25px;">✅ Recommended Actions (Priority Order)</h2>
+              <ol style="background-color: #e3f2fd; border-left: 4px solid #1565c0; padding: 15px 15px 15px 40px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
+                <li><strong>Investigate Now:</strong> Check backup service logs to identify the root cause</li>
+                <li><strong>Verify Storage:</strong> Ensure backup storage has sufficient disk space</li>
+                <li><strong>Check Network:</strong> Verify network connectivity to backup destination</li>
+                <li><strong>Restart Service:</strong> Try restarting the backup service/job</li>
+                <li><strong>Manual Backup:</strong> Perform an immediate manual backup as a temporary solution</li>
+                <li><strong>Review Logs:</strong> Check system and application logs for errors or warnings</li>
+              </ol>
+
+              <!-- Key Metrics -->
+              <h2 style="color: #1565c0; margin-top: 25px;">📊 Backup System Health</h2>
+              <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+                <tr style="background-color: #fff9c4;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Status:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd; color: ${headerColor};"><strong>${alertEmoji} ${statusText}</strong></td>
+                </tr>
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Risk Level:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd; color: ${headerColor};"><strong>🔴 VERY HIGH</strong></td>
+                </tr>
+              </table>
+
+              <!-- Footer -->
+              <hr style="border: none; border-top: 2px solid #ddd; margin: 25px 0;">
+              <p style="color: #666; font-size: 13px; text-align: center; margin: 15px 0 0 0;">
+                <strong>This is an automated CRITICAL alert</strong> from your DevOps Monitoring System<br>
+                <strong>Data protection is critical:</strong> Address this immediately<br>
+                <a href="http://localhost:3000/backups" style="color: #1565c0; text-decoration: none;">View Backup Dashboard →</a>
+              </p>
+            </div>
+          </div>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`[Email] ✓ CRITICAL backup alert email sent successfully`);
+      console.log(`  To: ${adminEmail} | Server: ${serverId} | Status: ${statusText} | Message ID: ${info.messageId}`);
+      return { success: true, mode: 'real', severity: 'CRITICAL', messageId: info.messageId };
+
+    } catch (error) {
+      console.error(`[Email] ✗ FAILED to send CRITICAL backup alert email`);
+      console.error(`  Error: ${error.message}`);
+      console.error(`  This could be due to: incorrect credentials, Gmail security settings, or network issues`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Send test email to verify Gmail SMTP configuration
    */
   async sendTestEmail(testEmail) {
@@ -226,6 +392,132 @@ class EmailService {
       console.error(`  2. Use Gmail App Password, not your regular password`);
       console.error(`  3. Enable 'Less secure app access' if using regular Gmail password`);
       console.error(`  4. Check Gmail security settings: https://myaccount.google.com/security`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send audit notification email
+   */
+  async sendAuditNotificationEmail(auditData) {
+    try {
+      const {
+        action,
+        target,
+        admin_email,
+        server_id,
+        result,
+        timestamp,
+        details
+      } = auditData;
+
+      const timeStr = new Date(timestamp).toLocaleString();
+
+      // If not configured, log to console instead
+      if (!this.isConfigured) {
+        console.log(`[Email] Audit Notification - DEMO MODE (real email disabled):`);
+        console.log(`  To: ${admin_email}`);
+        console.log(`  Action: ${action} on ${target}`);
+        console.log(`  Server: ${server_id}`);
+        console.log(`  Result: ${result}`);
+        console.log(`  Time: ${timeStr}`);
+        return { success: true, mode: 'demo', type: 'AUDIT' };
+      }
+
+      // Send real email via Gmail SMTP
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: admin_email,
+        subject: `🔐 [AUDIT] ${action} on ${target} - ${result}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <!-- Header -->
+            <div style="background-color: #2e7d32; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
+              <h1 style="margin: 0; font-size: 24px;">🔐 AUDIT LOG - Remote Action</h1>
+              <p style="margin: 10px 0 0 0; font-size: 14px;">Administrative action performed on server infrastructure</p>
+            </div>
+
+            <!-- Main Content -->
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 5px 5px;">
+              
+              <!-- Action Details -->
+              <h2 style="color: #2e7d32; margin-top: 0;">Action Details</h2>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; width: 30%;">Action:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${action}</td>
+                </tr>
+                <tr style="background-color: #fafafa;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Target:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${target}</td>
+                </tr>
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Server:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${server_id}</td>
+                </tr>
+                <tr style="background-color: #fafafa;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Result:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">
+                    <span style="background-color: ${result === 'SUCCESS' ? '#4caf50' : '#f44336'}; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold;">
+                      ${result}
+                    </span>
+                  </td>
+                </tr>
+                <tr style="background-color: white;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Time:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${timeStr}</td>
+                </tr>
+                ${details ? `
+                <tr style="background-color: #fafafa;">
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Details:</td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">${details}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              <!-- Security Information -->
+              <h2 style="color: #1565c0; margin-top: 25px;">🔒 Security Information</h2>
+              <div style="background-color: #e3f2fd; border-left: 4px solid #1565c0; padding: 15px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
+                <p><strong>✅ Authenticated Administrator:</strong> ${admin_email}</p>
+                <p><strong>📝 Action Logged:</strong> All remote actions are recorded for audit purposes</p>
+                <p><strong>🔐 Secure Protocol:</strong> Action performed through authenticated API</p>
+                <p><strong>📊 Monitoring Active:</strong> System health monitoring continues</p>
+              </div>
+
+              <!-- Important Notice -->
+              <h2 style="color: #f57c00; margin-top: 25px;">⚠️ Important Notice</h2>
+              <div style="background-color: #fff3cd; border-left: 4px solid #f57c00; padding: 15px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
+                <p><strong>🔍 This action has been:</strong></p>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                  <li><strong>Logged in audit trail</strong> with full details</li>
+                  <li><strong>Verified for authorization</strong> (admin permissions)</li>
+                  <li><strong>Monitored for impact</strong> on system performance</li>
+                  <li><strong>Documented for compliance</strong> and security review</li>
+                </ul>
+                <p><strong>📧 Email notification sent to:</strong> ${admin_email}</p>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <hr style="border: none; border-top: 2px solid #ddd; margin: 25px 0;">
+            <p style="color: #666; font-size: 13px; text-align: center; margin: 15px 0 0 0;">
+              <strong>This is an automated AUDIT notification</strong> from your DevOps Monitoring System<br>
+              <strong>Remote management action performed:</strong> ${action}<br>
+              <strong>For security purposes:</strong> This action has been logged and tracked<br>
+              <a href="http://localhost:3000/api/servers/${server_id}/audit-log" style="color: #1565c0; text-decoration: none;">View Audit Log →</a>
+            </p>
+          </div>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`[Email] ✓ Audit notification email sent successfully`);
+      console.log(`  To: ${admin_email} | Action: ${action} | Result: ${result} | Message ID: ${info.messageId}`);
+      return { success: true, mode: 'real', type: 'AUDIT', messageId: info.messageId };
+
+    } catch (error) {
+      console.error(`[Email] ✗ FAILED to send audit notification email`);
+      console.error(`  Error: ${error.message}`);
       return { success: false, error: error.message };
     }
   }

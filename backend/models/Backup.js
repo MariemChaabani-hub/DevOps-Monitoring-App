@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const BackupSchema = new mongoose.Schema({
-  server_id: {
+  serverId: {
     type: String,
     required: true,
     index: true
@@ -13,39 +13,32 @@ const BackupSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['success', 'failed', 'missing'],
+    enum: ['OK', 'FAILED', 'LATE'],
     required: true,
+    default: 'OK',
     index: true
-  },
-  size: {
-    type: Number,
-    required: true,
-    min: 0
   },
   duration: {
     type: Number,
     required: true,
-    min: 0
+    description: 'Duration in seconds'
   },
-  created_at: {
+  size: {
+    type: Number,
+    required: true,
+    description: 'Size in MB'
+  },
+  createdAt: {
     type: Date,
     default: Date.now,
     index: true
-  },
-  updated_at: {
-    type: Date,
-    default: Date.now
-  },
-  notes: {
-    type: String,
-    default: ''
   }
-}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+}, { timestamps: true });
 
-// Compound index for efficient server + date queries
-BackupSchema.index({ server_id: 1, date: -1 });
+// Compound index for efficient queries on serverId and date
+BackupSchema.index({ serverId: 1, date: -1 });
 
-// Compound index for efficient status queries
-BackupSchema.index({ status: 1, created_at: -1 });
+// Index for status queries
+BackupSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Backup', BackupSchema);

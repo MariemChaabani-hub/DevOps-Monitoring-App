@@ -27,24 +27,22 @@ class AlertService {
       // CPU Alert
       if (metric.cpu_percent >= 90) {
         alerts.push(await this.createOrUpdateAlert({
-          server_id: metric.server_id,
-          server_name: metric.server_name,
-          alert_type: 'CPU_HIGH',
+          serverId: metric.server_id,
+          type: 'CRITICAL',
           severity: 'CRITICAL',
-          metric_name: 'cpu_percent',
-          threshold_value: 90,
-          current_value: metric.cpu_percent,
+          metric: 'cpu_percent',
+          threshold: 90,
+          value: metric.cpu_percent,
           message: `Critical CPU usage: ${metric.cpu_percent}%`
         }, server));
       } else if (metric.cpu_percent >= 70) {
         alerts.push(await this.createOrUpdateAlert({
-          server_id: metric.server_id,
-          server_name: metric.server_name,
-          alert_type: 'CPU_HIGH',
+          serverId: metric.server_id,
+          type: 'WARNING',
           severity: 'WARNING',
-          metric_name: 'cpu_percent',
-          threshold_value: 70,
-          current_value: metric.cpu_percent,
+          metric: 'cpu_percent',
+          threshold: 70,
+          value: metric.cpu_percent,
           message: `High CPU usage: ${metric.cpu_percent}%`
         }, server));
       }
@@ -52,24 +50,22 @@ class AlertService {
       // RAM Alert
       if (metric.ram_percent >= 95) {
         alerts.push(await this.createOrUpdateAlert({
-          server_id: metric.server_id,
-          server_name: metric.server_name,
-          alert_type: 'RAM_HIGH',
+          serverId: metric.server_id,
+          type: 'CRITICAL',
           severity: 'CRITICAL',
-          metric_name: 'ram_percent',
-          threshold_value: 95,
-          current_value: metric.ram_percent,
+          metric: 'ram_percent',
+          threshold: 95,
+          value: metric.ram_percent,
           message: `Critical RAM usage: ${metric.ram_percent}%`
         }, server));
       } else if (metric.ram_percent >= 80) {
         alerts.push(await this.createOrUpdateAlert({
-          server_id: metric.server_id,
-          server_name: metric.server_name,
-          alert_type: 'RAM_HIGH',
+          serverId: metric.server_id,
+          type: 'WARNING',
           severity: 'WARNING',
-          metric_name: 'ram_percent',
-          threshold_value: 80,
-          current_value: metric.ram_percent,
+          metric: 'ram_percent',
+          threshold: 80,
+          value: metric.ram_percent,
           message: `High RAM usage: ${metric.ram_percent}%`
         }, server));
       }
@@ -77,24 +73,22 @@ class AlertService {
       // Disk Alert
       if (metric.disk_percent >= 95) {
         alerts.push(await this.createOrUpdateAlert({
-          server_id: metric.server_id,
-          server_name: metric.server_name,
-          alert_type: 'DISK_HIGH',
+          serverId: metric.server_id,
+          type: 'CRITICAL',
           severity: 'CRITICAL',
-          metric_name: 'disk_percent',
-          threshold_value: 95,
-          current_value: metric.disk_percent,
+          metric: 'disk_percent',
+          threshold: 95,
+          value: metric.disk_percent,
           message: `Critical disk usage: ${metric.disk_percent}%`
         }, server));
       } else if (metric.disk_percent >= 85) {
         alerts.push(await this.createOrUpdateAlert({
-          server_id: metric.server_id,
-          server_name: metric.server_name,
-          alert_type: 'DISK_HIGH',
+          serverId: metric.server_id,
+          type: 'WARNING',
           severity: 'WARNING',
-          metric_name: 'disk_percent',
-          threshold_value: 85,
-          current_value: metric.disk_percent,
+          metric: 'disk_percent',
+          threshold: 85,
+          value: metric.disk_percent,
           message: `High disk usage: ${metric.disk_percent}%`
         }, server));
       }
@@ -113,14 +107,14 @@ class AlertService {
     try {
       // Check if alert already exists
       const existingAlert = await Alert.findOne({
-        server_id: alertData.server_id,
-        alert_type: alertData.alert_type,
+        serverId: alertData.serverId,
+        type: alertData.type,
         status: 'ACTIVE'
       });
 
       if (existingAlert) {
         // Update existing alert
-        existingAlert.current_value = alertData.current_value;
+        existingAlert.value = alertData.value;
         existingAlert.message = alertData.message;
         await existingAlert.save();
         return existingAlert;
@@ -137,16 +131,16 @@ class AlertService {
       // Send email notification
       if (server && server.alert_email) {
         await EmailService.sendAlertEmail({
-          server_name: server.name,
-          alert_message: alertData.message,
-          severity: alertData.severity,
-          email: server.alert_email,
-          metric_name: alertData.metric_name,
-          current_value: alertData.current_value,
-          threshold_value: alertData.threshold_value
+          serverId: alertData.serverId,
+          type: alertData.type,
+          metric: alertData.metric,
+          value: alertData.value,
+          threshold: alertData.threshold,
+          timestamp: new Date(),
+          adminEmail: server.alert_email
         });
-        newAlert.email_sent = true;
-        newAlert.email_sent_at = new Date();
+        newAlert.emailSent = true;
+        newAlert.emailSentAt = new Date();
         await newAlert.save();
       }
 
@@ -164,12 +158,12 @@ class AlertService {
     try {
       await Alert.updateMany(
         {
-          server_id: serverId,
+          serverId: serverId,
           status: 'ACTIVE'
         },
         {
           status: 'RESOLVED',
-          resolved_at: new Date()
+          resolvedAt: new Date()
         }
       );
     } catch (error) {
@@ -183,10 +177,10 @@ class AlertService {
   static async getActiveAlerts(serverId = null) {
     try {
       const query = { status: 'ACTIVE' };
-      if (serverId) query.server_id = serverId;
+      if (serverId) query.serverId = serverId;
 
       return await Alert.find(query)
-        .sort({ severity: -1, created_at: -1 })
+        .sort({ severity: -1, timestamp: -1 })
         .exec();
     } catch (error) {
       console.error('[AlertService] Error fetching alerts:', error);
@@ -202,9 +196,7 @@ class AlertService {
       return await Alert.findByIdAndUpdate(
         alertId,
         {
-          status: 'ACKNOWLEDGED',
-          acknowledged_at: new Date(),
-          acknowledged_by: acknowledgedBy
+          status: 'ACKNOWLEDGED'
         },
         { new: true }
       );
@@ -237,13 +229,12 @@ class AlertService {
 
             // Create alert
             await this.createOrUpdateAlert({
-              server_id: server.server_id,
-              server_name: server.name,
-              alert_type: 'AGENT_OFFLINE',
+              serverId: server._id.toString(),
+              type: 'CRITICAL',
               severity: 'CRITICAL',
-              metric_name: 'agent_connectivity',
-              threshold_value: 30,
-              current_value: Math.round((now - lastMetricTime) / 1000),
+              metric: 'agent_connectivity',
+              threshold: 30,
+              value: Math.round((now - lastMetricTime) / 1000),
               message: `Agent offline for ${Math.round((now - lastMetricTime) / 1000)} seconds`
             }, server);
           }

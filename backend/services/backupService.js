@@ -3,9 +3,11 @@
  * Handles backup monitoring and daily backup checks
  */
 
+const mongoose = require('mongoose');
 const Backup = require('../models/Backup');
 const Server = require('../models/Server');
 const Alert = require('../models/Alert');
+const EmailService = require('./emailService');
 
 // Helper function to get today's date at midnight
 function getTodayDateRange() {
@@ -20,7 +22,7 @@ function getTodayDateRange() {
 
 // Helper function to simulate backup success or failure (50/50 for daily check)
 function simulateBackupStatus() {
-  const statuses = ['success', 'failed'];
+  const statuses = ['OK', 'FAILED'];
   return statuses[Math.floor(Math.random() * statuses.length)];
 }
 
@@ -45,13 +47,13 @@ function generateRandomDuration() {
  */
 async function checkBackupStatusAndCreateAlert(backup) {
   try {
-    const { server_id, status } = backup;
+    const { serverId, status } = backup;
 
-    if (status === 'success') {
+    if (status === 'OK') {
       // Resolve any existing backup-related alerts for this server
       await Alert.updateMany(
         {
-          serverId: server_id,
+          serverId: serverId,
           metric: 'backup_status',
           status: 'ACTIVE'
         },
@@ -60,20 +62,20 @@ async function checkBackupStatusAndCreateAlert(backup) {
           resolvedAt: new Date()
         }
       );
-      console.log(`[Backup Service] Resolved backup alerts for server ${server_id}`);
+      console.log(`[Backup Service] Resolved backup alerts for server ${serverId}`);
       return null;
     }
 
     // Determine alert severity based on backup status
-    const severity = status === 'missing' ? 'CRITICAL' : 'WARNING';
-    const alertType = status === 'missing' ? 'BACKUP_MISSING' : 'BACKUP_FAILED';
-    const message = status === 'missing' 
-      ? `Backup is missing for server ${server_id}`
-      : `Backup failed for server ${server_id}`;
+    const severity = status === 'LATE' ? 'CRITICAL' : 'WARNING';
+    const alertType = status === 'LATE' ? 'BACKUP_MISSING' : 'BACKUP_FAILED';
+    const message = status === 'LATE' 
+      ? `Backup is missing for server ${serverId}`
+      : `Backup failed for server ${serverId}`;
 
     // Check if alert already exists for this backup status
     const existingAlert = await Alert.findOne({
-      serverId: server_id,
+      serverId: serverId,
       metric: 'backup_status',
       type: alertType,
       status: 'ACTIVE'
@@ -84,13 +86,13 @@ async function checkBackupStatusAndCreateAlert(backup) {
       existingAlert.message = message;
       existingAlert.timestamp = new Date();
       await existingAlert.save();
-      console.log(`[Backup Service] Updated ${severity} alert for server ${server_id}`);
+      console.log(`[Backup Service] Updated ${severity} alert for server ${serverId}`);
       return existingAlert;
     }
 
     // Create new alert
     const alert = new Alert({
-      serverId: server_id,
+      serverId: serverId,
       type: severity,
       severity: severity,
       status: 'ACTIVE',
@@ -102,11 +104,38 @@ async function checkBackupStatusAndCreateAlert(backup) {
     });
 
     await alert.save();
-    console.log(`[Backup Service] Created ${severity} alert for server ${server_id}: ${message}`);
+    console.log(`[Backup Service] Created ${severity} alert for server ${serverId}: ${message}`);
+
+    // Send email notification for backup failures
+    if (status === 'FAILED' || status === 'LATE') {
+      try {
+        const emailService = require('./emailService');
+        const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+        
+        const emailData = {
+          serverId: serverId,
+          type: status === 'LATE' ? 'BACKUP_LATE' : 'BACKUP_FAILED',
+          severity: 'CRITICAL',
+          status: status,
+          duration: backup.duration || 0,
+          size: backup.size || 0,
+          date: backup.date,
+          message: message,
+          timestamp: new Date(),
+          adminEmail: adminEmail
+        };
+
+        const emailResult = await emailService.sendBackupAlertEmail(emailData);
+        console.log(`[Backup Service] Email notification result for ${serverId}:`, emailResult);
+      } catch (emailError) {
+        console.error(`[Backup Service] Failed to send backup failure email for ${serverId}:`, emailError);
+        // Don't throw error - email failure shouldn't break the backup process
+      }
+    }
 
     return alert;
   } catch (error) {
-    console.error(`[Backup Service] Error creating backup alert for server ${backup.server_id}:`, error);
+    console.error(`[Backup Service] Error creating backup alert for server ${backup.serverId}:`, error);
     throw error;
   }
 }
@@ -129,7 +158,7 @@ async function simulateBackup(server_id) {
 
     // Generate status with 80% success rate
     const random = Math.random();
-    const status = random < 0.8 ? 'success' : 'failed';
+    const status = random < 0.8 ? 'OK' : 'FAILED';
 
     // Generate random size between 100-1000 MB
     const size = Math.floor(Math.random() * (1000 - 100 + 1)) + 100;
@@ -139,12 +168,11 @@ async function simulateBackup(server_id) {
 
     // Create backup record
     const backup = new Backup({
-      server_id: server_id,
+      serverId: server_id,
       date: new Date(),
       status: status,
       size: size,
-      duration: duration,
-      notes: `Simulated backup (${status === 'success' ? 'successful' : 'failed'})`
+      duration: duration
     });
 
     // Save to MongoDB
@@ -197,7 +225,7 @@ async function runDailyBackupCheck() {
 
       // Check if backup exists for today
       const existingBackup = await Backup.findOne({
-        server_id: serverId,
+        serverId: serverId,
         date: {
           $gte: dateRange.start,
           $lt: dateRange.end
@@ -208,7 +236,7 @@ async function runDailyBackupCheck() {
         console.log(`[Backup Service] Backup exists for server ${serverId}: status = ${existingBackup.status}`);
         results.backups_found++;
         results.details.push({
-          server_id: serverId,
+          serverId: serverId,
           action: 'found',
           status: existingBackup.status,
           date: existingBackup.date
@@ -223,12 +251,11 @@ async function runDailyBackupCheck() {
         const duration = generateRandomDuration();
 
         const backup = new Backup({
-          server_id: serverId,
+          serverId: serverId,
           date: new Date(),
           status: status,
           size: size,
-          duration: duration,
-          notes: `Auto-generated from daily backup check (simulated: ${status})`
+          duration: duration
         });
 
         await backup.save();
@@ -241,7 +268,7 @@ async function runDailyBackupCheck() {
         results.backups_created++;
         results.backups_simulated++;
         results.details.push({
-          server_id: serverId,
+          serverId: serverId,
           action: 'created',
           status: status,
           size: size,
@@ -263,8 +290,134 @@ async function runDailyBackupCheck() {
   }
 }
 
+/**
+ * Calculate backup indicators for a specific server
+ * 
+ * @param {string} serverId - The server ID
+ * @returns {Promise<Object>} - Summary object with:
+ *   - last_successful_backup_date
+ *   - last_backup_status
+ *   - average_duration_seconds
+ *   - average_size_mb
+ *   - total_backups
+ *   - status_breakdown
+ */
+async function calculateBackupIndicators(serverId) {
+  try {
+    console.log(`[Backup Service] Calculating indicators for server ${serverId}`);
+
+    // Fetch all backups for this server
+    const backups = await Backup.find({ serverId })
+      .sort({ date: -1 })
+      .exec();
+
+    if (!backups || backups.length === 0) {
+      console.log(`[Backup Service] No backups found for server ${serverId}`);
+      return {
+        serverId,
+        last_successful_backup_date: null,
+        last_backup_status: null,
+        average_duration_seconds: 0,
+        average_size_mb: 0,
+        total_backups: 0,
+        status_breakdown: {
+          ok: 0,
+          failed: 0,
+          late: 0
+        },
+        has_data: false
+      };
+    }
+
+    // Find last successful backup
+    const lastSuccessful = backups.find(b => b.status === 'OK');
+    const lastBackupStatus = backups.length > 0 ? backups[0].status : null;
+
+    // Calculate averages
+    let totalDuration = 0;
+    let totalSize = 0;
+    let durationCount = 0;
+    let sizeCount = 0;
+
+    const statusBreakdown = {
+      ok: 0,
+      failed: 0,
+      late: 0
+    };
+
+    for (const backup of backups) {
+      // Duration and size calculation (skip 0 values for LATE backups)
+      if (backup.duration > 0) {
+        totalDuration += backup.duration;
+        durationCount++;
+      }
+      if (backup.size > 0) {
+        totalSize += backup.size;
+        sizeCount++;
+      }
+
+      // Status breakdown
+      if (backup.status === 'OK') {
+        statusBreakdown.ok++;
+      } else if (backup.status === 'FAILED') {
+        statusBreakdown.failed++;
+      } else if (backup.status === 'LATE') {
+        statusBreakdown.late++;
+      }
+    }
+
+    const avgDuration = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
+    const avgSize = sizeCount > 0 ? Math.round(totalSize / sizeCount) : 0;
+
+    const indicators = {
+      serverId,
+      last_successful_backup_date: lastSuccessful ? lastSuccessful.date : null,
+      last_backup_status: lastBackupStatus,
+      last_backup_date: backups.length > 0 ? backups[0].date : null,
+      average_duration_seconds: avgDuration,
+      average_size_mb: avgSize,
+      total_backups: backups.length,
+      status_breakdown: statusBreakdown,
+      health_score: calculateHealthScore(statusBreakdown, backups.length),
+      has_data: true
+    };
+
+    console.log(
+      `[Backup Service] Indicators calculated for ${serverId}: ` +
+      `${indicators.total_backups} backups, avg duration ${indicators.average_duration_seconds}s, ` +
+      `avg size ${indicators.average_size_mb}MB`
+    );
+
+    return indicators;
+  } catch (error) {
+    console.error(`[Backup Service] Error calculating indicators for ${serverId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Calculate a health score (0-100) based on backup status breakdown
+ * 
+ * @param {Object} statusBreakdown - {ok, failed, late}
+ * @param {number} total - Total number of backups
+ * @returns {number} - Health score 0-100
+ */
+function calculateHealthScore(statusBreakdown, total) {
+  if (total === 0) return 0;
+
+  const okCount = statusBreakdown.ok || 0;
+  const failedCount = statusBreakdown.failed || 0;
+  const lateCount = statusBreakdown.late || 0;
+
+  // Score formula: (ok_count * 100 - failed_count * 50 - late_count * 25) / total
+  // Results in a 0-100 range
+  const score = Math.max(0, Math.min(100, (okCount * 100 - failedCount * 50 - lateCount * 25) / total));
+  return Math.round(score);
+}
+
 module.exports = {
   simulateBackup,
   checkBackupStatusAndCreateAlert,
-  runDailyBackupCheck
+  runDailyBackupCheck,
+  calculateBackupIndicators
 };

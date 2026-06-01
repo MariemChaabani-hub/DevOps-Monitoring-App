@@ -6,7 +6,10 @@
 const express = require('express');
 const router = express.Router();
 const Backup = require('../models/Backup');
+const Server = require('../models/Server');
 const BackupService = require('../services/backupService');
+const BackupSocketService = require('../services/backupSocketService');
+const BackupAlertService = require('../services/backupAlertService');
 
 // GET /api/backups
 // Returns all backups with optional filters and pagination
@@ -24,7 +27,7 @@ router.get('/', async (req, res) => {
 
     const query = {};
 
-    if (server_id) query.server_id = server_id;
+    if (server_id) query.serverId = server_id;
     if (status) query.status = status;
 
     // Date range filtering
@@ -68,13 +71,13 @@ router.get('/server/:server_id', async (req, res) => {
     const { server_id } = req.params;
     const { limit = 50, skip = 0 } = req.query;
 
-    const backups = await Backup.find({ server_id })
+    const backups = await Backup.find({ serverId: server_id })
       .sort({ date: -1 })
       .limit(parseInt(limit))
       .skip(parseInt(skip))
       .exec();
 
-    const total = await Backup.countDocuments({ server_id });
+    const total = await Backup.countDocuments({ serverId: server_id });
 
     console.log(`[Backups API] Found ${backups.length} backups for server ${server_id}`);
 
@@ -100,7 +103,7 @@ router.get('/stats/summary', async (req, res) => {
     const { server_id, start_date, end_date } = req.query;
 
     const matchStage = {};
-    if (server_id) matchStage.server_id = server_id;
+    if (server_id) matchStage.serverId = server_id;
 
     if (start_date || end_date) {
       matchStage.date = {};
@@ -115,13 +118,13 @@ router.get('/stats/summary', async (req, res) => {
           _id: null,
           total_backups: { $sum: 1 },
           successful_backups: {
-            $sum: { $cond: [{ $eq: ['$status', 'success'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'OK'] }, 1, 0] }
           },
           failed_backups: {
-            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'FAILED'] }, 1, 0] }
           },
-          missing_backups: {
-            $sum: { $cond: [{ $eq: ['$status', 'missing'] }, 1, 0] }
+          late_backups: {
+            $sum: { $cond: [{ $eq: ['$status', 'LATE'] }, 1, 0] }
           },
           total_size_mb: { $sum: '$size' },
           avg_size_mb: { $avg: '$size' },
@@ -136,7 +139,7 @@ router.get('/stats/summary', async (req, res) => {
           total_backups: 1,
           successful_backups: 1,
           failed_backups: 1,
-          missing_backups: 1,
+          late_backups: 1,
           success_rate: {
             $cond: [
               { $eq: ['$total_backups', 0] },
@@ -175,6 +178,29 @@ router.get('/stats/summary', async (req, res) => {
   }
 });
 
+// POST /api/backups/test/run-daily-check
+// Manually trigger daily backup check (for testing)
+router.post('/test/run-daily-check', async (req, res) => {
+  try {
+    console.log('[Backups API] Manually triggering daily backup check');
+
+    const results = await BackupService.runDailyBackupCheck();
+
+    res.json({
+      success: true,
+      message: 'Daily backup check executed successfully',
+      timestamp: new Date(),
+      results: results
+    });
+  } catch (error) {
+    console.error('[Backups API] Error running daily backup check:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
 // GET /api/backups/latest/:server_id
 // Returns latest backup with detailed status information for a specific server
 router.get('/latest/:server_id', async (req, res) => {
@@ -182,22 +208,22 @@ router.get('/latest/:server_id', async (req, res) => {
     const { server_id } = req.params;
 
     // Get latest backup for the server
-    const latestBackup = await Backup.findOne({ server_id })
+    const latestBackup = await Backup.findOne({ serverId: server_id })
       .sort({ date: -1 })
       .exec();
 
     // Get last successful backup
     const lastSuccessful = await Backup.findOne({
-      server_id,
-      status: 'success'
+      serverId: server_id,
+      status: 'OK'
     })
       .sort({ date: -1 })
       .exec();
 
     // Get last failed backup
     const lastFailed = await Backup.findOne({
-      server_id,
-      status: 'failed'
+      serverId: server_id,
+      status: 'FAILED'
     })
       .sort({ date: -1 })
       .exec();
@@ -205,11 +231,11 @@ router.get('/latest/:server_id', async (req, res) => {
     // Determine current status
     let currentStatus = 'Missing';
     if (latestBackup) {
-      if (latestBackup.status === 'success') {
+      if (latestBackup.status === 'OK') {
         currentStatus = 'OK';
-      } else if (latestBackup.status === 'failed') {
+      } else if (latestBackup.status === 'FAILED') {
         currentStatus = 'Failed';
-      } else if (latestBackup.status === 'missing') {
+      } else if (latestBackup.status === 'LATE') {
         currentStatus = 'Missing';
       }
     }
@@ -256,6 +282,119 @@ router.get('/latest/:server_id', async (req, res) => {
   }
 });
 
+// GET /api/backups/:serverId/latest
+// Returns the latest backup for a specific server
+router.get('/:serverId/latest', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+
+    // Get latest backup for the server
+    const latestBackup = await Backup.findOne({ serverId })
+      .sort({ date: -1 })
+      .exec();
+
+    if (!latestBackup) {
+      return res.status(404).json({
+        error: 'No backup found for this server',
+        serverId
+      });
+    }
+
+    console.log(
+      `[Backups API] GET /:serverId/latest - Server ${serverId}, Latest: ${latestBackup.status}`
+    );
+
+    res.json({
+      serverId,
+      latest_backup: {
+        _id: latestBackup._id,
+        date: latestBackup.date,
+        status: latestBackup.status,
+        duration: latestBackup.duration,
+        size: latestBackup.size,
+        createdAt: latestBackup.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('[Backups API] Error fetching latest backup:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/backups/:serverId/status
+// Returns backup status information for a specific server
+router.get('/:serverId/status', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+
+    // Get last backup (any status)
+    const lastBackup = await Backup.findOne({ serverId })
+      .sort({ date: -1 })
+      .exec();
+
+    // Get last successful backup
+    const lastSuccessful = await Backup.findOne({
+      serverId,
+      status: 'OK'
+    })
+      .sort({ date: -1 })
+      .exec();
+
+    // Get last failed backup
+    const lastFailed = await Backup.findOne({
+      serverId,
+      status: 'FAILED'
+    })
+      .sort({ date: -1 })
+      .exec();
+
+    // Determine overall status
+    let overallStatus = 'NO_BACKUP';
+    if (lastBackup) {
+      if (lastBackup.status === 'OK') {
+        overallStatus = 'HEALTHY';
+      } else if (lastBackup.status === 'FAILED') {
+        overallStatus = 'FAILED';
+      } else if (lastBackup.status === 'LATE') {
+        overallStatus = 'LATE';
+      }
+    }
+
+    console.log(
+      `[Backups API] GET /:serverId/status - Server ${serverId}, Overall: ${overallStatus}`
+    );
+
+    res.json({
+      serverId,
+      overall_status: overallStatus,
+      last_backup: lastBackup ? {
+        date: lastBackup.date,
+        status: lastBackup.status,
+        duration: lastBackup.duration,
+        size: lastBackup.size
+      } : null,
+      last_successful_backup: lastSuccessful ? {
+        date: lastSuccessful.date,
+        duration: lastSuccessful.duration,
+        size: lastSuccessful.size
+      } : null,
+      last_failed_backup: lastFailed ? {
+        date: lastFailed.date,
+        duration: lastFailed.duration,
+        size: lastFailed.size
+      } : null,
+      summary: {
+        has_backup: !!lastBackup,
+        is_healthy: overallStatus === 'HEALTHY',
+        needs_attention: overallStatus === 'FAILED' || overallStatus === 'LATE' || overallStatus === 'NO_BACKUP'
+      }
+    });
+  } catch (error) {
+    console.error('[Backups API] Error fetching backup status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/backups/:id
 // Intelligently handles both:
 // - MongoDB backup _id (returns single backup document)
@@ -278,19 +417,19 @@ router.get('/:id', async (req, res) => {
       console.log('[Backups API] GET /api/backups/:id - Found backup:', backup._id);
       res.json(backup);
     } else {
-      // Treat as server_id - return all backups for this server
-      const backups = await Backup.find({ server_id: id })
+      // Treat as serverId - return all backups for this server
+      const backups = await Backup.find({ serverId: id })
         .sort({ date: -1 })
         .limit(parseInt(limit))
         .skip(parseInt(skip))
         .exec();
 
-      const total = await Backup.countDocuments({ server_id: id });
+      const total = await Backup.countDocuments({ serverId: id });
 
       console.log(`[Backups API] GET /api/backups/:serverId - Found ${backups.length} backups for server ${id}`);
 
       res.json({
-        server_id: id,
+        serverId: id,
         backups,
         pagination: {
           total,
@@ -309,18 +448,21 @@ router.get('/:id', async (req, res) => {
 // Creates a new backup record
 router.post('/', async (req, res) => {
   try {
-    const { server_id, date, status, size, duration, notes } = req.body;
+    const { serverId, server_id, date, status, size, duration, notes } = req.body;
+    
+    // Support both serverId and server_id for backward compatibility
+    const finalServerId = serverId || server_id;
 
     // Validation
-    if (!server_id || !date || !status || size === undefined || duration === undefined) {
+    if (!finalServerId || !date || !status || size === undefined || duration === undefined) {
       return res.status(400).json({
-        error: 'Missing required fields: server_id, date, status, size, duration'
+        error: 'Missing required fields: serverId, date, status, size, duration'
       });
     }
 
-    if (!['success', 'failed', 'missing'].includes(status)) {
+    if (!['OK', 'FAILED', 'LATE'].includes(status)) {
       return res.status(400).json({
-        error: 'Status must be one of: success, failed, missing'
+        error: 'Status must be one of: OK, FAILED, LATE'
       });
     }
 
@@ -331,23 +473,36 @@ router.post('/', async (req, res) => {
     }
 
     const backup = new Backup({
-      server_id,
+      serverId: finalServerId,
       date: new Date(date),
       status,
       size,
       duration,
-      notes: notes || ''
+      createdAt: new Date()
     });
 
     await backup.save();
 
     console.log('[Backups API] POST /api/backups - Created backup:', backup._id);
 
-    // Check backup status and create alerts if needed
+    // Emit socket.io event for real-time update
     try {
-      await BackupService.checkBackupStatusAndCreateAlert(backup);
+      BackupSocketService.emitBackupUpdate(finalServerId, {
+        status: backup.status,
+        duration: backup.duration,
+        size: backup.size,
+        date: backup.date
+      });
     } catch (error) {
-      console.error('[Backups API] Error checking backup status:', error);
+      console.error('[Backups API] Error emitting socket event:', error);
+    }
+
+    // Check backup status and create alerts if needed (FAILED or LATE)
+    try {
+      const server = await Server.findById(finalServerId);
+      await BackupAlertService.checkBackupAndAlert(backup, server);
+    } catch (error) {
+      console.error('[Backups API] Error checking backup alerts:', error);
       // Continue even if alert creation fails
     }
 
@@ -363,14 +518,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, size, duration, notes, date } = req.body;
+    const { status, size, duration, date } = req.body;
 
     // Prepare update object
     const updateData = {};
+    let oldStatus = null;
+
     if (status !== undefined) {
-      if (!['success', 'failed', 'missing'].includes(status)) {
+      if (!['OK', 'FAILED', 'LATE'].includes(status)) {
         return res.status(400).json({
-          error: 'Status must be one of: success, failed, missing'
+          error: 'Status must be one of: OK, FAILED, LATE'
         });
       }
       updateData.status = status;
@@ -390,15 +547,15 @@ router.put('/:id', async (req, res) => {
       updateData.duration = duration;
     }
 
-    if (notes !== undefined) {
-      updateData.notes = notes;
-    }
-
     if (date !== undefined) {
       updateData.date = new Date(date);
     }
 
-    updateData.updated_at = new Date();
+    // Get the backup before updating to capture old status
+    const oldBackup = await Backup.findById(id);
+    if (oldBackup) {
+      oldStatus = oldBackup.status;
+    }
 
     const backup = await Backup.findByIdAndUpdate(id, updateData, { new: true });
 
@@ -408,12 +565,30 @@ router.put('/:id', async (req, res) => {
 
     console.log('[Backups API] PUT /api/backups/:id - Updated backup:', backup._id);
 
+    // Emit socket.io event for real-time update
+    try {
+      BackupSocketService.emitBackupUpdate(backup.serverId, {
+        status: backup.status,
+        duration: backup.duration,
+        size: backup.size,
+        date: backup.date
+      });
+
+      // If status changed, emit status change event
+      if (status !== undefined && oldStatus && oldStatus !== status) {
+        BackupSocketService.emitBackupStatusChange(backup.serverId, oldStatus, status);
+      }
+    } catch (error) {
+      console.error('[Backups API] Error emitting socket event:', error);
+    }
+
     // Check backup status and create alerts if needed (especially if status was updated)
     if (status !== undefined) {
       try {
-        await BackupService.checkBackupStatusAndCreateAlert(backup);
+        const server = await Server.findById(backup.serverId);
+        await BackupAlertService.checkBackupAndAlert(backup, server);
       } catch (error) {
-        console.error('[Backups API] Error checking backup status:', error);
+        console.error('[Backups API] Error checking backup alerts:', error);
         // Continue even if alert creation fails
       }
     }
@@ -442,6 +617,93 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'Backup deleted successfully', backup });
   } catch (error) {
     console.error('[Backups API] Error deleting backup:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/backups/test/trigger
+// Manual endpoint for testing - triggers backup immediately
+router.post('/test/trigger', async (req, res) => {
+  try {
+    const BackupCronService = require('../services/backupCronService');
+    
+    console.log('[Backups API] Manual backup trigger requested');
+    
+    // Trigger backup immediately
+    await BackupCronService.triggerBackupNow();
+    
+    // Fetch the latest backups to return as confirmation
+    const recentBackups = await Backup.find()
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .exec();
+
+    res.json({
+      message: 'Backup triggered successfully',
+      timestamp: new Date(),
+      recent_backups: recentBackups
+    });
+  } catch (error) {
+    console.error('[Backups API] Error triggering backup:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/backups/test/check-late
+// Manual endpoint for testing - checks for late backups
+router.post('/test/check-late', async (req, res) => {
+  try {
+    const BackupCronService = require('../services/backupCronService');
+    
+    console.log('[Backups API] Manual late backup check requested');
+    
+    // Trigger late backup check immediately
+    await BackupCronService.checkAndCreateLateBackups();
+    
+    // Get today's backups for reference
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todaysBackups = await Backup.find({
+      date: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      message: 'Late backup check completed successfully',
+      timestamp: new Date(),
+      todays_backup_count: todaysBackups.length,
+      late_backups: todaysBackups.filter(b => b.status === 'LATE'),
+      all_todays_backups: todaysBackups
+    });
+  } catch (error) {
+    console.error('[Backups API] Error checking late backups:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/backups/:serverId/indicators
+// Returns backup health indicators and metrics for a specific server
+router.get('/:serverId/indicators', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+
+    console.log('[Backups API] GET /:serverId/indicators - Calculating for server:', serverId);
+
+    // Calculate backup indicators
+    const indicators = await BackupService.calculateBackupIndicators(serverId);
+
+    res.json({
+      serverId,
+      timestamp: new Date(),
+      indicators
+    });
+  } catch (error) {
+    console.error('[Backups API] Error calculating backup indicators:', error);
     res.status(500).json({ error: error.message });
   }
 });
