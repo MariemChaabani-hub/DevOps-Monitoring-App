@@ -8,7 +8,7 @@
  */
 
 const express = require('express');
-const NodeSSH = require('node-ssh');
+const { NodeSSH } = require('node-ssh');
 const router = express.Router();
 const Server = require('../models/Server');
 const Metric = require('../models/Metric');
@@ -182,7 +182,6 @@ router.post('/:server_id/restart',
       console.log(`[Remote Action] Délai avant redémarrage: ${delay} secondes`);
       
       // Exécution réelle via SSH
-      const NodeSSH = require('node-ssh');
       const ssh = new NodeSSH();
       
       try {
