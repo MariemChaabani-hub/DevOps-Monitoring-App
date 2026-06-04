@@ -59,6 +59,22 @@ const ServerSchema = new mongoose.Schema({
   updated_at: {
     type: Date,
     default: Date.now
+  },
+  ip_address: {
+    type: String,
+    default: null
+  },
+  ssh_username: {
+    type: String,
+    default: 'root'
+  },
+  ssh_password: {
+    type: String,
+    default: null
+  },
+  ssh_port: {
+    type: Number,
+    default: 22
   }
 }, {
   timestamps: true,

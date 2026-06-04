@@ -170,18 +170,25 @@ const MetricsPanel = ({ server }) => {
             </div>
           </div>
 
-          {currentMetric.uptime && (
+          {(currentMetric.uptime_days !== undefined || currentMetric.uptime_seconds !== undefined || currentMetric.boot_time) && (
             <div className="uptime-info">
               <h3>System Uptime</h3>
               <div className="uptime-details">
-                <div className="uptime-item">
-                  <span>Uptime (Days):</span>
-                  <strong>{currentMetric.uptime.uptime_days}</strong>
-                </div>
-                <div className="uptime-item">
-                  <span>Boot Time:</span>
-                  <strong>{new Date(currentMetric.uptime.boot_time).toLocaleString()}</strong>
-                </div>
+                {(currentMetric.uptime_days !== undefined || currentMetric.uptime_seconds !== undefined) && (
+                  <div className="uptime-item">
+                    <span>Uptime (Days):</span>
+                    <strong>{(() => {
+                      const days = currentMetric.uptime_days ?? 0;
+                      return !isNaN(days) ? days : 0;
+                    })()}</strong>
+                  </div>
+                )}
+                {currentMetric.boot_time && (
+                  <div className="uptime-item">
+                    <span>Boot Time:</span>
+                    <strong>{new Date(currentMetric.boot_time).toLocaleString()}</strong>
+                  </div>
+                )}
               </div>
             </div>
           )}

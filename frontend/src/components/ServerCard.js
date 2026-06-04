@@ -130,7 +130,11 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Uptime</p>
           <p className="text-sm font-semibold text-white">
-            {Math.floor((latestMetric.uptime || 0) / 3600)} hrs
+            {(() => {
+              const uptimeSeconds = latestMetric.uptime_seconds ?? latestMetric.uptime ?? 0;
+              const uptimeHours = !isNaN(uptimeSeconds) ? Math.floor(uptimeSeconds / 3600) : 0;
+              return `${uptimeHours} hrs`;
+            })()}
           </p>
         </div>
       </div>

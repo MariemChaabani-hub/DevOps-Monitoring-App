@@ -8,6 +8,7 @@
  */
 
 const express = require('express');
+const NodeSSH = require('node-ssh');
 const router = express.Router();
 const Server = require('../models/Server');
 const Metric = require('../models/Metric');
@@ -164,58 +165,106 @@ router.post('/:server_id/restart',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      console.log(`[Remote Action] Redémarrage du serveur ${server_id}`);
-      console.log(`[Remote Action] Délai avant redémarrage: ${delay} secondes`);
-      
-      // Simulation du redémarrage (remplacer par vraie connexion SSH)
-      const result = {
-        success: true,
-        message: `Serveur ${server.name} redémarré avec succès`,
-        server_id: server_id,
-        server_name: server.name,
-        delay_seconds: delay,
-        estimated_downtime: `${delay + 60} secondes`,
-        timestamp: new Date()
-      };
-
-      // Créer des métriques OK pour refléter le redémarrage du serveur
-      try {
-        const restartMetric = new Metric({
-          server_id: server_id,
-          server_name: server.name,
-          cpu_percent: 25 + Math.random() * 20,  // CPU normal 25-45%
-          ram_percent: 30 + Math.random() * 25,  // RAM normal 30-55%
-          disk_percent: 35 + Math.random() * 20,  // Disk normal 35-55%
-          network_in: 500 + Math.random() * 500,
-          network_out: 1000 + Math.random() * 500,
-          uptime: 120,             // 2 minutes après redémarrage
-          timestamp: new Date(),
-          status: 'OK',            // État OK
-          location: server.location || 'Unknown'
+      // Vérifier que les informations SSH sont disponibles
+      if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
+        return res.status(400).json({ 
+          error: 'Informations SSH incomplètes',
+          message: 'Le serveur doit avoir ip_address, ssh_username et ssh_password configurés',
+          missing_fields: {
+            ip_address: !server.ip_address,
+            ssh_username: !server.ssh_username,
+            ssh_password: !server.ssh_password
+          }
         });
-        
-        await restartMetric.save();
-        
-        // Mettre à jour le statut du serveur
-        server.status = 'OK';
-        server.is_active = true;
-        server.current_metrics = {
-          cpu_percent: restartMetric.cpu_percent,
-          ram_percent: restartMetric.ram_percent,
-          disk_percent: restartMetric.disk_percent
-        };
-        server.last_metric_time = new Date();
-        await server.save();
-        
-        console.log(`[Remote Action] Métriques OK créées pour ${server_id} après redémarrage`);
-      } catch (metricError) {
-        console.error('[Remote Action] Erreur création métriques OK après redémarrage:', metricError);
       }
 
-      // Logger l'action
-      await logAuditAction(req.auditData, result);
+      console.log(`[Remote Action] Redémarrage du serveur ${server_id} via SSH`);
+      console.log(`[Remote Action] Délai avant redémarrage: ${delay} secondes`);
+      
+      // Exécution réelle via SSH
+      const NodeSSH = require('node-ssh');
+      const ssh = new NodeSSH();
+      
+      try {
+        // Connexion SSH
+        await ssh.connect({
+          host: server.ip_address,
+          username: server.ssh_username,
+          password: server.ssh_password,
+          port: server.ssh_port || 22
+        });
+        
+        console.log(`[Remote Action] Connexion SSH établie avec ${server.ip_address}`);
+        
+        // Exécuter la commande de redémarrage
+        const result = await ssh.execCommand(`sleep ${delay} && sudo reboot`);
+        
+        console.log(`[Remote Action] Commande reboot envoyée - stdout: ${result.stdout}, stderr: ${result.stderr}`);
+        
+        await ssh.dispose();
+        
+        // Créer des métriques OK pour refléter le redémarrage du serveur
+        try {
+          const restartMetric = new Metric({
+            server_id: server_id,
+            server_name: server.name,
+            cpu_percent: 25 + Math.random() * 20,  // CPU normal 25-45%
+            ram_percent: 30 + Math.random() * 25,  // RAM normal 30-55%
+            disk_percent: 35 + Math.random() * 20,  // Disk normal 35-55%
+            network_in: 500 + Math.random() * 500,
+            network_out: 1000 + Math.random() * 500,
+            uptime: 120,             // 2 minutes après redémarrage
+            timestamp: new Date(),
+            status: 'OK',            // État OK
+            location: server.location || 'Unknown'
+          });
+          
+          await restartMetric.save();
+          
+          // Mettre à jour le statut du serveur
+          server.status = 'OK';
+          server.is_active = true;
+          server.current_metrics = {
+            cpu_percent: restartMetric.cpu_percent,
+            ram_percent: restartMetric.ram_percent,
+            disk_percent: restartMetric.disk_percent
+          };
+          server.last_metric_time = new Date();
+          await server.save();
+          
+          console.log(`[Remote Action] Métriques OK créées pour ${server_id} après redémarrage`);
+        } catch (metricError) {
+          console.error('[Remote Action] Erreur création métriques OK après redémarrage:', metricError);
+        }
 
-      res.json(result);
+        const auditResult = {
+          success: true,
+          message: `Serveur ${server.name} redémarré avec succès via SSH`,
+          server_id: server_id,
+          server_name: server.name,
+          ip_address: server.ip_address,
+          delay_seconds: delay,
+          estimated_downtime: `${delay + 60} secondes`,
+          timestamp: new Date()
+        };
+
+        // Logger l'action
+        await logAuditAction(req.auditData, auditResult);
+
+        res.json(auditResult);
+
+      } catch (sshError) {
+        console.error('[Remote Action] Erreur SSH lors du redémarrage:', sshError);
+        const auditResult = {
+          success: false,
+          error: `Erreur SSH: ${sshError.message}`
+        };
+        await logAuditAction(req.auditData, auditResult);
+        
+        res.status(500).json({ 
+          error: `Impossible de redémarrer le serveur via SSH: ${sshError.message}` 
+        });
+      }
 
     } catch (error) {
       console.error('[Remote Action] Erreur lors du redémarrage du serveur:', error);
