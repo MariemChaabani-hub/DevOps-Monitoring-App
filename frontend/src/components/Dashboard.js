@@ -136,15 +136,7 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Set up 5-second real-time polling for latest metrics
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLatestMetrics();
-    }, 5000);
 
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Fetch alerts on mount
   useEffect(() => {
@@ -152,15 +144,7 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Set up 10-second real-time polling for alerts (less frequent than metrics)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchAlerts();
-    }, 10000);
 
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Fetch history when selected server changes
   useEffect(() => {

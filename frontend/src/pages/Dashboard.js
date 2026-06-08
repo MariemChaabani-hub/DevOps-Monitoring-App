@@ -88,28 +88,7 @@ const Dashboard = () => {
       setWsConnected(false);
     };
 
-    // Polling for updates every 5 seconds
-    const pollInterval = setInterval(async () => {
-      try {
-        const serversRes = await fetch('http://localhost:3000/api/servers');
-        const serversData = await serversRes.json();
-        setServers(serversData);
-
-        const alertsRes = await fetch('http://localhost:3000/api/alerts?status=ACTIVE');
-        const alertsData = await alertsRes.json();
-        console.log('[Dashboard Poll] Alerts:', alertsData.length, alertsData);
-        setAlerts(alertsData);
-
-        const healthRes = await fetch('http://localhost:3000/api/dashboard/summary');
-        const healthData = await healthRes.json();
-        setHealth(healthData);
-      } catch (error) {
-        console.error('[Dashboard Poll] Error:', error);
-      }
-    }, 5000);
-
     return () => {
-      clearInterval(pollInterval);
       ws.close();
     };
   }, []);

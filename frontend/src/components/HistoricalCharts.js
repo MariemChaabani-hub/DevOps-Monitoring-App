@@ -75,10 +75,7 @@ const HistoricalCharts = ({ serverId }) => {
 
     fetchHistoricalData();
 
-    // Poll for updates every 10 seconds
-    const interval = setInterval(fetchHistoricalData, 10000);
-
-    return () => clearInterval(interval);
+    return () => {};
   }, [serverId, timeRange]);
 
   const CustomTooltip = ({ active, payload, label }) => {

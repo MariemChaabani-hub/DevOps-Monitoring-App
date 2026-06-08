@@ -30,10 +30,7 @@ const MetricsPanel = ({ server }) => {
 
     fetchMetrics();
 
-    // Poll for new metrics every 5 seconds
-    const interval = setInterval(fetchMetrics, 5000);
-
-    return () => clearInterval(interval);
+    return () => {};
   }, [server]);
 
   if (!server) {
