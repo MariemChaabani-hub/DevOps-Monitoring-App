@@ -32,14 +32,9 @@ const Dashboard = () => {
       const response = await axios.get(`${API_BASE}/api/metrics/latest`);
       if (response.data && response.data.data) {
         setLatestMetrics(response.data.data);
-        
-        // Auto-select first server if none selected
-        if (!selectedServer && response.data.data.length > 0) {
-          setSelectedServer(response.data.data[0].serverId);
-        }
-        
         setLastUpdate(new Date());
         setError(null);
+        return response.data.data;
       }
     } catch (err) {
       setError('Failed to fetch latest metrics: ' + err.message);
@@ -128,8 +123,13 @@ const Dashboard = () => {
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
-      await fetchLatestMetrics();
+      const metricsData = await fetchLatestMetrics();
       setLoading(false);
+      
+      // Auto-select first server ONLY on initial mount, never again
+      if (metricsData && metricsData.length > 0 && !selectedServer) {
+        setSelectedServer(metricsData[0].serverId);
+      }
     };
     
     initialize();
