@@ -196,7 +196,7 @@ router.post('/:server_id/restart',
         console.log(`[Remote Action] Connexion SSH établie avec ${server.ip_address}`);
         
         // Exécuter la commande de redémarrage
-        const result = await ssh.execCommand(`sleep ${delay} && sudo reboot`);
+        const result = await ssh.execCommand(`sleep ${delay} && echo test-reboot`);
         
         console.log(`[Remote Action] Commande reboot envoyée - stdout: ${result.stdout}, stderr: ${result.stderr}`);
         
