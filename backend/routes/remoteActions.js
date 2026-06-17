@@ -1,7 +1,7 @@
 /**
  * Remote Management API Routes
  * 5.2 Actions à distance (Remote Management)
- * - Redémarrage de services (Apache, Nginx, MySQL, Docker, etc.)
+ * - Redémarrage de services (PM2, Nginx, MySQL, Docker, etc.)
  * - Restart d'un serveur via commande distante sécurisée
  * - Reboot du serveur depuis l'interface web
  * - Arrêt/démarrage de services applicatifs
@@ -88,7 +88,7 @@ router.post('/:server_id/restart-service',
       if (!service_name) {
         return res.status(400).json({ 
           error: 'service_name est requis',
-          supported_services: ['apache2', 'nginx', 'mysql', 'docker', 'postgresql', 'redis', 'mongodb']
+          supported_services: ['pm2', 'nginx', 'mongodb', 'docker']
         });
       }
 
@@ -100,7 +100,7 @@ router.post('/:server_id/restart-service',
 
       // Services supportés
       const supportedServices = {
-        'apache2': { name: 'Apache', command: 'sudo systemctl restart apache2' },
+        'pm2': { name: 'PM2', command: 'sudo pm2 restart all' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl restart nginx' },
         'mongodb': { name: 'MongoDB', command: 'sudo systemctl restart mongod' },
         'docker': { name: 'Docker', command: 'sudo systemctl restart docker' }
@@ -377,7 +377,7 @@ router.post('/:server_id/start-service',
       }
 
       const supportedServices = {
-        'apache2': { name: 'Apache', command: 'sudo systemctl start apache2' },
+        'pm2': { name: 'PM2', command: 'sudo pm2 start all' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl start nginx' },
         'mongodb': { name: 'MongoDB', command: 'sudo systemctl start mongod' },
         'docker': { name: 'Docker', command: 'sudo systemctl start docker' }
@@ -438,7 +438,7 @@ router.post('/:server_id/stop-service',
       }
 
       const supportedServices = {
-        'apache2': { name: 'Apache', command: 'sudo systemctl stop apache2' },
+        'pm2': { name: 'PM2', command: 'sudo pm2 stop all' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl stop nginx' },
         'mongodb': { name: 'MongoDB', command: 'sudo systemctl stop mongod' },
         'docker': { name: 'Docker', command: 'sudo systemctl stop docker' }
@@ -494,7 +494,7 @@ router.get('/:server_id/services-status',
 
       // Simulation du statut des services
       const servicesStatus = {
-        'apache2': { status: 'running', uptime: '2 days, 14 hours' },
+        'pm2': { status: 'running', uptime: '2 days, 14 hours' },
         'nginx': { status: 'running', uptime: '5 days, 3 hours' },
         'mongodb': { status: 'running', uptime: '4 days, 6 hours' },
         'docker': { status: 'running', uptime: '1 day, 8 hours' }

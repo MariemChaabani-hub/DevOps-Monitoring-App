@@ -34,6 +34,7 @@ const alertRoutes = require('./routes/alerts');
 const metricsRoutes = require('./routes/metrics');
 const backupRoutes = require('./routes/backups');
 const remoteActionsRoutes = require('./routes/remoteActions');
+const servicesRoutes = require('./routes/services');
 
 // Initialize Express
 const app = express();
@@ -229,6 +230,7 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/remote-actions', remoteActionsRoutes);
+app.use('/api/services', servicesRoutes);
 
 // Dashboard summary endpoint
 app.get('/api/dashboard/summary', async (req, res) => {
