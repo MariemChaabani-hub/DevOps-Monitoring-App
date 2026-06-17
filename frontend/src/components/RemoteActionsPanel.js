@@ -12,13 +12,32 @@ import './RemoteActionsPanel.css';
 
 const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const [selectedServer, setSelectedServer] = useState('');
-  const [loading, setLoading] = useState(false);
+  // State granulaire: clé = "serviceName_action" (ex: "pm2_restart", "nginx_stop")
+  const [actionStates, setActionStates] = useState({});
   const [servicesStatus, setServicesStatus] = useState({});
   const [auditLogs, setAuditLogs] = useState([]);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [actionResult, setActionResult] = useState(null);
 
   const API_BASE = 'http://localhost:3000';
+
+  // Générer une clé unique pour chaque action de service
+  const getActionKey = (serviceName, actionType) => {
+    return `${serviceName}_${actionType}`;
+  };
+
+  // Vérifier si une action spécifique est en cours
+  const isActionLoading = (serviceName, actionType) => {
+    return actionStates[getActionKey(serviceName, actionType)] || false;
+  };
+
+  // Mettre à jour l'état d'une action spécifique
+  const setActionLoading = (serviceName, actionType, isLoading) => {
+    setActionStates(prev => ({
+      ...prev,
+      [getActionKey(serviceName, actionType)]: isLoading
+    }));
+  };
 
   // Services supportés
   const supportedServices = [
@@ -79,13 +98,14 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   };
 
   // Execute remote action
-  const executeRemoteAction = async (action, endpoint, payload = {}) => {
+  const executeRemoteAction = async (serviceName, actionType, endpoint, payload = {}) => {
     if (!selectedServer) {
       alert('Veuillez sélectionner un serveur');
       return;
     }
 
-    setLoading(true);
+    // Activer le loading pour cette action spécifique
+    setActionLoading(serviceName, actionType, true);
     setActionResult(null);
 
     try {
@@ -125,7 +145,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         message: error.message
       });
     } finally {
-      setLoading(false);
+      // Désactiver le loading pour cette action spécifique
+      setActionLoading(serviceName, actionType, false);
     }
   };
 
@@ -226,27 +247,29 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                     <div className="service-action-buttons">
                       <button
                         onClick={() => executeRemoteAction(
-                          `restart-${service.id}`,
+                          service.id,
+                          'restart',
                           'restart-service',
                           { service_name: service.id }
                         )}
-                        disabled={loading}
+                        disabled={isActionLoading(service.id, 'restart')}
                         className="action-btn restart-btn"
                         title="Redémarrer le service"
                       >
-                        🔄 Redémarrer
+                        {isActionLoading(service.id, 'restart') ? '⏳ Redémarrage...' : '🔄 Redémarrer'}
                       </button>
                       <button
                         onClick={() => executeRemoteAction(
-                          `stop-${service.id}`,
+                          service.id,
+                          'stop',
                           'stop-service',
                           { service_name: service.id }
                         )}
-                        disabled={loading}
+                        disabled={isActionLoading(service.id, 'stop')}
                         className="action-btn stop-btn"
                         title="Arrêter le service"
                       >
-                        ⏹️ Arrêter
+                        {isActionLoading(service.id, 'stop') ? '⏳ Arrêt...' : '⏹️ Arrêter'}
                       </button>
                     </div>
                   </div>
@@ -264,14 +287,15 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                 <p>Redémarrer complètement le serveur (downtime ~2-3 minutes)</p>
                 <button
                   onClick={() => executeRemoteAction(
-                    'restart-server',
+                    'server',
+                    'restart',
                     'restart',
                     { delay: 30 }
                   )}
-                  disabled={loading}
+                  disabled={isActionLoading('server', 'restart')}
                   className="action-btn restart-server-btn"
                 >
-                  🔄 Redémarrer le Serveur
+                  {isActionLoading('server', 'restart') ? '⏳ Redémarrage du serveur...' : '🔄 Redémarrer le Serveur'}
                 </button>
               </div>
 
@@ -280,14 +304,15 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                 <p>Arrêter complètement le serveur (nécessite intervention manuelle)</p>
                 <button
                   onClick={() => executeRemoteAction(
-                    'shutdown-server',
+                    'server',
+                    'shutdown',
                     'shutdown',
                     { delay: 60, reason: 'Maintenance planifiée' }
                   )}
-                  disabled={loading}
+                  disabled={isActionLoading('server', 'shutdown')}
                   className="action-btn shutdown-btn"
                 >
-                  🔌 Arrêter le Serveur
+                  {isActionLoading('server', 'shutdown') ? '⏳ Arrêt du serveur...' : '🔌 Arrêter le Serveur'}
                 </button>
               </div>
             </div>
