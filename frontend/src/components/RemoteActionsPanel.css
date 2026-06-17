@@ -138,6 +138,18 @@
   color: #64748b;
 }
 
+.service-action-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.service-action-buttons .action-btn {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
 /* Service Actions Section */
 .service-actions-section {
   margin-bottom: 30px;

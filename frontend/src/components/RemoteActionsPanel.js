@@ -22,13 +22,10 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
 
   // Services supportés
   const supportedServices = [
-    { id: 'apache2', name: 'Apache2', icon: '🌐', description: 'Serveur web Apache' },
+    { id: 'apache2', name: 'Apache', icon: '🌐', description: 'Serveur web Apache' },
     { id: 'nginx', name: 'Nginx', icon: '⚡', description: 'Serveur web Nginx' },
-    { id: 'mysql', name: 'MySQL', icon: '🗄️', description: 'Base de données MySQL' },
-    { id: 'docker', name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' },
-    { id: 'postgresql', name: 'PostgreSQL', icon: '🐘', description: 'Base de données PostgreSQL' },
-    { id: 'redis', name: 'Redis', icon: '🔴', description: 'Cache Redis' },
-    { id: 'mongodb', name: 'MongoDB', icon: '🍃', description: 'Base de données MongoDB' }
+    { id: 'mongodb', name: 'MongoDB', icon: '🍃', description: 'Base de données MongoDB' },
+    { id: 'docker', name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' }
   ];
 
   // Fetch services status for selected server
@@ -226,56 +223,35 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                         </p>
                       )}
                     </div>
+                    <div className="service-action-buttons">
+                      <button
+                        onClick={() => executeRemoteAction(
+                          `restart-${service.id}`,
+                          'restart-service',
+                          { service_name: service.id }
+                        )}
+                        disabled={loading}
+                        className="action-btn restart-btn"
+                        title="Redémarrer le service"
+                      >
+                        🔄 Redémarrer
+                      </button>
+                      <button
+                        onClick={() => executeRemoteAction(
+                          `stop-${service.id}`,
+                          'stop-service',
+                          { service_name: service.id }
+                        )}
+                        disabled={loading}
+                        className="action-btn stop-btn"
+                        title="Arrêter le service"
+                      >
+                        ⏹️ Arrêter
+                      </button>
+                    </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Service Actions */}
-          <div className="service-actions-section">
-            <h3>🔄 Actions sur les Services</h3>
-            <div className="actions-grid">
-              {supportedServices.map((service) => (
-                <div key={service.id} className="service-actions">
-                  <h4>{service.icon} {service.name}</h4>
-                  <div className="action-buttons">
-                    <button
-                      onClick={() => executeRemoteAction(
-                        `restart-${service.id}`,
-                        'restart-service',
-                        { service_name: service.id }
-                      )}
-                      disabled={loading}
-                      className="action-btn restart-btn"
-                    >
-                      🔄 Redémarrer
-                    </button>
-                    <button
-                      onClick={() => executeRemoteAction(
-                        `start-${service.id}`,
-                        'start-service',
-                        { service_name: service.id }
-                      )}
-                      disabled={loading}
-                      className="action-btn start-btn"
-                    >
-                      ▶️ Démarrer
-                    </button>
-                    <button
-                      onClick={() => executeRemoteAction(
-                        `stop-${service.id}`,
-                        'stop-service',
-                        { service_name: service.id }
-                      )}
-                      disabled={loading}
-                      className="action-btn stop-btn"
-                    >
-                      ⏹️ Arrêter
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 

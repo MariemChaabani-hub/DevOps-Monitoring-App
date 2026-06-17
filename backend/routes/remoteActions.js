@@ -100,13 +100,10 @@ router.post('/:server_id/restart-service',
 
       // Services supportés
       const supportedServices = {
-        'apache2': { name: 'Apache2', command: 'sudo systemctl restart apache2' },
+        'apache2': { name: 'Apache', command: 'sudo systemctl restart apache2' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl restart nginx' },
-        'mysql': { name: 'MySQL', command: 'sudo systemctl restart mysql' },
-        'docker': { name: 'Docker', command: 'sudo systemctl restart docker' },
-        'postgresql': { name: 'PostgreSQL', command: 'sudo systemctl restart postgresql' },
-        'redis': { name: 'Redis', command: 'sudo systemctl restart redis' },
-        'mongodb': { name: 'MongoDB', command: 'sudo systemctl restart mongod' }
+        'mongodb': { name: 'MongoDB', command: 'sudo systemctl restart mongod' },
+        'docker': { name: 'Docker', command: 'sudo systemctl restart docker' }
       };
 
       const service = supportedServices[service_name];
@@ -380,13 +377,10 @@ router.post('/:server_id/start-service',
       }
 
       const supportedServices = {
-        'apache2': { name: 'Apache2', command: 'sudo systemctl start apache2' },
+        'apache2': { name: 'Apache', command: 'sudo systemctl start apache2' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl start nginx' },
-        'mysql': { name: 'MySQL', command: 'sudo systemctl start mysql' },
-        'docker': { name: 'Docker', command: 'sudo systemctl start docker' },
-        'postgresql': { name: 'PostgreSQL', command: 'sudo systemctl start postgresql' },
-        'redis': { name: 'Redis', command: 'sudo systemctl start redis' },
-        'mongodb': { name: 'MongoDB', command: 'sudo systemctl start mongod' }
+        'mongodb': { name: 'MongoDB', command: 'sudo systemctl start mongod' },
+        'docker': { name: 'Docker', command: 'sudo systemctl start docker' }
       };
 
       const service = supportedServices[service_name];
@@ -444,13 +438,10 @@ router.post('/:server_id/stop-service',
       }
 
       const supportedServices = {
-        'apache2': { name: 'Apache2', command: 'sudo systemctl stop apache2' },
+        'apache2': { name: 'Apache', command: 'sudo systemctl stop apache2' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl stop nginx' },
-        'mysql': { name: 'MySQL', command: 'sudo systemctl stop mysql' },
-        'docker': { name: 'Docker', command: 'sudo systemctl stop docker' },
-        'postgresql': { name: 'PostgreSQL', command: 'sudo systemctl stop postgresql' },
-        'redis': { name: 'Redis', command: 'sudo systemctl stop redis' },
-        'mongodb': { name: 'MongoDB', command: 'sudo systemctl stop mongod' }
+        'mongodb': { name: 'MongoDB', command: 'sudo systemctl stop mongod' },
+        'docker': { name: 'Docker', command: 'sudo systemctl stop docker' }
       };
 
       const service = supportedServices[service_name];
@@ -501,15 +492,12 @@ router.get('/:server_id/services-status',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // Simulation du statut des services (remplacer par vraie commande)
+      // Simulation du statut des services
       const servicesStatus = {
         'apache2': { status: 'running', uptime: '2 days, 14 hours' },
-        'nginx': { status: 'stopped', uptime: '0 seconds' },
-        'mysql': { status: 'running', uptime: '5 days, 3 hours' },
-        'docker': { status: 'running', uptime: '1 day, 8 hours' },
-        'postgresql': { status: 'stopped', uptime: '0 seconds' },
-        'redis': { status: 'running', uptime: '3 days, 12 hours' },
-        'mongodb': { status: 'running', uptime: '4 days, 6 hours' }
+        'nginx': { status: 'running', uptime: '5 days, 3 hours' },
+        'mongodb': { status: 'running', uptime: '4 days, 6 hours' },
+        'docker': { status: 'running', uptime: '1 day, 8 hours' }
       };
 
       res.json({
