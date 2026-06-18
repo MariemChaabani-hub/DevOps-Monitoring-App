@@ -8,11 +8,67 @@
  */
 
 const express = require('express');
+const { exec } = require('child_process');
 const { NodeSSH } = require('node-ssh');
 const router = express.Router();
 const Server = require('../models/Server');
 const Metric = require('../models/Metric');
 const EmailService = require('../services/emailService');
+
+// ============================================================
+// Helper: Execute a shell command and return { stdout, stderr }
+// ============================================================
+const execCommand = (command, timeoutMs = 30000) => {
+  return new Promise((resolve, reject) => {
+    console.log(`[Remote Action] Executing command: ${command}`);
+    exec(command, { timeout: timeoutMs }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`[Remote Action] Command failed: ${error.message}`);
+        console.error(`[Remote Action] stderr: ${stderr}`);
+        return reject({ message: error.message, stderr: stderr.trim(), code: error.code });
+      }
+      console.log(`[Remote Action] Command succeeded - stdout: ${stdout.trim()}`);
+      resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
+    });
+  });
+};
+
+// ============================================================
+// Helper: Verify the real status of a service after an action
+// Returns { status: 'active'|'inactive'|'unknown', raw: string }
+// ============================================================
+const verifyServiceStatus = async (serviceName) => {
+  const statusCommands = {
+    'pm2': 'pm2 pid',                           // returns PID if running, empty if not
+    'nginx': 'systemctl is-active nginx',        // returns active/inactive
+    'mongodb': 'systemctl is-active mongod',     // returns active/inactive
+    'docker': 'systemctl is-active docker'       // returns active/inactive
+  };
+
+  const cmd = statusCommands[serviceName];
+  if (!cmd) return { status: 'unknown', raw: 'unsupported service' };
+
+  try {
+    const { stdout } = await execCommand(cmd, 10000);
+
+    if (serviceName === 'pm2') {
+      // pm2 pid returns a number if processes are running, empty if stopped
+      const isRunning = stdout && stdout.trim() !== '' && stdout.trim() !== '0';
+      return { status: isRunning ? 'active' : 'inactive', raw: stdout };
+    }
+
+    // systemctl is-active returns 'active' or 'inactive'
+    const status = stdout.trim().toLowerCase();
+    return { status: status === 'active' ? 'active' : 'inactive', raw: stdout };
+  } catch (err) {
+    // systemctl is-active returns exit code 3 for 'inactive' — that's not an error
+    if (err.stderr && err.stderr.includes('inactive')) {
+      return { status: 'inactive', raw: 'inactive' };
+    }
+    // pm2 not installed or other issues
+    return { status: 'unknown', raw: err.message || 'verification failed' };
+  }
+};
 
 // Audit log model
 const AuditLog = require('../models/AuditLog');
@@ -98,9 +154,9 @@ router.post('/:server_id/restart-service',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // Services supportés
+      // Services supportés avec commandes réelles
       const supportedServices = {
-        'pm2': { name: 'PM2', command: 'sudo pm2 restart all' },
+        'pm2': { name: 'PM2', command: 'pm2 restart all' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl restart nginx' },
         'mongodb': { name: 'MongoDB', command: 'sudo systemctl restart mongod' },
         'docker': { name: 'Docker', command: 'sudo systemctl restart docker' }
@@ -114,17 +170,37 @@ router.post('/:server_id/restart-service',
         });
       }
 
-      // Simuler l'exécution de la commande à distance
       console.log(`[Remote Action] Redémarrage du service ${service.name} sur le serveur ${server_id}`);
-      console.log(`[Remote Action] Commande: ${service.command}`);
-      
-      // Simulation de l'exécution (remplacer par vraie connexion SSH)
+
+      // REAL EXECUTION via child_process
+      let execResult;
+      try {
+        execResult = await execCommand(service.command);
+      } catch (execError) {
+        const failResult = {
+          success: false,
+          error: `Échec de l'exécution: ${execError.message}`,
+          stderr: execError.stderr,
+          service_name: service.name,
+          command: service.command,
+          server_id: server_id,
+          timestamp: new Date()
+        };
+        await logAuditAction(req.auditData, failResult);
+        return res.status(500).json(failResult);
+      }
+
+      // VERIFY real status after restart
+      const verifiedStatus = await verifyServiceStatus(service_name);
+
       const result = {
         success: true,
         message: `Service ${service.name} redémarré avec succès`,
         service_name: service.name,
         command: service.command,
         server_id: server_id,
+        verified_status: verifiedStatus.status,
+        command_output: execResult.stdout,
         timestamp: new Date()
       };
 
@@ -377,7 +453,7 @@ router.post('/:server_id/start-service',
       }
 
       const supportedServices = {
-        'pm2': { name: 'PM2', command: 'sudo pm2 start all' },
+        'pm2': { name: 'PM2', command: 'pm2 start all' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl start nginx' },
         'mongodb': { name: 'MongoDB', command: 'sudo systemctl start mongod' },
         'docker': { name: 'Docker', command: 'sudo systemctl start docker' }
@@ -389,13 +465,36 @@ router.post('/:server_id/start-service',
       }
 
       console.log(`[Remote Action] Démarrage du service ${service.name} sur le serveur ${server_id}`);
-      
+
+      // REAL EXECUTION via child_process
+      let execResult;
+      try {
+        execResult = await execCommand(service.command);
+      } catch (execError) {
+        const failResult = {
+          success: false,
+          error: `Échec de l'exécution: ${execError.message}`,
+          stderr: execError.stderr,
+          service_name: service.name,
+          command: service.command,
+          server_id: server_id,
+          timestamp: new Date()
+        };
+        await logAuditAction(req.auditData, failResult);
+        return res.status(500).json(failResult);
+      }
+
+      // VERIFY real status after start
+      const verifiedStatus = await verifyServiceStatus(service_name);
+
       const result = {
         success: true,
         message: `Service ${service.name} démarré avec succès`,
         service_name: service.name,
         command: service.command,
         server_id: server_id,
+        verified_status: verifiedStatus.status,
+        command_output: execResult.stdout,
         timestamp: new Date()
       };
 
@@ -438,7 +537,7 @@ router.post('/:server_id/stop-service',
       }
 
       const supportedServices = {
-        'pm2': { name: 'PM2', command: 'sudo pm2 stop all' },
+        'pm2': { name: 'PM2', command: 'pm2 stop all' },
         'nginx': { name: 'Nginx', command: 'sudo systemctl stop nginx' },
         'mongodb': { name: 'MongoDB', command: 'sudo systemctl stop mongod' },
         'docker': { name: 'Docker', command: 'sudo systemctl stop docker' }
@@ -450,13 +549,36 @@ router.post('/:server_id/stop-service',
       }
 
       console.log(`[Remote Action] Arrêt du service ${service.name} sur le serveur ${server_id}`);
-      
+
+      // REAL EXECUTION via child_process
+      let execResult;
+      try {
+        execResult = await execCommand(service.command);
+      } catch (execError) {
+        const failResult = {
+          success: false,
+          error: `Échec de l'exécution: ${execError.message}`,
+          stderr: execError.stderr,
+          service_name: service.name,
+          command: service.command,
+          server_id: server_id,
+          timestamp: new Date()
+        };
+        await logAuditAction(req.auditData, failResult);
+        return res.status(500).json(failResult);
+      }
+
+      // VERIFY real status after stop
+      const verifiedStatus = await verifyServiceStatus(service_name);
+
       const result = {
         success: true,
         message: `Service ${service.name} arrêté avec succès`,
         service_name: service.name,
         command: service.command,
         server_id: server_id,
+        verified_status: verifiedStatus.status,
+        command_output: execResult.stdout,
         timestamp: new Date()
       };
 
@@ -492,13 +614,18 @@ router.get('/:server_id/services-status',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // Simulation du statut des services
-      const servicesStatus = {
-        'pm2': { status: 'running', uptime: '2 days, 14 hours' },
-        'nginx': { status: 'running', uptime: '5 days, 3 hours' },
-        'mongodb': { status: 'running', uptime: '4 days, 6 hours' },
-        'docker': { status: 'running', uptime: '1 day, 8 hours' }
-      };
+      // REAL status check for all services
+      const serviceNames = ['pm2', 'nginx', 'mongodb', 'docker'];
+      const servicesStatus = {};
+
+      for (const svcName of serviceNames) {
+        const verified = await verifyServiceStatus(svcName);
+        servicesStatus[svcName] = {
+          status: verified.status === 'active' ? 'running' : 
+                  verified.status === 'inactive' ? 'stopped' : 'unknown',
+          raw: verified.raw
+        };
+      }
 
       res.json({
         server_id: server_id,

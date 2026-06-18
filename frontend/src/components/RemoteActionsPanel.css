@@ -365,6 +365,75 @@
   white-space: pre-wrap;
 }
 
+/* Verified Status Badge */
+.verified-status-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.verified-status-badge.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.verified-status-badge.inactive {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.verified-status-badge.unknown {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+/* Command Output */
+.result-command-output {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 6px;
+}
+
+.result-command-output strong {
+  color: #10b981;
+  font-size: 0.85rem;
+}
+
+.result-command-output pre {
+  margin: 6px 0 0 0;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+/* Stderr Error Output */
+.result-stderr {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+}
+
+.result-stderr strong {
+  color: #ef4444;
+  font-size: 0.85rem;
+}
+
+.result-stderr pre {
+  margin: 6px 0 0 0;
+  color: #fca5a5;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
 /* Audit Section */
 .audit-section {
   margin-top: 30px;

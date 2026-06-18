@@ -127,6 +127,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         setActionResult({
           success: true,
           message: result.message,
+          verifiedStatus: result.verified_status || null,
+          commandOutput: result.command_output || null,
           details: result
         });
         
@@ -136,7 +138,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
       } else {
         setActionResult({
           success: false,
-          message: result.error || 'Action failed'
+          message: result.error || 'Action failed',
+          stderr: result.stderr || null
         });
       }
     } catch (error) {
@@ -328,10 +331,29 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                 <span className="result-title">
                   {actionResult.success ? 'Action Réussie' : 'Action Échouée'}
                 </span>
+                {actionResult.verifiedStatus && (
+                  <span className={`verified-status-badge ${actionResult.verifiedStatus}`}>
+                    {actionResult.verifiedStatus === 'active' ? '🟢 Vérifié: Actif' :
+                     actionResult.verifiedStatus === 'inactive' ? '🔴 Vérifié: Inactif' :
+                     '🟡 Vérifié: Inconnu'}
+                  </span>
+                )}
               </div>
               <div className="result-message">
                 {actionResult.message}
               </div>
+              {actionResult.commandOutput && (
+                <div className="result-command-output">
+                  <strong>Sortie de la commande:</strong>
+                  <pre>{actionResult.commandOutput}</pre>
+                </div>
+              )}
+              {actionResult.stderr && (
+                <div className="result-stderr">
+                  <strong>Erreur:</strong>
+                  <pre>{actionResult.stderr}</pre>
+                </div>
+              )}
               {actionResult.details && (
                 <div className="result-details">
                   <pre>{JSON.stringify(actionResult.details, null, 2)}</pre>
