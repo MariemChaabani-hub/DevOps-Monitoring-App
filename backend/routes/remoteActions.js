@@ -82,14 +82,14 @@ const AuditLog = require('../models/AuditLog');
 const requireAdmin = (req, res, next) => {
   const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
   const userEmail = req.headers['x-admin-email'] || req.body.admin_email;
-  
+
   if (userEmail !== adminEmail) {
-    return res.status(403).json({ 
+    return res.status(403).json({
       error: 'Accès non autorisé',
       message: 'Seuls les administrateurs peuvent effectuer des actions à distance'
     });
   }
-  
+
   next();
 };
 
@@ -118,7 +118,7 @@ const logAuditAction = async (auditData, result) => {
       details: result.details || result.error
     });
     await log.save();
-    
+
     // Envoyer un email de notification pour l'audit
     const emailService = require('../services/emailService');
     await emailService.sendAuditNotificationEmail({
@@ -138,16 +138,16 @@ const logAuditAction = async (auditData, result) => {
 /**
  * Redémarrage de services spécifiques
  */
-router.post('/:server_id/restart-service', 
-  requireAdmin, 
+router.post('/:server_id/restart-service',
+  requireAdmin,
   auditAction('RESTART_SERVICE', 'SERVICE'),
   async (req, res) => {
     try {
       const { server_id } = req.params;
       const { service_name, force = false } = req.body;
-      
+
       if (!service_name) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'service_name est requis',
           supported_services: ['pm2', 'nginx', 'mongodb', 'docker']
         });
@@ -169,7 +169,7 @@ router.post('/:server_id/restart-service',
 
       const service = supportedServices[service_name];
       if (!service) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Service non supporté',
           supported_services: Object.keys(supportedServices)
         });
@@ -221,7 +221,7 @@ router.post('/:server_id/restart-service',
         error: error.message
       };
       await logAuditAction(req.auditData, result);
-      
+
       res.status(500).json({ error: error.message });
     }
   }
@@ -230,8 +230,8 @@ router.post('/:server_id/restart-service',
 /**
  * Redémarrage complet du serveur
  */
-router.post('/:server_id/restart', 
-  requireAdmin, 
+router.post('/:server_id/restart',
+  requireAdmin,
   auditAction('RESTART_SERVER', 'SERVER'),
   async (req, res) => {
     try {
@@ -245,7 +245,7 @@ router.post('/:server_id/restart',
 
       // Vérifier que les informations SSH sont disponibles
       if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Informations SSH incomplètes',
           message: 'Le serveur doit avoir ip_address, ssh_username et ssh_password configurés',
           missing_fields: {
@@ -258,10 +258,10 @@ router.post('/:server_id/restart',
 
       console.log(`[Remote Action] Redémarrage du serveur ${server_id} via SSH`);
       console.log(`[Remote Action] Délai avant redémarrage: ${delay} secondes`);
-      
+
       // Exécution réelle via SSH
       const ssh = new NodeSSH();
-      
+
       try {
         // Connexion SSH
         await ssh.connect({
@@ -270,16 +270,16 @@ router.post('/:server_id/restart',
           password: server.ssh_password,
           port: server.ssh_port || 22
         });
-        
+
         console.log(`[Remote Action] Connexion SSH établie avec ${server.ip_address}`);
-        
+
         // Exécuter la commande de redémarrage
         const result = await ssh.execCommand(`sleep ${delay} && sudo reboot`);
-        
+
         console.log(`[Remote Action] Commande reboot envoyée - stdout: ${result.stdout}, stderr: ${result.stderr}`);
-        
+
         await ssh.dispose();
-        
+
         // Créer des métriques OK pour refléter le redémarrage du serveur
         try {
           const restartMetric = new Metric({
@@ -295,9 +295,9 @@ router.post('/:server_id/restart',
             status: 'OK',            // État OK
             location: server.location || 'Unknown'
           });
-          
+
           await restartMetric.save();
-          
+
           // Mettre à jour le statut du serveur
           server.status = 'OK';
           server.is_active = true;
@@ -308,7 +308,7 @@ router.post('/:server_id/restart',
           };
           server.last_metric_time = new Date();
           await server.save();
-          
+
           console.log(`[Remote Action] Métriques OK créées pour ${server_id} après redémarrage`);
         } catch (metricError) {
           console.error('[Remote Action] Erreur création métriques OK après redémarrage:', metricError);
@@ -337,9 +337,9 @@ router.post('/:server_id/restart',
           error: `Erreur SSH: ${sshError.message}`
         };
         await logAuditAction(req.auditData, auditResult);
-        
-        res.status(500).json({ 
-          error: `Impossible de redémarrer le serveur via SSH: ${sshError.message}` 
+
+        res.status(500).json({
+          error: `Impossible de redémarrer le serveur via SSH: ${sshError.message}`
         });
       }
 
@@ -350,7 +350,7 @@ router.post('/:server_id/restart',
         error: error.message
       };
       await logAuditAction(req.auditData, result);
-      
+
       res.status(500).json({ error: error.message });
     }
   }
@@ -359,8 +359,8 @@ router.post('/:server_id/restart',
 /**
  * Arrêt du serveur
  */
-router.post('/:server_id/shutdown', 
-  requireAdmin, 
+router.post('/:server_id/shutdown',
+  requireAdmin,
   auditAction('SHUTDOWN_SERVER', 'SERVER'),
   async (req, res) => {
     try {
@@ -374,7 +374,7 @@ router.post('/:server_id/shutdown',
 
       console.log(`[Remote Action] Arrêt du serveur ${server_id}`);
       console.log(`[Remote Action] Raison: ${reason}`);
-      
+
       const result = {
         success: true,
         message: `Serveur ${server.name} arrêté avec succès`,
@@ -400,9 +400,9 @@ router.post('/:server_id/shutdown',
           status: 'OFFLINE',       // État OFFLINE
           location: server.location || 'Unknown'
         });
-        
+
         await offlineMetric.save();
-        
+
         // Mettre à jour le statut du serveur
         server.status = 'OFFLINE';
         server.is_active = false;
@@ -413,7 +413,7 @@ router.post('/:server_id/shutdown',
         };
         server.last_metric_time = new Date();
         await server.save();
-        
+
         console.log(`[Remote Action] Métriques OFFLINE créées pour ${server_id}`);
       } catch (metricError) {
         console.error('[Remote Action] Erreur création métriques OFFLINE:', metricError);
@@ -431,7 +431,7 @@ router.post('/:server_id/shutdown',
         error: error.message
       };
       await logAuditAction(req.auditData, result);
-      
+
       res.status(500).json({ error: error.message });
     }
   }
@@ -440,8 +440,8 @@ router.post('/:server_id/shutdown',
 /**
  * Démarrage de services applicatifs
  */
-router.post('/:server_id/start-service', 
-  requireAdmin, 
+router.post('/:server_id/start-service',
+  requireAdmin,
   auditAction('START_SERVICE', 'SERVICE'),
   async (req, res) => {
     try {
@@ -515,7 +515,7 @@ router.post('/:server_id/start-service',
         error: error.message
       };
       await logAuditAction(req.auditData, result);
-      
+
       res.status(500).json({ error: error.message });
     }
   }
@@ -524,8 +524,8 @@ router.post('/:server_id/start-service',
 /**
  * Arrêt de services applicatifs
  */
-router.post('/:server_id/stop-service', 
-  requireAdmin, 
+router.post('/:server_id/stop-service',
+  requireAdmin,
   auditAction('STOP_SERVICE', 'SERVICE'),
   async (req, res) => {
     try {
@@ -599,7 +599,7 @@ router.post('/:server_id/stop-service',
         error: error.message
       };
       await logAuditAction(req.auditData, result);
-      
+
       res.status(500).json({ error: error.message });
     }
   }
@@ -608,8 +608,8 @@ router.post('/:server_id/stop-service',
 /**
  * Obtenir le statut des services sur un serveur
  */
-router.get('/:server_id/services-status', 
-  requireAdmin, 
+router.get('/:server_id/services-status',
+  requireAdmin,
   async (req, res) => {
     try {
       const { server_id } = req.params;
@@ -626,8 +626,8 @@ router.get('/:server_id/services-status',
       for (const svcName of serviceNames) {
         const verified = await verifyServiceStatus(svcName);
         servicesStatus[svcName] = {
-          status: verified.status === 'active' ? 'running' : 
-                  verified.status === 'inactive' ? 'stopped' : 'unknown',
+          status: verified.status === 'active' ? 'running' :
+            verified.status === 'inactive' ? 'stopped' : 'unknown',
           raw: verified.raw
         };
       }
@@ -649,15 +649,15 @@ router.get('/:server_id/services-status',
 /**
  * Obtenir l'historique des actions d'audit
  */
-router.get('/:server_id/audit-log', 
-  requireAdmin, 
+router.get('/:server_id/audit-log',
+  requireAdmin,
   async (req, res) => {
     try {
       const { server_id } = req.params;
       const { limit = 50, start_date, end_date } = req.query;
 
       let query = { server_id };
-      
+
       if (start_date || end_date) {
         query.timestamp = {};
         if (start_date) query.timestamp.$gte = new Date(start_date);

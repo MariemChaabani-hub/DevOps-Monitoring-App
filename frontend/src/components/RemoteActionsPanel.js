@@ -7,7 +7,7 @@
  * - Arrêt/démarrage de services applicatifs
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './RemoteActionsPanel.css';
 
 const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
@@ -18,6 +18,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [actionResult, setActionResult] = useState(null);
+
+  const statusIntervalRef = useRef(null);
 
   const API_BASE = 'http://localhost:3000';
 
@@ -48,12 +50,12 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   ];
 
   // Fetch services status for selected server
-  const fetchServicesStatus = async () => {
-    if (!selectedServer) return;
+  const fetchServicesStatus = async (serverId = selectedServer) => {
+    if (!serverId) return;
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/remote-actions/${selectedServer}/services-status`,
+        `${API_BASE}/api/remote-actions/${serverId}/services-status`,
         {
           headers: {
             'x-admin-email': 'mariemchaabani39@gmail.com'
@@ -73,12 +75,12 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   };
 
   // Fetch audit logs for selected server
-  const fetchAuditLogs = async () => {
-    if (!selectedServer) return;
+  const fetchAuditLogs = async (serverId = selectedServer) => {
+    if (!serverId) return;
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/remote-actions/${selectedServer}/audit-log`,
+        `${API_BASE}/api/remote-actions/${serverId}/audit-log`,
         {
           headers: {
             'x-admin-email': 'mariemchaabani39@gmail.com'
@@ -104,13 +106,21 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
       return;
     }
 
+    const currentServer = selectedServer;
+
     // Activer le loading pour cette action spécifique
     setActionLoading(serviceName, actionType, true);
     setActionResult(null);
 
+    // Clear any existing status refresh interval
+    if (statusIntervalRef.current) {
+      clearInterval(statusIntervalRef.current);
+      statusIntervalRef.current = null;
+    }
+
     try {
       const response = await fetch(
-        `${API_BASE}/api/remote-actions/${selectedServer}/${endpoint}`,
+        `${API_BASE}/api/remote-actions/${currentServer}/${endpoint}`,
         {
           method: 'POST',
           headers: {
@@ -132,9 +142,20 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           details: result
         });
         
-        // Refresh services status and audit logs
-        await fetchServicesStatus();
-        await fetchAuditLogs();
+        // Refresh services status and audit logs immediately
+        await fetchServicesStatus(currentServer);
+        await fetchAuditLogs(currentServer);
+
+        // Automatically refresh service status every 3s for 15s (5 times total)
+        let checkCount = 0;
+        statusIntervalRef.current = setInterval(async () => {
+          checkCount++;
+          await fetchServicesStatus(currentServer);
+          if (checkCount >= 5) {
+            clearInterval(statusIntervalRef.current);
+            statusIntervalRef.current = null;
+          }
+        }, 3000);
       } else {
         setActionResult({
           success: false,
@@ -190,9 +211,16 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   // Effect: Fetch services status when server changes
   useEffect(() => {
     if (selectedServer) {
-      fetchServicesStatus();
-      fetchAuditLogs();
+      fetchServicesStatus(selectedServer);
+      fetchAuditLogs(selectedServer);
     }
+
+    return () => {
+      if (statusIntervalRef.current) {
+        clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = null;
+      }
+    };
   }, [selectedServer]);
 
   return (
@@ -235,8 +263,10 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                     <div className="service-header">
                       <span className="service-icon">{service.icon}</span>
                       <span className="service-name">{service.name}</span>
-                      <span className="service-status">
-                        {getStatusIcon(status?.status || 'unknown')}
+                      <span className={`status-badge ${status?.status || 'unknown'}`}>
+                        {status?.status === 'running' ? '🟢 Active' :
+                         status?.status === 'stopped' ? '🔴 Inactive' :
+                         '🟡 Unknown'}
                       </span>
                     </div>
                     <div className="service-details">
