@@ -12,15 +12,14 @@ const AdminAuth = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const ADMIN_EMAIL = 'mariemchaabani39@gmail.com';
-
   // Vérifier si déjà authentifié dans le localStorage
   useEffect(() => {
     const storedAuth = localStorage.getItem('adminAuthenticated');
     const storedEmail = localStorage.getItem('adminEmail');
     
-    if (storedAuth === 'true' && storedEmail === ADMIN_EMAIL) {
+    if (storedAuth === 'true' && storedEmail) {
       setIsAuthenticated(true);
+      setEmail(storedEmail);
     }
   }, []);
 
@@ -29,41 +28,30 @@ const AdminAuth = ({ children }) => {
     setIsLoading(true);
     setError('');
 
-    // Vérifier si l'email correspond à l'admin
-    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-      // Simuler une vérification backend (remplacer par vrai appel API)
-      try {
-        // Appel API pour vérifier l'authentification
-        const response = await fetch('http://localhost:3000/api/auth/admin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ email })
-        });
+    try {
+      // Appel API pour vérifier l'authentification
+      const response = await fetch('http://localhost:3000/api/auth/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
 
-        if (response.ok || email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          // Authentification réussie
-          setIsAuthenticated(true);
-          localStorage.setItem('adminAuthenticated', 'true');
-          localStorage.setItem('adminEmail', email.toLowerCase());
-          localStorage.setItem('authTimestamp', Date.now().toString());
-        } else {
-          setError('Échec de l\'authentification');
-        }
-      } catch (err) {
-        // En cas d'erreur backend, vérifier localement pour le développement
-        if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          setIsAuthenticated(true);
-          localStorage.setItem('adminAuthenticated', 'true');
-          localStorage.setItem('adminEmail', email.toLowerCase());
-          localStorage.setItem('authTimestamp', Date.now().toString());
-        } else {
-          setError('Email non autorisé');
-        }
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Authentification réussie
+        setIsAuthenticated(true);
+        localStorage.setItem('adminAuthenticated', 'true');
+        localStorage.setItem('adminEmail', data.email.toLowerCase());
+        localStorage.setItem('authTimestamp', Date.now().toString());
+      } else {
+        setError(data.message || 'Échec de l\'authentification');
       }
-    } else {
-      setError('Email non autorisé. Accès réservé à l\'administrateur.');
+    } catch (err) {
+      console.error('[Frontend Auth] Error connecting to authentication API:', err);
+      setError('Impossible de se connecter au serveur d\'authentification ou la base de données est hors ligne.');
     }
 
     setIsLoading(false);

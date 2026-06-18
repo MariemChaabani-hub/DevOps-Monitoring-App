@@ -11,20 +11,37 @@ const express = require('express');
 const router = express.Router();
 const Server = require('../models/Server');
 const Service = require('../models/Service');
+const User = require('../models/User');
 
 // Middleware pour vérifier les permissions administrateur
-const requireAdmin = (req, res, next) => {
-  const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
-  const userEmail = req.headers['x-admin-email'] || req.body.admin_email;
-  
-  if (userEmail !== adminEmail) {
-    return res.status(403).json({ 
-      error: 'Accès non autorisé',
-      message: 'Seuls les administrateurs peuvent accéder aux services'
+const requireAdmin = async (req, res, next) => {
+  try {
+    const userEmail = req.headers['x-admin-email'] || req.body.admin_email;
+    
+    if (!userEmail) {
+      return res.status(401).json({
+        error: 'Authentification requise',
+        message: 'L\'email de l\'administrateur est requis.'
+      });
+    }
+
+    const user = await User.findOne({ email: userEmail.toLowerCase() });
+    
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Accès non autorisé',
+        message: 'Seuls les administrateurs peuvent accéder aux services'
+      });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('[Services Auth Middleware] Erreur lors de la vérification de l\'admin:', error);
+    return res.status(500).json({
+      error: 'Erreur d\'authentification base de données',
+      message: 'Impossible de valider les droits d\'administrateur (Base de données hors ligne/erreur).'
     });
   }
-  
-  next();
 };
 
 // Services supportés

@@ -14,6 +14,7 @@ const router = express.Router();
 const Server = require('../models/Server');
 const Metric = require('../models/Metric');
 const EmailService = require('../services/emailService');
+const User = require('../models/User');
 
 // ============================================================
 // Helper: Execute a shell command and return { stdout, stderr }
@@ -79,18 +80,34 @@ const verifyServiceStatus = async (serviceName) => {
 const AuditLog = require('../models/AuditLog');
 
 // Middleware pour vérifier les permissions administrateur
-const requireAdmin = (req, res, next) => {
-  const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
-  const userEmail = req.headers['x-admin-email'] || req.body.admin_email;
+const requireAdmin = async (req, res, next) => {
+  try {
+    const userEmail = req.headers['x-admin-email'] || req.body.admin_email;
 
-  if (userEmail !== adminEmail) {
-    return res.status(403).json({
-      error: 'Accès non autorisé',
-      message: 'Seuls les administrateurs peuvent effectuer des actions à distance'
+    if (!userEmail) {
+      return res.status(401).json({
+        error: 'Authentification requise',
+        message: 'L\'email de l\'administrateur est requis.'
+      });
+    }
+
+    const user = await User.findOne({ email: userEmail.toLowerCase() });
+
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Accès non autorisé',
+        message: 'Seuls les administrateurs peuvent effectuer des actions à distance'
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error('[RemoteActions Auth Middleware] Erreur lors de la vérification de l\'admin:', error);
+    return res.status(500).json({
+      error: 'Erreur d\'authentification base de données',
+      message: 'Impossible de valider les droits d\'administrateur (Base de données hors ligne/erreur).'
     });
   }
-
-  next();
 };
 
 // Middleware pour logger les actions d'audit

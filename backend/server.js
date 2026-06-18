@@ -35,6 +35,7 @@ const metricsRoutes = require('./routes/metrics');
 const backupRoutes = require('./routes/backups');
 const remoteActionsRoutes = require('./routes/remoteActions');
 const servicesRoutes = require('./routes/services');
+const authRoutes = require('./routes/auth');
 
 // Initialize Express
 const app = express();
@@ -63,12 +64,31 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pfe-mo
 mongoose.connect(MONGODB_URI).then(() => {
   console.log('[Backend] Connected to MongoDB');
   initializeDefaultThresholds();
+  initializeDefaultAdmin();
   BackupCronService.initializeBackupCron();
   BackupCronService.initializeLateBackupCheck();
 }).catch(err => {
   console.error('[Backend] MongoDB connection error:', err);
   process.exit(1);
 });
+
+// Initialize default admin user if not exist
+async function initializeDefaultAdmin() {
+  try {
+    const User = require('./models/User');
+    const adminEmail = (process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com').toLowerCase();
+    const count = await User.countDocuments({ email: adminEmail });
+    if (count === 0) {
+      await User.create({
+        email: adminEmail,
+        role: 'admin'
+      });
+      console.log(`[Backend] Default admin user initialized in MongoDB: ${adminEmail}`);
+    }
+  } catch (error) {
+    console.error('[Backend] Error initializing default admin:', error);
+  }
+}
 
 // Initialize default thresholds if not exist
 async function initializeDefaultThresholds() {
@@ -231,6 +251,7 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/remote-actions', remoteActionsRoutes);
 app.use('/api/services', servicesRoutes);
+app.use('/api/auth', authRoutes);
 
 // Dashboard summary endpoint
 app.get('/api/dashboard/summary', async (req, res) => {
