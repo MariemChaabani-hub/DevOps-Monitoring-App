@@ -21,6 +21,8 @@ services:
       - PORT=3000
     depends_on:
       - mongodb
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - app-network
 
