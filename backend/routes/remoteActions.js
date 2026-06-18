@@ -36,36 +36,41 @@ const execCommand = (command, timeoutMs = 30000) => {
 // ============================================================
 // Helper: Verify the real status of a service after an action
 // Returns { status: 'active'|'inactive'|'unknown', raw: string }
+// Services run as Docker containers (except Docker daemon itself)
 // ============================================================
 const verifyServiceStatus = async (serviceName) => {
-  const statusCommands = {
-    'pm2': 'pm2 pid',                           // returns PID if running, empty if not
-    'nginx': 'systemctl is-active nginx',        // returns active/inactive
-    'mongodb': 'systemctl is-active mongod',     // returns active/inactive
-    'docker': 'systemctl is-active docker'       // returns active/inactive
+  // Map service names to their Docker container names
+  const containerNames = {
+    'pm2': 'backend',
+    'nginx': 'frontend',
+    'mongodb': 'mongodb'
   };
 
-  const cmd = statusCommands[serviceName];
-  if (!cmd) return { status: 'unknown', raw: 'unsupported service' };
+  // Docker daemon uses systemctl
+  if (serviceName === 'docker') {
+    try {
+      const { stdout } = await execCommand('systemctl is-active docker', 10000);
+      const status = stdout.trim().toLowerCase();
+      return { status: status === 'active' ? 'active' : 'inactive', raw: stdout };
+    } catch (err) {
+      if (err.stderr && err.stderr.includes('inactive')) {
+        return { status: 'inactive', raw: 'inactive' };
+      }
+      return { status: 'unknown', raw: err.message || 'verification failed' };
+    }
+  }
+
+  const containerName = containerNames[serviceName];
+  if (!containerName) return { status: 'unknown', raw: 'unsupported service' };
 
   try {
-    const { stdout } = await execCommand(cmd, 10000);
-
-    if (serviceName === 'pm2') {
-      // pm2 pid returns a number if processes are running, empty if stopped
-      const isRunning = stdout && stdout.trim() !== '' && stdout.trim() !== '0';
-      return { status: isRunning ? 'active' : 'inactive', raw: stdout };
-    }
-
-    // systemctl is-active returns 'active' or 'inactive'
-    const status = stdout.trim().toLowerCase();
-    return { status: status === 'active' ? 'active' : 'inactive', raw: stdout };
+    const { stdout } = await execCommand(
+      `docker inspect --format='{{.State.Running}}' ${containerName}`, 10000
+    );
+    const isRunning = stdout.trim().toLowerCase() === 'true';
+    return { status: isRunning ? 'active' : 'inactive', raw: stdout };
   } catch (err) {
-    // systemctl is-active returns exit code 3 for 'inactive' — that's not an error
-    if (err.stderr && err.stderr.includes('inactive')) {
-      return { status: 'inactive', raw: 'inactive' };
-    }
-    // pm2 not installed or other issues
+    // Container might not exist or docker not running
     return { status: 'unknown', raw: err.message || 'verification failed' };
   }
 };
@@ -154,11 +159,11 @@ router.post('/:server_id/restart-service',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // Services supportés avec commandes réelles
+      // Services supportés — containers Docker (sauf Docker daemon)
       const supportedServices = {
-        'pm2': { name: 'PM2', command: 'pm2 restart all' },
-        'nginx': { name: 'Nginx', command: 'sudo systemctl restart nginx' },
-        'mongodb': { name: 'MongoDB', command: 'sudo systemctl restart mongod' },
+        'pm2': { name: 'PM2 (Backend)', command: 'docker restart backend' },
+        'nginx': { name: 'Nginx (Frontend)', command: 'docker restart frontend' },
+        'mongodb': { name: 'MongoDB', command: 'docker restart mongodb' },
         'docker': { name: 'Docker', command: 'sudo systemctl restart docker' }
       };
 
@@ -453,9 +458,9 @@ router.post('/:server_id/start-service',
       }
 
       const supportedServices = {
-        'pm2': { name: 'PM2', command: 'pm2 start all' },
-        'nginx': { name: 'Nginx', command: 'sudo systemctl start nginx' },
-        'mongodb': { name: 'MongoDB', command: 'sudo systemctl start mongod' },
+        'pm2': { name: 'PM2 (Backend)', command: 'docker start backend' },
+        'nginx': { name: 'Nginx (Frontend)', command: 'docker start frontend' },
+        'mongodb': { name: 'MongoDB', command: 'docker start mongodb' },
         'docker': { name: 'Docker', command: 'sudo systemctl start docker' }
       };
 
@@ -537,9 +542,9 @@ router.post('/:server_id/stop-service',
       }
 
       const supportedServices = {
-        'pm2': { name: 'PM2', command: 'pm2 stop all' },
-        'nginx': { name: 'Nginx', command: 'sudo systemctl stop nginx' },
-        'mongodb': { name: 'MongoDB', command: 'sudo systemctl stop mongod' },
+        'pm2': { name: 'PM2 (Backend)', command: 'docker stop backend' },
+        'nginx': { name: 'Nginx (Frontend)', command: 'docker stop frontend' },
+        'mongodb': { name: 'MongoDB', command: 'docker stop mongodb' },
         'docker': { name: 'Docker', command: 'sudo systemctl stop docker' }
       };
 
