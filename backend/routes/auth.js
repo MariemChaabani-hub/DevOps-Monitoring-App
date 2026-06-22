@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const User = require('../models/User');
 
@@ -17,7 +18,16 @@ router.post('/admin', async (req, res) => {
       });
     }
 
-    // Query user from MongoDB
+    // Strict check: Verify MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      console.error('[Auth API] MongoDB connection state is down:', mongoose.connection.readyState);
+      return res.status(503).json({
+        error: 'Database unavailable',
+        message: 'La base de données MongoDB est actuellement indisponible.'
+      });
+    }
+
+    console.log(`[Auth API] Verifying credentials in MongoDB for email: ${email}`);
     const user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {

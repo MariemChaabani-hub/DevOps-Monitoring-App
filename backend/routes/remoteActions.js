@@ -69,6 +69,31 @@ const verifyServiceStatus = async (serviceName) => {
       `docker inspect --format='{{.State.Running}}' ${containerName}`, 10000
     );
     const isRunning = stdout.trim().toLowerCase() === 'true';
+
+    if (isRunning && serviceName === 'pm2') {
+      try {
+        const { stdout: pm2Stdout } = await execCommand(
+          'docker exec backend pm2 jlist', 10000
+        );
+        let isOnline = false;
+        try {
+          const processes = JSON.parse(pm2Stdout);
+          isOnline = Array.isArray(processes) && processes.some(p => p.pm2_env && p.pm2_env.status === 'online');
+        } catch (jsonErr) {
+          isOnline = pm2Stdout.includes('"status":"online"') || pm2Stdout.includes("'status': 'online'");
+        }
+        return {
+          status: isOnline ? 'active' : 'inactive',
+          raw: `Container running, PM2 process: ${isOnline ? 'online' : 'not online'}\nRaw: ${pm2Stdout}`
+        };
+      } catch (pm2Err) {
+        return {
+          status: 'inactive',
+          raw: `Container running but PM2 check failed: ${pm2Err.message}`
+        };
+      }
+    }
+
     return { status: isRunning ? 'active' : 'inactive', raw: stdout };
   } catch (err) {
     // Container might not exist or docker not running
@@ -178,7 +203,7 @@ router.post('/:server_id/restart-service',
 
       // Services supportés — containers Docker (sauf Docker daemon)
       const supportedServices = {
-        'pm2': { name: 'PM2 (Backend)', command: 'docker restart backend' },
+        'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 restart server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker restart frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker restart mongodb' },
         'docker': { name: 'Docker', command: 'sudo systemctl restart docker' }
@@ -475,7 +500,7 @@ router.post('/:server_id/start-service',
       }
 
       const supportedServices = {
-        'pm2': { name: 'PM2 (Backend)', command: 'docker start backend' },
+        'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 start server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker start frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker start mongodb' },
         'docker': { name: 'Docker', command: 'sudo systemctl start docker' }
@@ -559,7 +584,7 @@ router.post('/:server_id/stop-service',
       }
 
       const supportedServices = {
-        'pm2': { name: 'PM2 (Backend)', command: 'docker stop backend' },
+        'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 stop server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker stop frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker stop mongodb' },
         'docker': { name: 'Docker', command: 'sudo systemctl stop docker' }

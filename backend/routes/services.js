@@ -12,6 +12,7 @@ const router = express.Router();
 const Server = require('../models/Server');
 const Service = require('../models/Service');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 // Middleware pour vérifier les permissions administrateur
 const requireAdmin = async (req, res, next) => {
@@ -25,6 +26,16 @@ const requireAdmin = async (req, res, next) => {
       });
     }
 
+    // Strict check: Verify MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      console.error('[Services Auth Middleware] MongoDB connection state is down:', mongoose.connection.readyState);
+      return res.status(503).json({
+        error: 'Database unavailable',
+        message: 'La base de données MongoDB est actuellement indisponible.'
+      });
+    }
+
+    console.log(`[Services Auth] Verifying admin role in MongoDB for email: ${userEmail}`);
     const user = await User.findOne({ email: userEmail.toLowerCase() });
     
     if (!user || user.role !== 'admin') {
