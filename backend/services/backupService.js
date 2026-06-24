@@ -4,6 +4,9 @@
  */
 
 const mongoose = require('mongoose');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const Backup = require('../models/Backup');
 const Server = require('../models/Server');
 const Alert = require('../models/Alert');
@@ -415,8 +418,192 @@ function calculateHealthScore(statusBreakdown, total) {
   return Math.round(score);
 }
 
+/**
+ * Perform a real MongoDB database backup
+ * Runs mongodump inside the mongodb Docker container
+ * Writes the gzipped archive file to /app/backups/
+ * 
+ * @param {string} serverId - The server ID (e.g. 'default-server')
+ * @returns {Promise<Object>} - Result of the backup operation { status: 'OK'|'FAILED', size: Number, duration: Number, filename: String|null }
+ */
+async function performRealDatabaseBackup(serverId) {
+  const startTime = Date.now();
+  console.log(`[Backup Service] Starting real database backup for ${serverId}...`);
+  
+  // Define backup directory and filename
+  const backupDir = '/app/backups';
+  
+  // Ensure the directory exists
+  if (!fs.existsSync(backupDir)) {
+    try {
+      fs.mkdirSync(backupDir, { recursive: true });
+    } catch (mkdirError) {
+      console.error(`[Backup Service] Error creating backup directory ${backupDir}:`, mkdirError);
+    }
+  }
+  
+  const now = new Date();
+  const dateStr = now.toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
+  const filename = `backup-${serverId}-${dateStr}.gz`;
+  const filepath = path.join(backupDir, filename);
+  
+  return new Promise((resolve) => {
+    const fileStream = fs.createWriteStream(filepath);
+    
+    // Command: docker exec mongodb mongodump --archive --gzip
+    // This dumps all databases inside the mongodb container to stdout
+    console.log(`[Backup Service] Running: docker exec mongodb mongodump --archive --gzip`);
+    const child = spawn('docker', ['exec', 'mongodb', 'mongodump', '--archive', '--gzip']);
+    
+    child.stdout.pipe(fileStream);
+    
+    let stderrData = '';
+    child.stderr.on('data', (data) => {
+      stderrData += data.toString();
+    });
+    
+    child.on('close', (code) => {
+      const duration = Math.round((Date.now() - startTime) / 1000); // duration in seconds
+      
+      if (code === 0) {
+        // Success! Get actual file size
+        try {
+          const stats = fs.statSync(filepath);
+          const sizeInMB = parseFloat((stats.size / (1024 * 1024)).toFixed(2));
+          console.log(`[Backup Service] Real database backup completed successfully. File: ${filename}, Size: ${sizeInMB}MB, Duration: ${duration}s`);
+          resolve({
+            status: 'OK',
+            size: sizeInMB,
+            duration: duration,
+            filename: filename,
+            filepath: filepath
+          });
+        } catch (statError) {
+          console.error(`[Backup Service] Error reading backup file stats:`, statError);
+          resolve({
+            status: 'OK',
+            size: 0,
+            duration: duration,
+            filename: filename,
+            filepath: filepath
+          });
+        }
+      } else {
+        // Failed
+        console.error(`[Backup Service] docker exec mongodump failed with exit code ${code}`);
+        console.error(`[Backup Service] stderr: ${stderrData}`);
+        
+        // Clean up empty or corrupted file if it exists
+        if (fs.existsSync(filepath)) {
+          try {
+            fs.unlinkSync(filepath);
+          } catch (unlinkError) {
+            console.error(`[Backup Service] Error deleting failed backup file:`, unlinkError);
+          }
+        }
+        
+        // Fallback: try local mongodump if docker isn't available
+        tryLocalMongodump(serverId, filepath, startTime)
+          .then(resolve)
+          .catch((localError) => {
+            console.error(`[Backup Service] Local backup fallback failed:`, localError.message);
+            resolve({
+              status: 'FAILED',
+              size: 0,
+              duration: duration,
+              filename: null,
+              error: `Docker error: ${stderrData.trim() || 'Exit code ' + code}. Local error: ${localError.message}`
+            });
+          });
+      }
+    });
+    
+    child.on('error', (err) => {
+      const duration = Math.round((Date.now() - startTime) / 1000);
+      console.error(`[Backup Service] Failed to start backup process:`, err);
+      
+      // Clean up file stream
+      fileStream.end();
+      if (fs.existsSync(filepath)) {
+        try {
+          fs.unlinkSync(filepath);
+        } catch (unlinkError) {
+          console.error(`[Backup Service] Error deleting failed backup file:`, unlinkError);
+        }
+      }
+      
+      // Try local fallback
+      tryLocalMongodump(serverId, filepath, startTime)
+        .then(resolve)
+        .catch((localError) => {
+          resolve({
+            status: 'FAILED',
+            size: 0,
+            duration: duration,
+            filename: null,
+            error: `Process start error: ${err.message}. Local error: ${localError.message}`
+          });
+        });
+    });
+  });
+}
+
+/**
+ * Fallback to local mongodump if docker exec fails
+ */
+function tryLocalMongodump(serverId, filepath, startTime) {
+  return new Promise((resolve, reject) => {
+    console.log(`[Backup Service] Attempting local mongodump fallback...`);
+    const fileStream = fs.createWriteStream(filepath);
+    
+    const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/pfe-monitoring';
+    const child = spawn('mongodump', ['--uri', uri, '--archive', '--gzip']);
+    
+    child.stdout.pipe(fileStream);
+    
+    child.on('close', (code) => {
+      const duration = Math.round((Date.now() - startTime) / 1000);
+      if (code === 0) {
+        try {
+          const stats = fs.statSync(filepath);
+          const sizeInMB = parseFloat((stats.size / (1024 * 1024)).toFixed(2));
+          console.log(`[Backup Service] Local backup fallback completed successfully. Size: ${sizeInMB}MB`);
+          resolve({
+            status: 'OK',
+            size: sizeInMB,
+            duration: duration,
+            filename: path.basename(filepath),
+            filepath: filepath
+          });
+        } catch (e) {
+          resolve({
+            status: 'OK',
+            size: 0,
+            duration: duration,
+            filename: path.basename(filepath),
+            filepath: filepath
+          });
+        }
+      } else {
+        if (fs.existsSync(filepath)) {
+          try { fs.unlinkSync(filepath); } catch (e) {}
+        }
+        reject(new Error(`mongodump failed with exit code ${code}`));
+      }
+    });
+    
+    child.on('error', (err) => {
+      if (fs.existsSync(filepath)) {
+        try { fs.unlinkSync(filepath); } catch (e) {}
+      }
+      reject(err);
+    });
+  });
+}
+
 module.exports = {
   simulateBackup,
+  performRealDatabaseBackup,
   checkBackupStatusAndCreateAlert,
   runDailyBackupCheck,
   calculateBackupIndicators

@@ -28,6 +28,10 @@ const BackupSchema = new mongoose.Schema({
     required: true,
     description: 'Size in MB'
   },
+  filename: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now,

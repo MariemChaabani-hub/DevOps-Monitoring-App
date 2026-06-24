@@ -8,6 +8,7 @@ const Backup = require('../models/Backup');
 const Server = require('../models/Server');
 const BackupSocketService = require('./backupSocketService');
 const BackupAlertService = require('./backupAlertService');
+const BackupService = require('./backupService');
 
 class BackupCronService {
   /**
@@ -62,17 +63,25 @@ class BackupCronService {
    */
   static async simulateServerBackup(server) {
     try {
-      // Randomly determine if backup succeeds (80% success rate)
-      const isSuccess = Math.random() > 0.2;
-
-      // Mock data for duration (in seconds): 60 to 600 seconds
-      const duration = Math.floor(Math.random() * 540) + 60;
-
-      // Mock data for size (in MB): 100 to 5000 MB
-      const size = Math.floor(Math.random() * 4900) + 100;
-
-      // Determine status
-      const status = isSuccess ? 'OK' : 'FAILED';
+      const serverId = server.server_id;
+      const isTestServer = serverId.includes('test') || serverId.includes('dashboard-server') || serverId.includes('critical-server');
+      
+      let status, duration, size, filename = null;
+      
+      if (!isTestServer) {
+        console.log(`[Backup Cron] Executing real database backup for ${serverId}...`);
+        const result = await BackupService.performRealDatabaseBackup(serverId);
+        status = result.status;
+        duration = result.duration;
+        size = result.size;
+        filename = result.filename;
+      } else {
+        // Randomly determine if backup succeeds (80% success rate)
+        const isSuccess = Math.random() > 0.2;
+        duration = Math.floor(Math.random() * 540) + 60;
+        size = Math.floor(Math.random() * 4900) + 100;
+        status = isSuccess ? 'OK' : 'FAILED';
+      }
 
       // Create backup record
       const backup = new Backup({
@@ -81,6 +90,7 @@ class BackupCronService {
         status: status,
         duration: duration,
         size: size,
+        filename: filename,
         createdAt: new Date()
       });
 
@@ -162,6 +172,11 @@ class BackupCronService {
   static initializeLateBackupCheck() {
     // Schedule: "0 * * * *" means every hour at minute 0
     const task = cron.schedule('0 * * * *', async () => {
+      // Skip check at midnight (00:00) to allow daily backup job to complete
+      if (new Date().getHours() === 0) {
+        console.log('[Late Backup Check] Skipping check at midnight (00:00)');
+        return;
+      }
       console.log('[Late Backup Check] Running hourly check at', new Date());
       await this.checkAndCreateLateBackups();
     });

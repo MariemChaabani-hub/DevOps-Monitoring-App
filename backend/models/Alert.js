@@ -8,7 +8,7 @@ const AlertSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['WARNING', 'CRITICAL'],
+    enum: ['WARNING', 'CRITICAL', 'BACKUP_FAILED', 'BACKUP_LATE'],
     required: true,
     index: true
   },
