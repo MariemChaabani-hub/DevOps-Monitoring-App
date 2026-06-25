@@ -256,7 +256,11 @@ const Dashboard = () => {
 
             {/* Backup Monitoring Section */}
             <div className="mt-12">
-              <BackupsPanel servers={latestMetrics} />
+              <BackupsPanel 
+                servers={latestMetrics} 
+                selectedServerId={selectedServer}
+                onClearFilter={() => setSelectedServer(null)}
+              />
             </div>
 
             {/* Summary Stats */}

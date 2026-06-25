@@ -11,7 +11,7 @@ import './BackupsPanel.css';
 import RefreshButton from './RefreshButton';
 import BackupHistoryModal from './BackupHistoryModal';
 
-const BackupsPanel = ({ servers = [] }) => {
+const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = null }) => {
   const [backupStatuses, setBackupStatuses] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -186,7 +186,19 @@ const BackupsPanel = ({ servers = [] }) => {
     <div className="backups-panel">
       {/* Header */}
       <div className="backups-header">
-        <h2>Backup Monitoring</h2>
+        <div className="title-area">
+          <h2>Backup Monitoring</h2>
+          {selectedServerId && (
+            <div className="filter-badge">
+              <span>Showing: <strong>{selectedServerId}</strong></span>
+              {onClearFilter && (
+                <button onClick={onClearFilter} className="clear-filter-btn" title="Show all servers">
+                  ✕ Show All
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <div className="header-controls">
           {lastUpdate && (
             <span className="last-update">
@@ -217,8 +229,13 @@ const BackupsPanel = ({ servers = [] }) => {
       {/* Backup status grid */}
       {!loading && (
         <div className="backups-grid">
-          {servers.map((server) => {
-            const serverId = server.serverId || server.server_id || server._id;
+          {servers
+            .filter((server) => {
+              const serverId = server.serverId || server.server_id || server._id;
+              return !selectedServerId || serverId === selectedServerId;
+            })
+            .map((server) => {
+              const serverId = server.serverId || server.server_id || server._id;
             const backupInfo = backupStatuses[serverId] || {};
             const latestBackup = backupInfo.latest_backup;
             const currentStatus = backupInfo.current_status || 'Missing';
