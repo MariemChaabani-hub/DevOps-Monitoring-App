@@ -105,14 +105,16 @@ router.get(['/history/*serverId', '/history'], async (req, res) => {
       .exec();
 
     if (metrics.length === 0) {
-      return res.status(404).json({
-        error: 'No metrics found for this server',
+      return res.json({
         serverId: serverId,
+        count: 0,
         timeRange: {
-          minutes: parseInt(minutes),
           from: timeThreshold,
-          to: new Date()
-        }
+          to: new Date(),
+          minutes: parseInt(minutes)
+        },
+        data: [],
+        timestamp: new Date()
       });
     }
 
