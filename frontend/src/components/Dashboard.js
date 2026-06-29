@@ -65,7 +65,7 @@ const Dashboard = () => {
       const response = await axios.get(`${API_BASE}/api/alerts?status=ACTIVE&limit=50`);
       if (response.data) {
         const newAlerts = Array.isArray(response.data) ? response.data : response.data.data || [];
-        
+
         // Check for NEW alerts (for notification popups)
         const currentAlertIds = new Set(newAlerts.map(a => a._id));
         newAlerts.forEach(alert => {
@@ -74,7 +74,7 @@ const Dashboard = () => {
             setActiveNotification(alert);
           }
         });
-        
+
         setPreviousAlertIds(currentAlertIds);
         setAlerts(newAlerts);
       }
@@ -125,13 +125,13 @@ const Dashboard = () => {
       setLoading(true);
       const metricsData = await fetchLatestMetrics();
       setLoading(false);
-      
+
       // Auto-select first server ONLY on initial mount, never again
       if (metricsData && metricsData.length > 0 && !selectedServer) {
         setSelectedServer(metricsData[0].serverId);
       }
     };
-    
+
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -174,10 +174,10 @@ const Dashboard = () => {
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
-              <img 
-                src="/logo-clediss.jpg" 
-                alt="Clediss Solutions" 
-                className="h-16 w-auto rounded-lg shadow-lg border border-gray-700 object-contain hover:scale-105 transition-transform duration-300"
+              <img
+                src="/logo-clediss.jpg"
+                alt="Clediss Solutions"
+                className="h-25 w-auto rounded-lg shadow-lg border border-gray-700 object-contain hover:scale-105 transition-transform duration-300"
               />
               <div className="h-12 w-px bg-gray-700 hidden sm:block"></div>
               <div>
@@ -186,7 +186,7 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="text-right flex flex-col items-end gap-3">
-              <RefreshButton 
+              <RefreshButton
                 onRefresh={fetchLatestMetrics}
                 isLoading={isUpdating}
                 disabled={loading}
@@ -228,18 +228,17 @@ const Dashboard = () => {
                   const serverId = metric.serverId;
                   // Wrap single metric in array for ServerCard compatibility
                   const metricsArray = [metric];
-                  
+
                   return (
                     <div
                       key={serverId}
                       onClick={() => setSelectedServer(serverId)}
-                      className={`cursor-pointer transition-all ${
-                        selectedServer === serverId ? 'ring-2 ring-blue-500' : ''
-                      }`}
+                      className={`cursor-pointer transition-all ${selectedServer === serverId ? 'ring-2 ring-blue-500' : ''
+                        }`}
                     >
-                      <ServerCard 
-                        server={{ serverId }} 
-                        metrics={metricsArray} 
+                      <ServerCard
+                        server={{ serverId }}
+                        metrics={metricsArray}
                         onRemoteActions={handleRemoteActions}
                       />
                     </div>
@@ -255,8 +254,8 @@ const Dashboard = () => {
                   Detailed Metrics - {selectedServer}
                 </h2>
                 {selectedHistory && selectedHistory.length > 0 ? (
-                  <MetricsChart 
-                    data={selectedHistory} 
+                  <MetricsChart
+                    data={selectedHistory}
                     title={`${selectedServer} - CPU & Memory Trends (Last 60 minutes)`}
                   />
                 ) : (
@@ -273,8 +272,8 @@ const Dashboard = () => {
 
             {/* Backup Monitoring Section */}
             <div className="mt-12">
-              <BackupsPanel 
-                servers={latestMetrics} 
+              <BackupsPanel
+                servers={latestMetrics}
                 selectedServerId={selectedServer}
                 onClearFilter={() => setSelectedServer(null)}
               />
@@ -314,7 +313,7 @@ const Dashboard = () => {
         {/* Alerts Section */}
         {!loading && (
           <div className="mt-12">
-            <AlertsPanel 
+            <AlertsPanel
               alerts={alerts}
               onAcknowledge={handleAcknowledgeAlert}
               onResolve={handleResolveAlert}
