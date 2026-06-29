@@ -13,6 +13,9 @@ import os
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from collector import collect_metrics
 from sender import MetricsSender
 
@@ -127,10 +130,10 @@ class MonitoringAgent:
         behavior_config = config.get('behavior', {})
         server_config = config.get('server', {})
         
-        # Server identification
-        self.server_id = server_config.get('id', 'unknown-server')
-        self.server_name = server_config.get('name', self.server_id)
-        self.server_location = server_config.get('location', 'Unknown')
+        # Server identification (environment variables override config.json values)
+        self.server_id = os.getenv("MONITORING_SERVER_ID", server_config.get('id', 'unknown-server'))
+        self.server_name = os.getenv("MONITORING_SERVER_NAME", server_config.get('name', self.server_id))
+        self.server_location = os.getenv("MONITORING_SERVER_LOCATION", server_config.get('location', 'Unknown'))
         
         self.api_url = api_config.get('url', 'http://localhost:3000')
         self.collection_interval = collection_config.get('interval', 5)
