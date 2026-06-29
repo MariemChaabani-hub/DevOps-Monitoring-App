@@ -10,11 +10,13 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
   const API_BASE = 'http://localhost:3000';
 
   useEffect(() => {
     if (isOpen) {
+      setStatusFilter('ALL');
       fetchBackupHistory();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,6 +110,13 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
 
   const stats = getStats();
 
+  const filteredBackups = statusFilter === 'ALL'
+    ? backups
+    : backups.filter(b => b.status === statusFilter);
+
+  // Sort by date descending (newest first)
+  const sortedBackups = [...filteredBackups].sort((a, b) => new Date(b.date) - new Date(a.date));
+
   if (!isOpen) return null;
 
   return (
@@ -129,28 +138,44 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
 
         {/* Stats Cards */}
         <div className="stats-container">
-          <div className="stat-card total">
+          <div 
+            className={`stat-card total ${statusFilter === 'ALL' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('ALL')}
+            title="Show all backups"
+          >
             <div className="stat-icon">📊</div>
             <div className="stat-info">
               <div className="stat-number">{stats.total}</div>
               <div className="stat-label">Total Backups</div>
             </div>
           </div>
-          <div className="stat-card success">
+          <div 
+            className={`stat-card success ${statusFilter === 'OK' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('OK')}
+            title="Show successful backups"
+          >
             <div className="stat-icon">✅</div>
             <div className="stat-info">
               <div className="stat-number">{stats.ok}</div>
               <div className="stat-label">Successful</div>
             </div>
           </div>
-          <div className="stat-card error">
+          <div 
+            className={`stat-card error ${statusFilter === 'FAILED' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('FAILED')}
+            title="Show failed backups"
+          >
             <div className="stat-icon">❌</div>
             <div className="stat-info">
               <div className="stat-number">{stats.failed}</div>
               <div className="stat-label">Failed</div>
             </div>
           </div>
-          <div className="stat-card warning">
+          <div 
+            className={`stat-card warning ${statusFilter === 'LATE' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('LATE')}
+            title="Show late backups"
+          >
             <div className="stat-icon">⏰</div>
             <div className="stat-info">
               <div className="stat-number">{stats.late}</div>
@@ -181,15 +206,19 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         {/* Backup History List */}
         {!loading && !error && (
           <div className="history-container">
-            {backups.length === 0 ? (
+            {sortedBackups.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">📭</div>
                 <h3>No Backup History</h3>
-                <p>No backup records found for this server.</p>
+                <p>
+                  {statusFilter === 'ALL' 
+                    ? 'No backup records found for this server.' 
+                    : `No ${statusFilter === 'OK' ? 'successful' : statusFilter.toLowerCase()} backup records found.`}
+                </p>
               </div>
             ) : (
               <div className="backup-list">
-                {backups.map((backup, index) => (
+                {sortedBackups.map((backup, index) => (
                   <div key={backup._id} className="backup-item">
                     <div className="backup-header">
                       <div className={`backup-status ${getStatusClass(backup.status)}`}>
@@ -235,7 +264,10 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         {/* Footer */}
         <div className="modal-footer">
           <div className="footer-info">
-            <span className="backup-count">Showing {backups.length} backups</span>
+            <span className="backup-count">
+              Showing {sortedBackups.length} {statusFilter !== 'ALL' ? (statusFilter === 'OK' ? 'successful' : statusFilter.toLowerCase()) : ''} backups
+              {statusFilter !== 'ALL' && ` (out of ${backups.length})`}
+            </span>
             <span className="server-id">Server: {serverId === 'all' ? 'All Servers' : serverId}</span>
           </div>
           <button className="refresh-button" onClick={fetchBackupHistory}>
