@@ -172,11 +172,19 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gray-900 text-gray-100">
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">DevOps Monitoring Dashboard</h1>
-              <p className="text-gray-400">Real-time server monitoring and performance tracking</p>
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-6">
+              <img 
+                src="/logo-clediss.jpg" 
+                alt="Clediss Solutions" 
+                className="h-16 w-auto rounded-lg shadow-lg border border-gray-700 object-contain hover:scale-105 transition-transform duration-300"
+              />
+              <div className="h-12 w-px bg-gray-700 hidden sm:block"></div>
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">DevOps Monitoring Dashboard</h1>
+                <p className="text-gray-400 text-sm">Real-time server monitoring and performance tracking</p>
+              </div>
             </div>
             <div className="text-right flex flex-col items-end gap-3">
               <RefreshButton 

@@ -34,34 +34,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single server with latest metrics
-router.get('/:server_id', async (req, res) => {
-  try {
-    const { server_id } = req.params;
-
-    const server = await Server.findOne({ server_id });
-    if (!server) {
-      return res.status(404).json({ error: 'Server not found' });
-    }
-
-    const latestMetric = await Metric.findOne({ server_id })
-      .sort({ timestamp: -1 })
-      .exec();
-
-    res.json({
-      ...server.toObject(),
-      latest_metric: latestMetric || null
-    });
-  } catch (error) {
-    console.error('[Servers API] Error fetching server:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Get server metrics (last N records or time range)
-router.get('/:server_id/metrics', async (req, res) => {
+router.get('/*server_id/metrics', async (req, res) => {
   try {
-    const { server_id } = req.params;
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
     const { limit = 100, minutes = 60 } = req.query;
 
     const timeThreshold = new Date(Date.now() - minutes * 60 * 1000);
@@ -82,9 +61,12 @@ router.get('/:server_id/metrics', async (req, res) => {
 });
 
 // Get server alerts
-router.get('/:server_id/alerts', async (req, res) => {
+router.get('/*server_id/alerts', async (req, res) => {
   try {
-    const { server_id } = req.params;
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
     const { status = 'ACTIVE' } = req.query;
 
     const Alert = require('../models/Alert');
@@ -99,6 +81,33 @@ router.get('/:server_id/alerts', async (req, res) => {
     res.json(alerts);
   } catch (error) {
     console.error('[Servers API] Error fetching alerts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single server with latest metrics
+router.get('/*server_id', async (req, res) => {
+  try {
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
+
+    const server = await Server.findOne({ server_id });
+    if (!server) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+
+    const latestMetric = await Metric.findOne({ server_id })
+      .sort({ timestamp: -1 })
+      .exec();
+
+    res.json({
+      ...server.toObject(),
+      latest_metric: latestMetric || null
+    });
+  } catch (error) {
+    console.error('[Servers API] Error fetching server:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -135,9 +144,12 @@ router.post('/', async (req, res) => {
 });
 
 // Update server
-router.put('/:server_id', async (req, res) => {
+router.put('/*server_id', async (req, res) => {
   try {
-    const { server_id } = req.params;
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
     const { name, location, description, alert_email, is_active } = req.body;
 
     const server = await Server.findOne({ server_id });
@@ -160,9 +172,12 @@ router.put('/:server_id', async (req, res) => {
 });
 
 // Delete server
-router.delete('/:server_id', async (req, res) => {
+router.delete('/*server_id', async (req, res) => {
   try {
-    const { server_id } = req.params;
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
 
     const result = await Server.findOneAndDelete({ server_id });
     if (!result) {

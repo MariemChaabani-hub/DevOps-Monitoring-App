@@ -14,17 +14,20 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   const API_BASE = 'http://localhost:3000';
 
   useEffect(() => {
-    if (isOpen && serverId) {
+    if (isOpen) {
       fetchBackupHistory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, serverId]);
 
   const fetchBackupHistory = async () => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `${API_BASE}/api/backups/server/${serverId}?limit=50`
-      );
+      const url = serverId && serverId !== 'all'
+        ? `${API_BASE}/api/backups/server/${serverId}?limit=50`
+        : `${API_BASE}/api/backups?limit=100`;
+      
+      const response = await fetch(url);
       
       if (response.ok) {
         const data = await response.json();
@@ -200,6 +203,14 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
                     
                     <div className="backup-details">
                       <div className="detail-grid">
+                        {serverId === 'all' && (
+                          <div className="detail-item">
+                            <span className="detail-label">Server</span>
+                            <span className="detail-value" style={{ color: '#60a5fa', fontWeight: 'bold' }}>
+                              {backup.serverId || backup.server_id}
+                            </span>
+                          </div>
+                        )}
                         <div className="detail-item">
                           <span className="detail-label">Size</span>
                           <span className="detail-value">{formatSize(backup.size)}</span>
@@ -225,7 +236,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         <div className="modal-footer">
           <div className="footer-info">
             <span className="backup-count">Showing {backups.length} backups</span>
-            <span className="server-id">Server: {serverId}</span>
+            <span className="server-id">Server: {serverId === 'all' ? 'All Servers' : serverId}</span>
           </div>
           <button className="refresh-button" onClick={fetchBackupHistory}>
             🔄 Refresh

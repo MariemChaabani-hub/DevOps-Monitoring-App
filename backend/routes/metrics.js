@@ -64,11 +64,19 @@ router.get('/latest', async (req, res) => {
   }
 });
 
-// GET /api/metrics/history/:serverId
+// GET /api/metrics/history/*serverId or query parameter serverId
 // Returns historical metrics for a specific server (for charts)
-router.get('/history/:serverId', async (req, res) => {
+router.get(['/history/*serverId', '/history'], async (req, res) => {
   try {
-    const { serverId } = req.params;
+    let serverId = req.params.serverId || req.query.serverId;
+    if (Array.isArray(serverId)) {
+      serverId = serverId.join('/');
+    }
+
+    if (!serverId) {
+      return res.status(400).json({ error: 'serverId is required' });
+    }
+
     const { limit = 100, minutes = 60 } = req.query;
 
     // Calculate time threshold

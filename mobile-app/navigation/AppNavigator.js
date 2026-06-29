@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/native-stack';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, View, Image, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // Screens
@@ -26,12 +26,24 @@ const AppNavigator = () => {
         initialRouteName={isAuthenticated ? 'Home' : 'Login'}
         screenOptions={({ navigation }) => ({
           headerStyle: {
-            backgroundColor: '#3498db',
+            backgroundColor: '#0f172a',
           },
           headerTintColor: '#fff',
           headerTitleStyle: {
             fontWeight: 'bold',
           },
+          headerTitle: (props) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Image
+                source={require('../assets/images/logo-clediss.jpg')}
+                style={{ width: 28, height: 28, borderRadius: 4, marginRight: 8 }}
+                resizeMode="contain"
+              />
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
+                {props.children}
+              </Text>
+            </View>
+          ),
           headerRight: () => (
             <TouchableOpacity
               onPress={() => navigation.navigate('Settings')}

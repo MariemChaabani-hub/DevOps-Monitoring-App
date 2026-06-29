@@ -188,6 +188,13 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
       <div className="backups-header">
         <div className="title-area">
           <h2>Backup Monitoring</h2>
+          <button 
+            className="history-all-btn"
+            onClick={() => openBackupHistory('all', 'All Servers')}
+            title="View backup history for all servers"
+          >
+            📋 All Backups
+          </button>
           {selectedServerId && (
             <div className="filter-badge">
               <span>Showing: <strong>{selectedServerId}</strong></span>

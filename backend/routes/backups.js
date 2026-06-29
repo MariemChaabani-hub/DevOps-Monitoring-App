@@ -64,11 +64,14 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/backups/server/:server_id
+// GET /api/backups/server/*server_id
 // Returns all backups for a specific server
-router.get('/server/:server_id', async (req, res) => {
+router.get('/server/*server_id', async (req, res) => {
   try {
-    const { server_id } = req.params;
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
     const { limit = 50, skip = 0 } = req.query;
 
     const backups = await Backup.find({ serverId: server_id })
@@ -201,11 +204,14 @@ router.post('/test/run-daily-check', async (req, res) => {
   }
 });
 
-// GET /api/backups/latest/:server_id
+// GET /api/backups/latest/*server_id
 // Returns latest backup with detailed status information for a specific server
-router.get('/latest/:server_id', async (req, res) => {
+router.get('/latest/*server_id', async (req, res) => {
   try {
-    const { server_id } = req.params;
+    let server_id = req.params.server_id;
+    if (Array.isArray(server_id)) {
+      server_id = server_id.join('/');
+    }
 
     // Get latest backup for the server
     const latestBackup = await Backup.findOne({ serverId: server_id })
@@ -282,11 +288,14 @@ router.get('/latest/:server_id', async (req, res) => {
   }
 });
 
-// GET /api/backups/:serverId/latest
+// GET /api/backups/*serverId/latest
 // Returns the latest backup for a specific server
-router.get('/:serverId/latest', async (req, res) => {
+router.get('/*serverId/latest', async (req, res) => {
   try {
-    const { serverId } = req.params;
+    let serverId = req.params.serverId;
+    if (Array.isArray(serverId)) {
+      serverId = serverId.join('/');
+    }
 
     // Get latest backup for the server
     const latestBackup = await Backup.findOne({ serverId })
@@ -321,11 +330,14 @@ router.get('/:serverId/latest', async (req, res) => {
   }
 });
 
-// GET /api/backups/:serverId/status
+// GET /api/backups/*serverId/status
 // Returns backup status information for a specific server
-router.get('/:serverId/status', async (req, res) => {
+router.get('/*serverId/status', async (req, res) => {
   try {
-    const { serverId } = req.params;
+    let serverId = req.params.serverId;
+    if (Array.isArray(serverId)) {
+      serverId = serverId.join('/');
+    }
 
     // Get last backup (any status)
     const lastBackup = await Backup.findOne({ serverId })
@@ -395,54 +407,7 @@ router.get('/:serverId/status', async (req, res) => {
   }
 });
 
-// GET /api/backups/:id
-// Intelligently handles both:
-// - MongoDB backup _id (returns single backup document)
-// - server_id (returns all backups for that server)
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { limit = 50, skip = 0 } = req.query;
 
-    // Check if id is a valid MongoDB ObjectId
-    const isValidObjectId = id.match(/^[0-9a-fA-F]{24}$/);
-
-    if (isValidObjectId) {
-      // Treat as MongoDB backup _id
-      const backup = await Backup.findById(id);
-      if (!backup) {
-        return res.status(404).json({ error: 'Backup not found' });
-      }
-
-      console.log('[Backups API] GET /api/backups/:id - Found backup:', backup._id);
-      res.json(backup);
-    } else {
-      // Treat as serverId - return all backups for this server
-      const backups = await Backup.find({ serverId: id })
-        .sort({ date: -1 })
-        .limit(parseInt(limit))
-        .skip(parseInt(skip))
-        .exec();
-
-      const total = await Backup.countDocuments({ serverId: id });
-
-      console.log(`[Backups API] GET /api/backups/:serverId - Found ${backups.length} backups for server ${id}`);
-
-      res.json({
-        serverId: id,
-        backups,
-        pagination: {
-          total,
-          limit: parseInt(limit),
-          skip: parseInt(skip)
-        }
-      });
-    }
-  } catch (error) {
-    console.error('[Backups API] Error fetching backup(s):', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // POST /api/backups
 // Creates a new backup record
@@ -686,11 +651,14 @@ router.post('/test/check-late', async (req, res) => {
   }
 });
 
-// GET /api/backups/:serverId/indicators
+// GET /api/backups/*serverId/indicators
 // Returns backup health indicators and metrics for a specific server
-router.get('/:serverId/indicators', async (req, res) => {
+router.get('/*serverId/indicators', async (req, res) => {
   try {
-    const { serverId } = req.params;
+    let serverId = req.params.serverId;
+    if (Array.isArray(serverId)) {
+      serverId = serverId.join('/');
+    }
 
     console.log('[Backups API] GET /:serverId/indicators - Calculating for server:', serverId);
 
@@ -704,6 +672,58 @@ router.get('/:serverId/indicators', async (req, res) => {
     });
   } catch (error) {
     console.error('[Backups API] Error calculating backup indicators:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/backups/*id
+// Intelligently handles both:
+// - MongoDB backup _id (returns single backup document)
+// - server_id (returns all backups for that server)
+router.get('/*id', async (req, res) => {
+  try {
+    let id = req.params.id;
+    if (Array.isArray(id)) {
+      id = id.join('/');
+    }
+    const { limit = 50, skip = 0 } = req.query;
+
+    // Check if id is a valid MongoDB ObjectId
+    const isValidObjectId = id.match(/^[0-9a-fA-F]{24}$/);
+
+    if (isValidObjectId) {
+      // Treat as MongoDB backup _id
+      const backup = await Backup.findById(id);
+      if (!backup) {
+        return res.status(404).json({ error: 'Backup not found' });
+      }
+
+      console.log('[Backups API] GET /api/backups/:id - Found backup:', backup._id);
+      res.json(backup);
+    } else {
+      // Treat as serverId - return all backups for this server
+      const backups = await Backup.find({ serverId: id })
+        .sort({ date: -1 })
+        .limit(parseInt(limit))
+        .skip(parseInt(skip))
+        .exec();
+
+      const total = await Backup.countDocuments({ serverId: id });
+
+      console.log(`[Backups API] GET /api/backups/:serverId - Found ${backups.length} backups for server ${id}`);
+
+      res.json({
+        serverId: id,
+        backups,
+        pagination: {
+          total,
+          limit: parseInt(limit),
+          skip: parseInt(skip)
+        }
+      });
+    }
+  } catch (error) {
+    console.error('[Backups API] Error fetching backup(s):', error);
     res.status(500).json({ error: error.message });
   }
 });

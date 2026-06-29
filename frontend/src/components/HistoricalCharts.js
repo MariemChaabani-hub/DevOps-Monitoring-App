@@ -49,7 +49,8 @@ const HistoricalCharts = ({ serverId }) => {
           throw new Error(`API error: ${response.status}`);
         }
 
-        const data = await response.json();
+        const json = await response.json();
+        const data = Array.isArray(json) ? json : (json.data || []);
         console.log(`[HistoricalCharts] Fetched ${data.length} metrics for ${serverId}`, data);
 
         // Format data for Recharts with only necessary fields and timestamps

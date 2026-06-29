@@ -8,7 +8,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Image
 } from 'react-native';
 import CustomButton from '../components/CustomButton';
 
@@ -47,6 +48,11 @@ const LoginScreen = ({ navigation }) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
+          <Image
+            source={require('../assets/images/logo-clediss.jpg')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>Monitoring App</Text>
           <Text style={styles.subtitle}>Gestion de serveurs à distance</Text>
         </View>
@@ -109,6 +115,14 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 40,
+  },
+  logo: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
   },
   title: {
     fontSize: 32,

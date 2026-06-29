@@ -87,6 +87,13 @@ const AdminAuth = ({ children }) => {
     return (
       <div className="admin-auth-container">
         <div className="admin-auth-card">
+          <div className="auth-logo-container">
+            <img 
+              src="/logo-clediss.jpg" 
+              alt="Clediss Solutions" 
+              className="auth-logo"
+            />
+          </div>
           <div className="auth-header">
             <h1>🔐 Authentification Administrateur</h1>
             <p>DevOps Monitoring System - Accès Restreint</p>
@@ -155,9 +162,16 @@ const AdminAuth = ({ children }) => {
     <div className="admin-auth-wrapper">
       {/* Header admin */}
       <div className="admin-header">
-        <div className="admin-info">
-          <span className="admin-badge">👤 Admin</span>
-          <span className="admin-email">{email}</span>
+        <div className="admin-header-left">
+          <img 
+            src="/logo-clediss.jpg" 
+            alt="Clediss Solutions" 
+            className="admin-header-logo"
+          />
+          <div className="admin-info">
+            <span className="admin-badge">👤 Admin</span>
+            <span className="admin-email">{email}</span>
+          </div>
         </div>
         <button onClick={handleLogout} className="logout-button">
           🔒 Déconnexion
