@@ -9,7 +9,7 @@ const ServiceSchema = new mongoose.Schema({
   service_name: {
     type: String,
     required: true,
-    enum: ['pm2', 'nginx', 'mongodb', 'docker', 'apache', 'apache2']
+    enum: ['pm2', 'nginx', 'mongodb', 'apache', 'apache2']
   },
   status: {
     type: String,

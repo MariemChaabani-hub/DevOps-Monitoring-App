@@ -47,20 +47,6 @@ const verifyServiceStatus = async (serviceName) => {
     'mongodb': 'mongodb'
   };
 
-  // Docker daemon uses systemctl
-  if (serviceName === 'docker') {
-    try {
-      const { stdout } = await execCommand('systemctl is-active docker', 10000);
-      const status = stdout.trim().toLowerCase();
-      return { status: status === 'active' ? 'active' : 'inactive', raw: stdout };
-    } catch (err) {
-      if (err.stderr && err.stderr.includes('inactive')) {
-        return { status: 'inactive', raw: 'inactive' };
-      }
-      return { status: 'unknown', raw: err.message || 'verification failed' };
-    }
-  }
-
   // Apache uses systemctl
   if (serviceName === 'apache' || serviceName === 'apache2') {
     try {
@@ -205,7 +191,7 @@ router.post('/:server_id/restart-service',
       if (!service_name) {
         return res.status(400).json({
           error: 'service_name est requis',
-          supported_services: ['pm2', 'nginx', 'mongodb', 'docker', 'apache', 'apache2']
+          supported_services: ['pm2', 'nginx', 'mongodb', 'apache', 'apache2']
         });
       }
 
@@ -215,12 +201,11 @@ router.post('/:server_id/restart-service',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // Services supportés — containers Docker (sauf Docker daemon et Apache)
+      // Services supportés — containers Docker (sauf Apache)
       const supportedServices = {
         'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 restart server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker restart frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker restart mongodb' },
-        'docker': { name: 'Docker', command: 'sudo systemctl restart docker' },
         'apache': { name: 'Apache', command: 'sudo systemctl restart apache2' },
         'apache2': { name: 'Apache', command: 'sudo systemctl restart apache2' }
       };
@@ -519,7 +504,6 @@ router.post('/:server_id/start-service',
         'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 start server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker start frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker start mongodb' },
-        'docker': { name: 'Docker', command: 'sudo systemctl start docker' },
         'apache': { name: 'Apache', command: 'sudo systemctl start apache2' },
         'apache2': { name: 'Apache', command: 'sudo systemctl start apache2' }
       };
@@ -608,7 +592,6 @@ router.post('/:server_id/stop-service',
         'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 stop server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker stop frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker stop mongodb' },
-        'docker': { name: 'Docker', command: 'sudo systemctl stop docker' },
         'apache': { name: 'Apache', command: 'sudo systemctl stop apache2' },
         'apache2': { name: 'Apache', command: 'sudo systemctl stop apache2' }
       };
@@ -688,7 +671,7 @@ router.get('/:server_id/services-status',
       }
 
       // REAL status check for all services
-      const serviceNames = ['pm2', 'nginx', 'mongodb', 'docker', 'apache'];
+      const serviceNames = ['pm2', 'nginx', 'mongodb', 'apache'];
       const servicesStatus = {};
 
       for (const svcName of serviceNames) {

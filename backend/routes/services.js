@@ -60,7 +60,6 @@ const SUPPORTED_SERVICES = {
   'pm2': { name: 'PM2', icon: '⚙️', description: 'Gestionnaire de processus PM2' },
   'nginx': { name: 'Nginx', icon: '⚡', description: 'Serveur web Nginx' },
   'mongodb': { name: 'MongoDB', icon: '🍃', description: 'Base de données MongoDB' },
-  'docker': { name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' },
   'apache': { name: 'Apache', icon: '🌐', description: 'Serveur HTTP Apache' },
   'apache2': { name: 'Apache', icon: '🌐', description: 'Serveur HTTP Apache' }
 };
@@ -83,7 +82,7 @@ router.get('/:server_id', requireAdmin, async (req, res) => {
     let services = await Service.find({ server_id });
 
     // Initialiser/compléter les services par défaut si nécessaire
-    const defaultKeys = ['pm2', 'nginx', 'mongodb', 'docker', 'apache'];
+    const defaultKeys = ['pm2', 'nginx', 'mongodb', 'apache'];
     const existingKeys = services.map(s => s.service_name);
     
     const missingKeys = defaultKeys.filter(key => {
