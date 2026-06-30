@@ -22,7 +22,9 @@ const ServicesPanel = ({ servers = [] }) => {
     pm2: { name: 'PM2', icon: '⚙️', color: '#6F00D2' },
     nginx: { name: 'Nginx', icon: '⚡', color: '#009639' },
     mongodb: { name: 'MongoDB', icon: '🍃', color: '#13AA52' },
-    docker: { name: 'Docker', icon: '🐳', color: '#0DB7ED' }
+    docker: { name: 'Docker', icon: '🐳', color: '#0DB7ED' },
+    apache: { name: 'Apache', icon: '🌐', color: '#E43D30' },
+    apache2: { name: 'Apache', icon: '🌐', color: '#E43D30' }
   };
 
   // Fetch services for selected server
@@ -152,7 +154,7 @@ const ServicesPanel = ({ servers = [] }) => {
       <div className="panel-header">
         <h2>🔧 Gestion des Services</h2>
         <p className="panel-subtitle">
-          PM2 • Nginx • MongoDB • Docker
+          PM2 • Nginx • MongoDB • Docker • Apache
         </p>
       </div>
 

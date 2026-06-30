@@ -60,7 +60,9 @@ const SUPPORTED_SERVICES = {
   'pm2': { name: 'PM2', icon: '⚙️', description: 'Gestionnaire de processus PM2' },
   'nginx': { name: 'Nginx', icon: '⚡', description: 'Serveur web Nginx' },
   'mongodb': { name: 'MongoDB', icon: '🍃', description: 'Base de données MongoDB' },
-  'docker': { name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' }
+  'docker': { name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' },
+  'apache': { name: 'Apache', icon: '🌐', description: 'Serveur HTTP Apache' },
+  'apache2': { name: 'Apache', icon: '🌐', description: 'Serveur HTTP Apache' }
 };
 
 /**
@@ -78,12 +80,21 @@ router.get('/:server_id', requireAdmin, async (req, res) => {
     }
 
     // Récupérer les services du serveur
-    const services = await Service.find({ server_id });
+    let services = await Service.find({ server_id });
 
-    // Si aucun service n'existe, initialiser les 4 services par défaut
-    if (services.length === 0) {
-      const defaultServices = [];
-      for (const serviceKey of Object.keys(SUPPORTED_SERVICES)) {
+    // Initialiser/compléter les services par défaut si nécessaire
+    const defaultKeys = ['pm2', 'nginx', 'mongodb', 'docker', 'apache'];
+    const existingKeys = services.map(s => s.service_name);
+    
+    const missingKeys = defaultKeys.filter(key => {
+      if (key === 'apache') {
+        return !existingKeys.includes('apache') && !existingKeys.includes('apache2');
+      }
+      return !existingKeys.includes(key);
+    });
+
+    if (missingKeys.length > 0) {
+      for (const serviceKey of missingKeys) {
         const service = new Service({
           server_id,
           service_name: serviceKey,
@@ -91,18 +102,8 @@ router.get('/:server_id', requireAdmin, async (req, res) => {
           uptime: 'N/A'
         });
         await service.save();
-        defaultServices.push(service);
+        services.push(service);
       }
-      
-      return res.json({
-        server_id,
-        server_name: server.name,
-        services: defaultServices.map(s => ({
-          ...s.toObject(),
-          ...SUPPORTED_SERVICES[s.service_name]
-        })),
-        timestamp: new Date()
-      });
     }
 
     res.json({

@@ -46,7 +46,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     { id: 'pm2', name: 'PM2', icon: '⚙️', description: 'Gestionnaire de processus PM2' },
     { id: 'nginx', name: 'Nginx', icon: '⚡', description: 'Serveur web Nginx' },
     { id: 'mongodb', name: 'MongoDB', icon: '🍃', description: 'Base de données MongoDB' },
-    { id: 'docker', name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' }
+    { id: 'docker', name: 'Docker', icon: '🐳', description: 'Conteneurs Docker' },
+    { id: 'apache', name: 'Apache', icon: '🌐', description: 'Serveur HTTP Apache' }
   ];
 
   // Fetch services status for selected server
