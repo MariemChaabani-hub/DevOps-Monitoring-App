@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: mariemchaabani/monitoring-frontend:24
+        image: mariemchaabani/monitoring-frontend:25
         ports:
         - containerPort: 80
 ---
