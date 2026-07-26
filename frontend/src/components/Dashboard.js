@@ -128,7 +128,9 @@ const Dashboard = () => {
 
       // Auto-select first server ONLY on initial mount, never again
       if (metricsData && metricsData.length > 0 && !selectedServer) {
-        setSelectedServer(metricsData[0].serverId);
+        // Prefer first active (online) server, fall back to first server if all are offline
+        const activeServer = metricsData.find(m => m.status !== 'OFFLINE');
+        setSelectedServer(activeServer ? activeServer.serverId : metricsData[0].serverId);
       }
     };
 
@@ -181,7 +183,7 @@ const Dashboard = () => {
               />
               <div className="h-12 w-px bg-gray-700 hidden sm:block"></div>
               <div>
-                <h1 className="text-3xl font-bold text-white mb-1">DevOps Monitoring Dashboard</h1>
+                <h2 className="text-3xl font-bold text-white mb-1">CLEDISS Monitor</h2>
                 <p className="text-gray-400 text-sm">Real-time server monitoring and performance tracking</p>
               </div>
             </div>
