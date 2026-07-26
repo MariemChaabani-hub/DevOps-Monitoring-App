@@ -17,7 +17,7 @@ const MetricsPanel = ({ server }) => {
       try {
         setLoading(true);
         const response = await fetch(
-          `http://localhost:3000/api/servers/${server.server_id}/metrics?limit=100&minutes=60`
+          `/api/servers/${server.server_id}/metrics?limit=100&minutes=60`
         );
         const data = await response.json();
         setMetrics(data);

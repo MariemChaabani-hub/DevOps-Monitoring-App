@@ -23,7 +23,7 @@ const Dashboard = () => {
     const fetchInitialData = async () => {
       try {
         // Fetch servers
-        const serversRes = await fetch('http://localhost:3000/api/servers');
+        const serversRes = await fetch('/api/servers');
         const serversData = await serversRes.json();
         console.log('[Dashboard] Servers fetched:', serversData.length);
         setServers(serversData);
@@ -33,14 +33,14 @@ const Dashboard = () => {
         }
 
         // Fetch alerts - ACTIVE only
-        const alertsRes = await fetch('http://localhost:3000/api/alerts?status=ACTIVE');
+        const alertsRes = await fetch('/api/alerts?status=ACTIVE');
         const alertsData = await alertsRes.json();
         console.log('[Dashboard] ACTIVE Alerts fetched:', alertsData.length);
         console.log('[Dashboard] Alert data:', alertsData);
         setAlerts(alertsData);
 
         // Fetch health summary
-        const healthRes = await fetch('http://localhost:3000/api/dashboard/summary');
+        const healthRes = await fetch('/api/dashboard/summary');
         const healthData = await healthRes.json();
         console.log('[Dashboard] Health summary fetched:', healthData);
         setHealth(healthData);
@@ -55,7 +55,8 @@ const Dashboard = () => {
     fetchInitialData();
 
     // Connect to WebSocket for real-time updates
-    const ws = new WebSocket('ws://localhost:3000');
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}`);
     
     ws.onopen = () => {
       console.log('[WebSocket] Connected');

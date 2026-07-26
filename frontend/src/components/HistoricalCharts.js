@@ -42,7 +42,7 @@ const HistoricalCharts = ({ serverId }) => {
       try {
         const minutes = timeRangeMap[timeRange];
         const response = await fetch(
-          `http://localhost:3000/api/metrics/history/${serverId}?minutes=${minutes}&limit=1000`
+          `/api/metrics/history/${serverId}?minutes=${minutes}&limit=1000`
         );
 
         if (!response.ok) {

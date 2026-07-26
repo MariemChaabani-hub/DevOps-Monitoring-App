@@ -14,7 +14,7 @@ const ServicesPanel = ({ servers = [] }) => {
   const [actionResult, setActionResult] = useState(null);
   const [refreshInterval, setRefreshInterval] = useState(null);
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
   const adminEmail = 'mariemchaabani39@gmail.com';
 
   // Service definitions

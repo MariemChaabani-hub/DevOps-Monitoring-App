@@ -12,7 +12,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
 
   useEffect(() => {
     if (isOpen) {

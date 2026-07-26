@@ -18,7 +18,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
   const [lastUpdate, setLastUpdate] = useState(null);
   const [historyModal, setHistoryModal] = useState({ isOpen: false, serverId: null, serverName: null });
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
 
   /**
    * Fetch backup status for all servers

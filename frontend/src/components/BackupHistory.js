@@ -12,7 +12,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({ total: 0, limit: 50, skip: 0 });
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
 
   useEffect(() => {
     if (serverId) {

@@ -30,7 +30,7 @@ const AdminAuth = ({ children }) => {
 
     try {
       // Appel API pour vérifier l'authentification
-      const response = await fetch('http://141.227.129.194:30300/api/auth/admin', {
+      const response = await fetch('/api/auth/admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

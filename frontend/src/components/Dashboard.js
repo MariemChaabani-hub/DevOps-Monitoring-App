@@ -23,7 +23,7 @@ const Dashboard = () => {
   const [showRemoteActionsModal, setShowRemoteActionsModal] = useState(false);
   const [remoteActionsServerId, setRemoteActionsServerId] = useState(null);
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
 
   // Fetch latest metrics from all servers (real-time update)
   const fetchLatestMetrics = async () => {
@@ -161,7 +161,7 @@ const Dashboard = () => {
         <div className="bg-red-900 border border-red-700 rounded-lg p-6 text-red-100">
           <h2 className="text-xl font-bold mb-2">Error</h2>
           <p>{error}</p>
-          <p className="text-sm mt-4">Make sure the backend is running at http://localhost:3000</p>
+          <p className="text-sm mt-4">Make sure the backend API is reachable</p>
         </div>
       </div>
     );

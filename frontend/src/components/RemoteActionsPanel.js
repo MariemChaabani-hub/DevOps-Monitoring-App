@@ -21,7 +21,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
 
   const statusIntervalRef = useRef(null);
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
 
   // Générer une clé unique pour chaque action de service
   const getActionKey = (serviceName, actionType) => {
