@@ -1,6 +1,6 @@
 /**
  * Admin Authentication Component
- * Vérifie si l'utilisateur est l'administrateur autorisé
+ * Authentifie l'administrateur avec email + mot de passe (JWT)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -9,6 +9,8 @@ import './AdminAuth.css';
 const AdminAuth = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -16,8 +18,9 @@ const AdminAuth = ({ children }) => {
   useEffect(() => {
     const storedAuth = localStorage.getItem('adminAuthenticated');
     const storedEmail = localStorage.getItem('adminEmail');
-    
-    if (storedAuth === 'true' && storedEmail) {
+    const storedToken = localStorage.getItem('adminToken');
+
+    if (storedAuth === 'true' && storedEmail && storedToken) {
       setIsAuthenticated(true);
       setEmail(storedEmail);
     }
@@ -29,23 +32,23 @@ const AdminAuth = ({ children }) => {
     setError('');
 
     try {
-      // Appel API pour vérifier l'authentification
-      const response = await fetch('/api/auth/admin', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, password })
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Authentification réussie
         setIsAuthenticated(true);
         localStorage.setItem('adminAuthenticated', 'true');
         localStorage.setItem('adminEmail', data.email.toLowerCase());
+        localStorage.setItem('adminToken', data.token);
         localStorage.setItem('authTimestamp', Date.now().toString());
+        setPassword('');
       } else {
         setError(data.message || 'Échec de l\'authentification');
       }
@@ -60,19 +63,21 @@ const AdminAuth = ({ children }) => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setEmail('');
+    setPassword('');
     localStorage.removeItem('adminAuthenticated');
     localStorage.removeItem('adminEmail');
+    localStorage.removeItem('adminToken');
     localStorage.removeItem('authTimestamp');
   };
 
-  // Vérifier si la session a expiré (24h)
+  // Vérifier si la session a expiré (24h, aligné sur l'expiration du JWT)
   useEffect(() => {
     const checkSession = () => {
       const authTimestamp = localStorage.getItem('authTimestamp');
       if (authTimestamp) {
         const sessionAge = Date.now() - parseInt(authTimestamp);
         const maxAge = 24 * 60 * 60 * 1000; // 24 heures
-        
+
         if (sessionAge > maxAge) {
           handleLogout();
         }
@@ -88,20 +93,16 @@ const AdminAuth = ({ children }) => {
       <div className="admin-auth-container">
         <div className="admin-auth-card">
           <div className="auth-logo-container">
-            <img 
-              src="/logo-clediss.jpg" 
-              alt="Clediss Solutions" 
+            <img
+              src="/logo-clediss.jpg"
+              alt="Clediss Solutions"
               className="auth-logo"
             />
-          </div>
-          <div className="auth-header">
-            <h1>🔐 Authentification Administrateur</h1>
-            <p>DevOps Monitoring System - Accès Restreint</p>
           </div>
 
           <form onSubmit={handleLogin} className="auth-form">
             <div className="form-group">
-              <label htmlFor="email">Email Administrateur:</label>
+              <label htmlFor="email">Email:</label>
               <input
                 type="email"
                 id="email"
@@ -109,8 +110,34 @@ const AdminAuth = ({ children }) => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Entrez votre email administrateur"
                 required
+                autoComplete="username"
                 className="auth-input"
               />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Mot de passe:</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Entrez votre mot de passe"
+                  required
+                  autoComplete="current-password"
+                  className="auth-input password-input"
+                />
+                <button
+                  type="button"
+                  className="toggle-password-btn"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -122,37 +149,19 @@ const AdminAuth = ({ children }) => {
 
             <button
               type="submit"
-              disabled={isLoading || !email}
+              disabled={isLoading || !email || !password}
               className="auth-button"
             >
               {isLoading ? (
                 <>
                   <span className="spinner"></span>
-                  Vérification...
+                  Connexion...
                 </>
               ) : (
-                '🔓 Se Connecter'
+                'Connexion'
               )}
             </button>
           </form>
-
-          <div className="auth-info">
-            <div className="info-section">
-              <h3>🔒 Sécurité</h3>
-              <ul>
-                <li>Accès réservé à l'administrateur système</li>
-                <li>Authentification forte requise</li>
-                <li>Session de 24 heures maximum</li>
-                <li>Audit de toutes les actions</li>
-              </ul>
-            </div>
-
-            <div className="info-section">
-              <h3>📧 Contact Admin</h3>
-              <p>Pour l'accès administrateur:</p>
-              <p className="admin-contact">mariemchaabani39@gmail.com</p>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -163,9 +172,9 @@ const AdminAuth = ({ children }) => {
       {/* Header admin */}
       <div className="admin-header">
         <div className="admin-header-left">
-          <img 
-            src="/logo-clediss.jpg" 
-            alt="Clediss Solutions" 
+          <img
+            src="/logo-clediss.jpg"
+            alt="Clediss Solutions"
             className="admin-header-logo"
           />
           <div className="admin-info">

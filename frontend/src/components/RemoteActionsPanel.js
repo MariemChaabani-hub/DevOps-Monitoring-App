@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import './RemoteActionsPanel.css';
+import { authHeaders } from '../utils/auth';
 
 const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const [selectedServer, setSelectedServer] = useState('');
@@ -58,7 +59,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         `${API_BASE}/api/remote-actions/${serverId}/services-status`,
         {
           headers: {
-            'x-admin-email': 'mariemchaabani39@gmail.com'
+            'x-admin-email': localStorage.getItem('adminEmail') || '',
+            ...authHeaders()
           }
         }
       );
@@ -83,7 +85,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         `${API_BASE}/api/remote-actions/${serverId}/audit-log`,
         {
           headers: {
-            'x-admin-email': 'mariemchaabani39@gmail.com'
+            'x-admin-email': localStorage.getItem('adminEmail') || '',
+            ...authHeaders()
           }
         }
       );
@@ -125,7 +128,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-admin-email': 'mariemchaabani39@gmail.com'
+            'x-admin-email': localStorage.getItem('adminEmail') || '',
+            ...authHeaders()
           },
           body: JSON.stringify(payload)
         }

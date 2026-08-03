@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import './ServicesPanel.css';
+import { authHeaders } from '../utils/auth';
 
 const ServicesPanel = ({ servers = [] }) => {
   const [selectedServer, setSelectedServer] = useState('');
@@ -15,7 +16,7 @@ const ServicesPanel = ({ servers = [] }) => {
   const [refreshInterval, setRefreshInterval] = useState(null);
 
   const API_BASE = '';
-  const adminEmail = 'mariemchaabani39@gmail.com';
+  const adminEmail = localStorage.getItem('adminEmail') || '';
 
   // Service definitions
   const serviceDefinitions = {
@@ -32,7 +33,7 @@ const ServicesPanel = ({ servers = [] }) => {
 
     try {
       const response = await fetch(`${API_BASE}/api/services/${serverId}`, {
-        headers: { 'x-admin-email': adminEmail }
+        headers: { 'x-admin-email': adminEmail, ...authHeaders() }
       });
 
       if (response.ok) {
@@ -70,7 +71,8 @@ const ServicesPanel = ({ servers = [] }) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-admin-email': adminEmail
+            'x-admin-email': adminEmail,
+            ...authHeaders()
           },
           body: JSON.stringify({ service_name: serviceName })
         }
@@ -85,7 +87,7 @@ const ServicesPanel = ({ servers = [] }) => {
             `${API_BASE}/api/services/${serverId}/${serviceName}/restart-log`,
             {
               method: 'POST',
-              headers: { 'x-admin-email': adminEmail }
+              headers: { 'x-admin-email': adminEmail, ...authHeaders() }
             }
           );
         }

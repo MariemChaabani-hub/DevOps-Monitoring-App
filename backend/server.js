@@ -6,6 +6,11 @@
 // Load environment variables from .env file
 require('dotenv').config();
 
+if (!process.env.JWT_SECRET) {
+  console.warn('[Backend] WARNING: JWT_SECRET is not set in the environment. Using an auto-generated secret for this run only — all tokens will be invalidated on restart. Set JWT_SECRET in your .env file for production.');
+  process.env.JWT_SECRET = require('crypto').randomBytes(32).toString('hex');
+}
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -36,6 +41,7 @@ const backupRoutes = require('./routes/backups');
 const remoteActionsRoutes = require('./routes/remoteActions');
 const servicesRoutes = require('./routes/services');
 const authRoutes = require('./routes/auth');
+const { verifyToken } = require('./middleware/auth');
 
 // Initialize Express
 const app = express();
@@ -72,18 +78,31 @@ mongoose.connect(MONGODB_URI).then(() => {
   process.exit(1);
 });
 
-// Initialize default admin user if not exist
+// Initialize default admin user if not exist (or backfill a password for a
+// pre-existing admin created before password auth was introduced)
 async function initializeDefaultAdmin() {
   try {
     const User = require('./models/User');
     const adminEmail = (process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com').toLowerCase();
-    const count = await User.countDocuments({ email: adminEmail });
-    if (count === 0) {
+    const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
+
+    if (!process.env.ADMIN_PASSWORD) {
+      console.warn('[Backend] WARNING: ADMIN_PASSWORD is not set. Using an insecure default password for the seeded admin account. Set ADMIN_PASSWORD in your .env file and change it immediately.');
+    }
+
+    const existing = await User.findOne({ email: adminEmail }).select('+password');
+
+    if (!existing) {
       await User.create({
         email: adminEmail,
+        password: adminPassword,
         role: 'admin'
       });
-      console.log(`[Backend] Default admin user initialized in MongoDB: ${adminEmail}`);
+      console.log(`[Backend] Default admin user created in MongoDB: ${adminEmail}`);
+    } else if (!existing.password) {
+      existing.password = adminPassword;
+      await existing.save();
+      console.log(`[Backend] Migrated existing admin user with a hashed password: ${adminEmail}`);
     }
   } catch (error) {
     console.error('[Backend] Error initializing default admin:', error);
@@ -249,8 +268,8 @@ app.use('/api/servers', serverRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/backups', backupRoutes);
-app.use('/api/remote-actions', remoteActionsRoutes);
-app.use('/api/services', servicesRoutes);
+app.use('/api/remote-actions', verifyToken, remoteActionsRoutes);
+app.use('/api/services', verifyToken, servicesRoutes);
 app.use('/api/auth', authRoutes);
 
 // Dashboard summary endpoint
