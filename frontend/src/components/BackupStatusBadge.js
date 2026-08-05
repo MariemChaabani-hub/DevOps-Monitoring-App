@@ -14,7 +14,6 @@ const BackupStatusBadge = ({ status, size = 'medium', showIcon = true }) => {
         return {
           className: 'badge-ok',
           label: 'OK',
-          icon: '✓',
           color: '#4caf50',
           bgColor: '#e8f5e9'
         };
@@ -23,7 +22,6 @@ const BackupStatusBadge = ({ status, size = 'medium', showIcon = true }) => {
         return {
           className: 'badge-failed',
           label: 'FAILED',
-          icon: '✕',
           color: '#f44336',
           bgColor: '#ffebee'
         };
@@ -31,7 +29,6 @@ const BackupStatusBadge = ({ status, size = 'medium', showIcon = true }) => {
         return {
           className: 'badge-late',
           label: 'LATE',
-          icon: '!',
           color: '#ff9800',
           bgColor: '#fff3e0'
         };
@@ -39,7 +36,6 @@ const BackupStatusBadge = ({ status, size = 'medium', showIcon = true }) => {
         return {
           className: 'badge-unknown',
           label: 'UNKNOWN',
-          icon: '?',
           color: '#999',
           bgColor: '#f5f5f5'
         };
@@ -50,7 +46,6 @@ const BackupStatusBadge = ({ status, size = 'medium', showIcon = true }) => {
 
   return (
     <span className={`backup-status-badge ${config.className} size-${size}`}>
-      {showIcon && <span className="badge-icon">{config.icon}</span>}
       <span className="badge-text">{config.label}</span>
     </span>
   );

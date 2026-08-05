@@ -199,14 +199,14 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
             }}
             title={selectedServerId ? `View backup history for ${selectedServerId}` : "View backup history for all servers"}
           >
-            {selectedServerId ? "📋 View Backups" : "📋 All Backups"}
+            {selectedServerId ? "View Backups" : "All Backups"}
           </button>
           {selectedServerId && (
             <div className="filter-badge">
               <span>Showing: <strong>{selectedServerId}</strong></span>
               {onClearFilter && (
                 <button onClick={onClearFilter} className="clear-filter-btn" title="Show all servers">
-                  ✕ Show All
+                  Show All
                 </button>
               )}
             </div>
@@ -225,7 +225,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
       {/* Error message */}
       {error && (
         <div className="error-message">
-          <span>⚠ {error}</span>
+          <span>{error}</span>
           <button onClick={fetchBackupStatuses} className="retry-btn">
             Retry
           </button>
@@ -276,7 +276,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                       onClick={() => openBackupHistory(serverId, server.name || serverId)}
                       title="View backup history"
                     >
-                      📋 History
+                      History
                     </button>
                   </div>
                 </div>
@@ -304,7 +304,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
 
                       {latestBackup.is_from_today && (
                         <div className="info-row today-badge">
-                          <span className="label">✓ Today's Backup</span>
+                          <span className="label">Today's Backup</span>
                         </div>
                       )}
                     </>
@@ -344,17 +344,17 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                     <>
                       {backupInfo.summary.is_healthy && (
                         <span className="health-indicator healthy">
-                          ✓ Healthy
+                          Healthy
                         </span>
                       )}
                       {backupInfo.summary.requires_attention && (
                         <span className="health-indicator warning">
-                          ⚠ Needs Attention
+                          Needs Attention
                         </span>
                       )}
                       {backupInfo.summary.has_recent_backup && (
                         <span className="health-indicator recent">
-                          ◉ Recent
+                          Recent
                         </span>
                       )}
                     </>

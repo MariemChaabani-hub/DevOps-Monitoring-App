@@ -20,11 +20,11 @@ const ServicesPanel = ({ servers = [] }) => {
 
   // Service definitions
   const serviceDefinitions = {
-    pm2: { name: 'PM2', icon: '⚙️', color: '#6F00D2' },
-    nginx: { name: 'Nginx', icon: '⚡', color: '#009639' },
-    mongodb: { name: 'MongoDB', icon: '🍃', color: '#13AA52' },
-    apache: { name: 'Apache', icon: '🌐', color: '#E43D30' },
-    apache2: { name: 'Apache', icon: '🌐', color: '#E43D30' }
+    pm2: { name: 'PM2', icon: '', color: '#6F00D2' },
+    nginx: { name: 'Nginx', icon: '', color: '#009639' },
+    mongodb: { name: 'MongoDB', icon: '', color: '#13AA52' },
+    apache: { name: 'Apache', icon: '', color: '#E43D30' },
+    apache2: { name: 'Apache', icon: '', color: '#E43D30' }
   };
 
   // Fetch services for selected server
@@ -118,10 +118,10 @@ const ServicesPanel = ({ servers = [] }) => {
   // Get status badge
   const getStatusBadge = (status) => {
     const statusConfig = {
-      'running': { text: '🟢 Actif', color: '#10B981' },
-      'stopped': { text: '🔴 Arrêté', color: '#EF4444' },
-      'error': { text: '⚠️ Erreur', color: '#F59E0B' },
-      'unknown': { text: '❓ Inconnu', color: '#6B7280' }
+      'running': { text: 'Actif', color: '#10B981' },
+      'stopped': { text: 'Arrêté', color: '#EF4444' },
+      'error': { text: 'Erreur', color: '#F59E0B' },
+      'unknown': { text: 'Inconnu', color: '#6B7280' }
     };
     return statusConfig[status] || statusConfig.unknown;
   };
@@ -153,7 +153,7 @@ const ServicesPanel = ({ servers = [] }) => {
   return (
     <div className="services-panel">
       <div className="panel-header">
-        <h2>🔧 Gestion des Services</h2>
+        <h2>Gestion des Services</h2>
         <p className="panel-subtitle">
           PM2 • Nginx • MongoDB • Apache
         </p>
@@ -181,7 +181,7 @@ const ServicesPanel = ({ servers = [] }) => {
       {actionResult && (
         <div className={`action-alert ${actionResult.success ? 'success' : 'error'}`}>
           <span className="alert-icon">
-            {actionResult.success ? '✅' : '❌'}
+            {actionResult.success ? '' : ''}
           </span>
           <span className="alert-message">
             {actionResult.message}
@@ -253,7 +253,7 @@ const ServicesPanel = ({ servers = [] }) => {
                     className="action-btn restart-btn"
                     title="Redémarrer le service"
                   >
-                    🔄 Redémarrer
+                    Redémarrer
                   </button>
                   <button
                     onClick={() => executeServiceAction('stop', selectedServer, service.service_name)}
@@ -261,7 +261,7 @@ const ServicesPanel = ({ servers = [] }) => {
                     className="action-btn stop-btn"
                     title="Arrêter le service"
                   >
-                    ⏹️ Arrêter
+                    Arrêter
                   </button>
                 </div>
 
@@ -281,13 +281,13 @@ const ServicesPanel = ({ servers = [] }) => {
       {/* Empty State */}
       {selectedServer && services.length === 0 && (
         <div className="empty-state">
-          <p>⏳ Chargement des services...</p>
+          <p>Chargement des services...</p>
         </div>
       )}
 
       {!selectedServer && (
         <div className="empty-state">
-          <p>👆 Sélectionnez un serveur pour voir ses services</p>
+          <p>Sélectionnez un serveur pour voir ses services</p>
         </div>
       )}
     </div>

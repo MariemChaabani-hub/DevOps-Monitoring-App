@@ -262,7 +262,7 @@ const Dashboard = () => {
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 bg-gray-900/50 border border-dashed border-gray-700 rounded-lg">
-                    <span className="text-3xl mb-3">📊</span>
+                    <span className="text-3xl mb-3"></span>
                     <h3 className="text-lg font-semibold text-white mb-1">No Historical Metrics</h3>
                     <p className="text-gray-400 text-sm max-w-md text-center">
                       No metrics have been recorded for <strong>{selectedServer}</strong> in the last 60 minutes.

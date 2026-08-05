@@ -46,13 +46,13 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'OK':
-        return '✅';
+        return '';
       case 'FAILED':
-        return '❌';
+        return '';
       case 'LATE':
-        return '⏰';
+        return '';
       default:
-        return '❓';
+        return '';
     }
   };
 
@@ -113,7 +113,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
       <div className="modal-content">
         {/* Header */}
         <div className="modal-header">
-          <h2>📋 Backup History</h2>
+          <h2>Backup History</h2>
           <h3>{serverName || serverId}</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
@@ -125,15 +125,15 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
             <span className="stat-value">{stats.total}</span>
           </div>
           <div className="stat-item status-ok">
-            <span className="stat-label">✅ Success:</span>
+            <span className="stat-label">Success:</span>
             <span className="stat-value">{stats.ok}</span>
           </div>
           <div className="stat-item status-failed">
-            <span className="stat-label">❌ Failed:</span>
+            <span className="stat-label">Failed:</span>
             <span className="stat-value">{stats.failed}</span>
           </div>
           <div className="stat-item status-late">
-            <span className="stat-label">⏰ Late:</span>
+            <span className="stat-label">Late:</span>
             <span className="stat-value">{stats.late}</span>
           </div>
         </div>
@@ -141,7 +141,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
         {/* Error message */}
         {error && (
           <div className="error-message">
-            <span>⚠ {error}</span>
+            <span>{error}</span>
             <button onClick={fetchBackupHistory} className="retry-btn">
               Retry
             </button>
@@ -201,7 +201,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
             Showing {backups.length} of {pagination.total} backups
           </div>
           <button className="refresh-btn" onClick={fetchBackupHistory}>
-            🔄 Refresh
+            Refresh
           </button>
         </div>
       </div>

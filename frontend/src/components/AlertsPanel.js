@@ -19,7 +19,7 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
           borderLeft: 'border-l-4 border-l-red-600',
           text: 'text-red-100',
           badge: 'bg-red-600 text-red-200',
-          icon: '⚠️',
+          icon: '',
         };
       case 'WARNING':
         return {
@@ -28,7 +28,7 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
           borderLeft: 'border-l-4 border-l-orange-600',
           text: 'text-orange-100',
           badge: 'bg-orange-600 text-orange-200',
-          icon: '⚡',
+          icon: '',
         };
       default:
         return {
@@ -37,7 +37,7 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
           borderLeft: 'border-l-4 border-l-blue-600',
           text: 'text-blue-100',
           badge: 'bg-blue-600 text-blue-200',
-          icon: 'ℹ️',
+          icon: '',
         };
     }
   };

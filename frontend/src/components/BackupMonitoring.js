@@ -349,7 +349,7 @@ const BackupMonitoring = ({ serverId }) => {
       <div className="backup-footer">
         <small>Last updated: {lastUpdate ? formatDate(lastUpdate) : 'Never'}</small>
         <button className="refresh-btn" onClick={fetchBackupData}>
-          🔄 Refresh
+          Refresh
         </button>
       </div>
     </div>

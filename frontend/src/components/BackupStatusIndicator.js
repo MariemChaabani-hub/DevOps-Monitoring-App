@@ -14,7 +14,6 @@ const BackupStatusIndicator = ({ status, animated = true }) => {
         return {
           className: 'indicator-ok',
           label: 'Backup OK',
-          icon: '✓',
           message: 'Latest backup successful',
           color: '#4caf50'
         };
@@ -23,7 +22,6 @@ const BackupStatusIndicator = ({ status, animated = true }) => {
         return {
           className: 'indicator-failed',
           label: 'Backup Failed',
-          icon: '✕',
           message: 'Latest backup failed',
           color: '#f44336'
         };
@@ -31,7 +29,6 @@ const BackupStatusIndicator = ({ status, animated = true }) => {
         return {
           className: 'indicator-late',
           label: 'Backup Late',
-          icon: '!',
           message: 'Backup is missing or late',
           color: '#ff9800'
         };
@@ -39,7 +36,6 @@ const BackupStatusIndicator = ({ status, animated = true }) => {
         return {
           className: 'indicator-unknown',
           label: 'Unknown Status',
-          icon: '?',
           message: 'No backup data',
           color: '#999'
         };
@@ -50,11 +46,6 @@ const BackupStatusIndicator = ({ status, animated = true }) => {
 
   return (
     <div className={`backup-status-indicator ${config.className} ${animated ? 'animated' : ''}`}>
-      <div className="indicator-circle">
-        <div className="indicator-inner">
-          <span className="indicator-icon">{config.icon}</span>
-        </div>
-      </div>
       <div className="indicator-text">
         <div className="indicator-label">{config.label}</div>
         <div className="indicator-message">{config.message}</div>

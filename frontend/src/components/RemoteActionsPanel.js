@@ -44,10 +44,10 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
 
   // Services supportés
   const supportedServices = [
-    { id: 'pm2', name: 'PM2', icon: '⚙️', description: 'Gestionnaire de processus PM2' },
-    { id: 'nginx', name: 'Nginx', icon: '⚡', description: 'Serveur web Nginx' },
-    { id: 'mongodb', name: 'MongoDB', icon: '🍃', description: 'Base de données MongoDB' },
-    { id: 'apache', name: 'Apache', icon: '🌐', description: 'Serveur HTTP Apache' }
+    { id: 'pm2', name: 'PM2', icon: '', description: 'Gestionnaire de processus PM2' },
+    { id: 'nginx', name: 'Nginx', icon: '', description: 'Serveur web Nginx' },
+    { id: 'mongodb', name: 'MongoDB', icon: '', description: 'Base de données MongoDB' },
+    { id: 'apache', name: 'Apache', icon: '', description: 'Serveur HTTP Apache' }
   ];
 
   // Fetch services status for selected server
@@ -186,22 +186,22 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   // Get status icon
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'running': return '🟢';
-      case 'stopped': return '🔴';
-      case 'error': return '⚠️';
-      default: return '❓';
+      case 'running': return '';
+      case 'stopped': return '';
+      case 'error': return '';
+      default: return '';
     }
   };
 
   // Get action icon
   const getActionIcon = (action) => {
     switch (action) {
-      case 'RESTART_SERVICE': return '🔄';
-      case 'START_SERVICE': return '▶️';
-      case 'STOP_SERVICE': return '⏹️';
-      case 'RESTART_SERVER': return '🔁';
-      case 'SHUTDOWN_SERVER': return '🔌';
-      default: return '⚙️';
+      case 'RESTART_SERVICE': return '';
+      case 'START_SERVICE': return '';
+      case 'STOP_SERVICE': return '';
+      case 'RESTART_SERVER': return '';
+      case 'SHUTDOWN_SERVER': return '';
+      default: return '';
     }
   };
 
@@ -230,7 +230,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   return (
     <div className="remote-actions-panel">
       <div className="panel-header">
-        <h2>🔧 Actions à Distance (Remote Management)</h2>
+        <h2>Actions à Distance (Remote Management)</h2>
         <p className="panel-description">
           Gérez vos serveurs à distance avec authentification forte et audit complet
         </p>
@@ -258,7 +258,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         <>
           {/* Services Status */}
           <div className="services-status-section">
-            <h3>📊 Statut des Services</h3>
+            <h3>Statut des Services</h3>
             <div className="services-grid">
               {supportedServices.map((service) => {
                 const status = servicesStatus[service.id];
@@ -268,9 +268,9 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                       <span className="service-icon">{service.icon}</span>
                       <span className="service-name">{service.name}</span>
                       <span className={`status-badge ${status?.status || 'unknown'}`}>
-                        {status?.status === 'running' ? '🟢 Active' :
-                         status?.status === 'stopped' ? '🔴 Inactive' :
-                         '🟡 Unknown'}
+                        {status?.status === 'running' ? 'Active' :
+                         status?.status === 'stopped' ? 'Inactive' :
+                         'Unknown'}
                       </span>
                     </div>
                     <div className="service-details">
@@ -293,7 +293,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                         className="action-btn restart-btn"
                         title="Redémarrer le service"
                       >
-                        {isActionLoading(service.id, 'restart') ? '⏳ Redémarrage...' : '🔄 Redémarrer'}
+                        {isActionLoading(service.id, 'restart') ? 'Redémarrage...' : 'Redémarrer'}
                       </button>
                       <button
                         onClick={() => executeRemoteAction(
@@ -306,7 +306,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                         className="action-btn stop-btn"
                         title="Arrêter le service"
                       >
-                        {isActionLoading(service.id, 'stop') ? '⏳ Arrêt...' : '⏹️ Arrêter'}
+                        {isActionLoading(service.id, 'stop') ? 'Arrêt...' : 'Arrêter'}
                       </button>
                     </div>
                   </div>
@@ -317,10 +317,10 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
 
           {/* Server Actions */}
           <div className="server-actions-section">
-            <h3>🖥️ Actions sur le Serveur</h3>
+            <h3>Actions sur le Serveur</h3>
             <div className="server-actions-grid">
               <div className="server-action-card">
-                <h4>🔁 Redémarrage du Serveur</h4>
+                <h4>Redémarrage du Serveur</h4>
                 <p>Redémarrer complètement le serveur (downtime ~2-3 minutes)</p>
                 <button
                   onClick={() => executeRemoteAction(
@@ -332,12 +332,12 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                   disabled={isActionLoading('server', 'restart')}
                   className="action-btn restart-server-btn"
                 >
-                  {isActionLoading('server', 'restart') ? '⏳ Redémarrage du serveur...' : '🔄 Redémarrer le Serveur'}
+                  {isActionLoading('server', 'restart') ? 'Redémarrage du serveur...' : 'Redémarrer le Serveur'}
                 </button>
               </div>
 
               <div className="server-action-card danger">
-                <h4>🔌 Arrêt du Serveur</h4>
+                <h4>Arrêt du Serveur</h4>
                 <p>Arrêter complètement le serveur (nécessite intervention manuelle)</p>
                 <button
                   onClick={() => executeRemoteAction(
@@ -349,7 +349,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                   disabled={isActionLoading('server', 'shutdown')}
                   className="action-btn shutdown-btn"
                 >
-                  {isActionLoading('server', 'shutdown') ? '⏳ Arrêt du serveur...' : '🔌 Arrêter le Serveur'}
+                  {isActionLoading('server', 'shutdown') ? 'Arrêt du serveur...' : 'Arrêter le Serveur'}
                 </button>
               </div>
             </div>
@@ -360,16 +360,16 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
             <div className={`action-result ${actionResult.success ? 'success' : 'error'}`}>
               <div className="result-header">
                 <span className="result-icon">
-                  {actionResult.success ? '✅' : '❌'}
+                  {actionResult.success ? '' : ''}
                 </span>
                 <span className="result-title">
                   {actionResult.success ? 'Action Réussie' : 'Action Échouée'}
                 </span>
                 {actionResult.verifiedStatus && (
                   <span className={`verified-status-badge ${actionResult.verifiedStatus}`}>
-                    {actionResult.verifiedStatus === 'active' ? '🟢 Vérifié: Actif' :
-                     actionResult.verifiedStatus === 'inactive' ? '🔴 Vérifié: Inactif' :
-                     '🟡 Vérifié: Inconnu'}
+                    {actionResult.verifiedStatus === 'active' ? 'Vérifié: Actif' :
+                     actionResult.verifiedStatus === 'inactive' ? 'Vérifié: Inactif' :
+                     'Vérifié: Inconnu'}
                   </span>
                 )}
               </div>
@@ -399,12 +399,12 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           {/* Audit Logs */}
           <div className="audit-section">
             <div className="audit-header">
-              <h3>📋 Journal d'Audit</h3>
+              <h3>Journal d'Audit</h3>
               <button
                 onClick={() => setShowAuditLogs(!showAuditLogs)}
                 className="toggle-audit-btn"
               >
-                {showAuditLogs ? '📁 Cacher' : '📂 Afficher'} les logs
+                {showAuditLogs ? 'Cacher' : 'Afficher'} les logs
               </button>
             </div>
 
@@ -412,7 +412,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
               <div className="audit-logs">
                 {auditLogs.length === 0 ? (
                   <div className="no-logs">
-                    <p>📭 Aucune action d'audit trouvée</p>
+                    <p>Aucune action d'audit trouvée</p>
                   </div>
                 ) : (
                   <div className="logs-list">
@@ -449,7 +449,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
 
       {!selectedServer && (
         <div className="no-server-selected">
-          <p>📋 Veuillez sélectionner un serveur pour voir les actions disponibles</p>
+          <p>Veuillez sélectionner un serveur pour voir les actions disponibles</p>
         </div>
       )}
     </div>

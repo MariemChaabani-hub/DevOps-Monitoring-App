@@ -35,16 +35,6 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
     };
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'OK': return '✓';
-      case 'WARNING': return '⚠';
-      case 'CRITICAL': return '❌';
-      case 'OFFLINE': return '⊗';
-      default: return '?';
-    }
-  };
-
   const getStatusColor = (status) => {
     switch (status) {
       case 'OK': return '#4CAF50';
@@ -73,13 +63,6 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
               }}
             >
               <div className="server-header">
-                <span 
-                  className="status-icon" 
-                  style={{ color: getStatusColor(alertStatus) }}
-                  title={alertStatus}
-                >
-                  {getStatusIcon(alertStatus)}
-                </span>
                 <h3>{server.name}</h3>
                 
                 {/* Alert Badge */}
@@ -112,13 +95,11 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
                 <div className="alert-summary">
                   {alertCounts.critical > 0 && (
                     <div className="alert-item critical">
-                      <span className="icon">●</span>
                       <span className="text">{alertCounts.critical} Critical</span>
                     </div>
                   )}
                   {alertCounts.warning > 0 && (
                     <div className="alert-item warning">
-                      <span className="icon">●</span>
                       <span className="text">{alertCounts.warning} Warning</span>
                     </div>
                   )}

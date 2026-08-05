@@ -68,7 +68,7 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
               }`}
               title={`Actions à distance - Serveur ${status}`}
             >
-              🔧 Actions
+              Actions
             </button>
           )}
         </div>
@@ -124,7 +124,7 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Network I/O</p>
           <p className="text-sm font-semibold text-white">
-            ↓ {(latestMetric.network_in || 0).toLocaleString()} B/s
+            {(latestMetric.network_in || 0).toLocaleString()} B/s
           </p>
         </div>
         <div>

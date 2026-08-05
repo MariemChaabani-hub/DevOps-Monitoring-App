@@ -21,7 +21,7 @@ const RemoteActionsModal = ({ isOpen, onClose, selectedServerId, servers = [] })
         {/* Modal Header */}
         <div className="modal-header">
           <div className="modal-title">
-            <h2>🔧 Actions à Distance</h2>
+            <h2>Actions à Distance</h2>
             {selectedServer && (
               <p className="server-info">
                 Serveur: <span className="server-name">{selectedServer.name || selectedServer.serverId}</span>
@@ -51,10 +51,10 @@ const RemoteActionsModal = ({ isOpen, onClose, selectedServerId, servers = [] })
         <div className="modal-footer">
           <div className="footer-info">
             <p className="security-notice">
-              🔐 <strong>Accès administrateur uniquement</strong> - Toutes les actions sont journalisées
+              <strong>Accès administrateur uniquement</strong> - Toutes les actions sont journalisées
             </p>
             <p className="admin-email">
-              📧 Admin: mariemchaabani39@gmail.com
+              Admin: mariemchaabani39@gmail.com
             </p>
           </div>
           <div className="footer-actions">

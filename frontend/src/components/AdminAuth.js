@@ -135,14 +135,14 @@ const AdminAuth = ({ children }) => {
                   aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                   tabIndex={-1}
                 >
-                  {showPassword ? '🙈' : '👁️'}
+                  {showPassword ? '' : ''}
                 </button>
               </div>
             </div>
 
             {error && (
               <div className="auth-error">
-                <span className="error-icon">⚠️</span>
+                <span className="error-icon"></span>
                 {error}
               </div>
             )}
@@ -178,12 +178,11 @@ const AdminAuth = ({ children }) => {
             className="admin-header-logo"
           />
           <div className="admin-info">
-            <span className="admin-badge">👤 Admin</span>
-            <span className="admin-email">{email}</span>
+            <span className="admin-badge">Admin</span>
           </div>
         </div>
         <button onClick={handleLogout} className="logout-button">
-          🔒 Déconnexion
+          Déconnexion
         </button>
       </div>
 

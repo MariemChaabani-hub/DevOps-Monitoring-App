@@ -49,13 +49,13 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'OK':
-        return '✅';
+        return '';
       case 'FAILED':
-        return '❌';
+        return '';
       case 'LATE':
-        return '⏰';
+        return '';
       default:
-        return '❓';
+        return '';
     }
   };
 
@@ -125,7 +125,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         {/* Header */}
         <div className="modal-header">
           <div className="header-content">
-            <h2>📋 Backup History</h2>
+            <h2>Backup History</h2>
             <h3>{serverName || serverId}</h3>
           </div>
           <button className="close-button" onClick={onClose}>
@@ -143,7 +143,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             onClick={() => setStatusFilter('ALL')}
             title="Show all backups"
           >
-            <div className="stat-icon">📊</div>
+            <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.total}</div>
               <div className="stat-label">Total Backups</div>
@@ -154,7 +154,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             onClick={() => setStatusFilter('OK')}
             title="Show successful backups"
           >
-            <div className="stat-icon">✅</div>
+            <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.ok}</div>
               <div className="stat-label">Successful</div>
@@ -165,7 +165,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             onClick={() => setStatusFilter('FAILED')}
             title="Show failed backups"
           >
-            <div className="stat-icon">❌</div>
+            <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.failed}</div>
               <div className="stat-label">Failed</div>
@@ -176,7 +176,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             onClick={() => setStatusFilter('LATE')}
             title="Show late backups"
           >
-            <div className="stat-icon">⏰</div>
+            <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.late}</div>
               <div className="stat-label">Late</div>
@@ -187,10 +187,10 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         {/* Error message */}
         {error && (
           <div className="error-container">
-            <div className="error-icon">⚠️</div>
+            <div className="error-icon"></div>
             <div className="error-message">{error}</div>
             <button className="retry-button" onClick={fetchBackupHistory}>
-              🔄 Retry
+              Retry
             </button>
           </div>
         )}
@@ -208,7 +208,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
           <div className="history-container">
             {sortedBackups.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">📭</div>
+                <div className="empty-icon"></div>
                 <h3>No Backup History</h3>
                 <p>
                   {statusFilter === 'ALL' 
@@ -271,7 +271,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             <span className="server-id">Server: {serverId === 'all' ? 'All Servers' : serverId}</span>
           </div>
           <button className="refresh-button" onClick={fetchBackupHistory}>
-            🔄 Refresh
+            Refresh
           </button>
         </div>
       </div>
