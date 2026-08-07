@@ -163,7 +163,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
       } else {
         setActionResult({
           success: false,
-          message: result.error || 'Action failed',
+          message: result.error || 'Échec de l\'action',
           stderr: result.stderr || null
         });
       }
@@ -205,6 +205,27 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     }
   };
 
+  // Translate action code for display
+  const translateAction = (action) => {
+    switch (action) {
+      case 'RESTART_SERVICE': return 'Redémarrage du service';
+      case 'START_SERVICE': return 'Démarrage du service';
+      case 'STOP_SERVICE': return 'Arrêt du service';
+      case 'RESTART_SERVER': return 'Redémarrage du serveur';
+      case 'SHUTDOWN_SERVER': return 'Arrêt du serveur';
+      default: return action;
+    }
+  };
+
+  // Translate audit result for display
+  const translateResult = (result) => {
+    switch (result) {
+      case 'SUCCESS': return 'SUCCÈS';
+      case 'FAILED': return 'ÉCHEC';
+      default: return result;
+    }
+  };
+
   // Effect: Pre-select server when preselectedServerId changes
   useEffect(() => {
     if (preselectedServerId && preselectedServerId !== selectedServer) {
@@ -230,7 +251,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   return (
     <div className="remote-actions-panel">
       <div className="panel-header">
-        <h2>Actions à Distance (Remote Management)</h2>
+        <h2>Actions à Distance</h2>
         <p className="panel-description">
           Gérez vos serveurs à distance avec authentification forte et audit complet
         </p>
@@ -268,16 +289,16 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                       <span className="service-icon">{service.icon}</span>
                       <span className="service-name">{service.name}</span>
                       <span className={`status-badge ${status?.status || 'unknown'}`}>
-                        {status?.status === 'running' ? 'Active' :
-                         status?.status === 'stopped' ? 'Inactive' :
-                         'Unknown'}
+                        {status?.status === 'running' ? 'Actif' :
+                         status?.status === 'stopped' ? 'Inactif' :
+                         'Inconnu'}
                       </span>
                     </div>
                     <div className="service-details">
                       <p className="service-description">{service.description}</p>
                       {status && (
                         <p className="service-uptime">
-                          Uptime: {status.uptime || 'N/A'}
+                          Disponibilité : {status.uptime || 'Indisponible'}
                         </p>
                       )}
                     </div>
@@ -321,7 +342,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
             <div className="server-actions-grid">
               <div className="server-action-card">
                 <h4>Redémarrage du Serveur</h4>
-                <p>Redémarrer complètement le serveur (downtime ~2-3 minutes)</p>
+                <p>Redémarrer complètement le serveur (interruption ~2-3 minutes)</p>
                 <button
                   onClick={() => executeRemoteAction(
                     'server',
@@ -378,13 +399,13 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
               </div>
               {actionResult.commandOutput && (
                 <div className="result-command-output">
-                  <strong>Sortie de la commande:</strong>
+                  <strong>Sortie de la commande :</strong>
                   <pre>{actionResult.commandOutput}</pre>
                 </div>
               )}
               {actionResult.stderr && (
                 <div className="result-stderr">
-                  <strong>Erreur:</strong>
+                  <strong>Erreur :</strong>
                   <pre>{actionResult.stderr}</pre>
                 </div>
               )}
@@ -420,21 +441,21 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                       <div key={index} className="log-entry">
                         <div className="log-header">
                           <span className="log-action">
-                            {getActionIcon(log.action)} {log.action}
+                            {getActionIcon(log.action)} {translateAction(log.action)}
                           </span>
                           <span className={`log-result ${log.result.toLowerCase()}`}>
-                            {log.result}
+                            {translateResult(log.result)}
                           </span>
                           <span className="log-timestamp">
                             {formatTimestamp(log.timestamp)}
                           </span>
                         </div>
                         <div className="log-details">
-                          <p><strong>Serveur:</strong> {log.server_id}</p>
-                          <p><strong>Admin:</strong> {log.admin_email}</p>
-                          <p><strong>IP:</strong> {log.ip_address}</p>
+                          <p><strong>Serveur :</strong> {log.server_id}</p>
+                          <p><strong>Admin :</strong> {log.admin_email}</p>
+                          <p><strong>IP :</strong> {log.ip_address}</p>
                           {log.details && (
-                            <p><strong>Détails:</strong> {log.details}</p>
+                            <p><strong>Détails :</strong> {log.details}</p>
                           )}
                         </div>
                       </div>

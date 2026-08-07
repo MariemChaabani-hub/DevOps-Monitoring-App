@@ -12,7 +12,7 @@ class AlertService {
    */
   static async checkAndGenerateAlerts(metric, server, statusResult) {
     try {
-      const { status, reasons } = statusResult;
+      const { status } = statusResult;
 
       // Skip if status is OK
       if (status === 'OK') {
@@ -21,76 +21,49 @@ class AlertService {
         return null;
       }
 
-      // Generate new alerts based on status
+      // Use the same DB-backed thresholds StatusService already computed,
+      // instead of duplicating hardcoded numbers here (that's what caused
+      // disk alerts to use the wrong 85/95 thresholds instead of 80/90).
+      const defaultThresholds = {
+        cpu: { warning: 70, critical: 90 },
+        ram: { warning: 80, critical: 95 },
+        disk: { warning: 80, critical: 90 }
+      };
+      const thresholds = { ...defaultThresholds, ...(statusResult.thresholds || {}) };
+
+      const metricConfigs = [
+        { key: 'cpu_percent', name: 'cpu', label: 'CPU' },
+        { key: 'ram_percent', name: 'ram', label: 'RAM' },
+        { key: 'disk_percent', name: 'disk', label: 'disque' }
+      ];
+
       const alerts = [];
 
-      // CPU Alert
-      if (metric.cpu_percent >= 90) {
-        alerts.push(await this.createOrUpdateAlert({
-          serverId: metric.server_id,
-          type: 'CRITICAL',
-          severity: 'CRITICAL',
-          metric: 'cpu_percent',
-          threshold: 90,
-          value: metric.cpu_percent,
-          message: `Critical CPU usage: ${metric.cpu_percent}%`
-        }, server));
-      } else if (metric.cpu_percent >= 70) {
-        alerts.push(await this.createOrUpdateAlert({
-          serverId: metric.server_id,
-          type: 'WARNING',
-          severity: 'WARNING',
-          metric: 'cpu_percent',
-          threshold: 70,
-          value: metric.cpu_percent,
-          message: `High CPU usage: ${metric.cpu_percent}%`
-        }, server));
-      }
+      for (const { key, name, label } of metricConfigs) {
+        const value = metric[key];
+        const { warning, critical } = thresholds[name];
 
-      // RAM Alert
-      if (metric.ram_percent >= 95) {
-        alerts.push(await this.createOrUpdateAlert({
-          serverId: metric.server_id,
-          type: 'CRITICAL',
-          severity: 'CRITICAL',
-          metric: 'ram_percent',
-          threshold: 95,
-          value: metric.ram_percent,
-          message: `Critical RAM usage: ${metric.ram_percent}%`
-        }, server));
-      } else if (metric.ram_percent >= 80) {
-        alerts.push(await this.createOrUpdateAlert({
-          serverId: metric.server_id,
-          type: 'WARNING',
-          severity: 'WARNING',
-          metric: 'ram_percent',
-          threshold: 80,
-          value: metric.ram_percent,
-          message: `High RAM usage: ${metric.ram_percent}%`
-        }, server));
-      }
-
-      // Disk Alert
-      if (metric.disk_percent >= 95) {
-        alerts.push(await this.createOrUpdateAlert({
-          serverId: metric.server_id,
-          type: 'CRITICAL',
-          severity: 'CRITICAL',
-          metric: 'disk_percent',
-          threshold: 95,
-          value: metric.disk_percent,
-          message: `Critical disk usage: ${metric.disk_percent}%`
-        }, server));
-      } else if (metric.disk_percent >= 85) {
-        alerts.push(await this.createOrUpdateAlert({
-          serverId: metric.server_id,
-          type: 'WARNING',
-          severity: 'WARNING',
-          metric: 'disk_percent',
-          threshold: 85,
-          value: metric.disk_percent,
-          message: `High disk usage: ${metric.disk_percent}%`
-        }, server));
+        if (value >= critical) {
+          alerts.push(await this.createOrUpdateAlert({
+            serverId: metric.server_id,
+            type: 'CRITICAL',
+            severity: 'CRITICAL',
+            metric: key,
+            threshold: critical,
+            value,
+            message: `Utilisation ${label} critique : ${value}%`
+          }, server));
+        } else if (value >= warning) {
+          alerts.push(await this.createOrUpdateAlert({
+            serverId: metric.server_id,
+            type: 'WARNING',
+            severity: 'WARNING',
+            metric: key,
+            threshold: warning,
+            value,
+            message: `Utilisation ${label} élevée : ${value}%`
+          }, server));
+        }
       }
 
       return alerts;
@@ -105,10 +78,13 @@ class AlertService {
    */
   static async createOrUpdateAlert(alertData, server) {
     try {
-      // Check if alert already exists
+      // Check if alert already exists. Filtering by `metric` too is required —
+      // without it, an ACTIVE CPU alert would make this query match and skip
+      // creating/emailing a separate RAM or Disk alert on the same server.
       const existingAlert = await Alert.findOne({
         serverId: alertData.serverId,
         type: alertData.type,
+        metric: alertData.metric,
         status: 'ACTIVE'
       });
 
@@ -128,17 +104,24 @@ class AlertService {
 
       await newAlert.save();
 
-      // Send email notification
-      if (server && server.alert_email) {
-        await EmailService.sendAlertEmail({
-          serverId: alertData.serverId,
-          type: alertData.type,
-          metric: alertData.metric,
-          value: alertData.value,
-          threshold: alertData.threshold,
-          timestamp: new Date(),
-          adminEmail: server.alert_email
-        });
+      // Send email notification. `server.alert_email` is a per-server
+      // override set manually via the API; it is never populated for
+      // servers auto-registered by the monitoring agent, so we must fall
+      // back to a global admin address instead of silently skipping the email.
+      const adminEmail = (server && server.alert_email) || process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+
+      const emailResult = await EmailService.sendAlertEmail({
+        serverId: alertData.serverId,
+        serverName: server && server.name,
+        type: alertData.type,
+        metric: alertData.metric,
+        value: alertData.value,
+        threshold: alertData.threshold,
+        timestamp: new Date(),
+        adminEmail
+      });
+
+      if (emailResult.success) {
         newAlert.emailSent = true;
         newAlert.emailSentAt = new Date();
         await newAlert.save();
@@ -235,7 +218,7 @@ class AlertService {
               metric: 'agent_connectivity',
               threshold: 30,
               value: Math.round((now - lastMetricTime) / 1000),
-              message: `Agent offline for ${Math.round((now - lastMetricTime) / 1000)} seconds`
+              message: `Agent hors ligne depuis ${Math.round((now - lastMetricTime) / 1000)} secondes`
             }, server);
           }
         }

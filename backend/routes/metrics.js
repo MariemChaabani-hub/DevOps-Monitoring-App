@@ -151,7 +151,7 @@ router.get('/server/:serverId/latest', async (req, res) => {
 
     if (!latestMetric) {
       return res.status(404).json({
-        error: 'No metrics found for this server',
+        error: 'Aucune métrique trouvée pour ce serveur',
         serverId: serverId
       });
     }

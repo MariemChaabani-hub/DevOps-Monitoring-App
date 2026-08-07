@@ -135,7 +135,7 @@ const AdminAuth = ({ children }) => {
                   aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                   tabIndex={-1}
                 >
-                  {showPassword ? '' : ''}
+                  {showPassword ? 'Masquer' : 'Afficher'}
                 </button>
               </div>
             </div>

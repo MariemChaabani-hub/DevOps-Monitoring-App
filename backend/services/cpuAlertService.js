@@ -39,7 +39,7 @@ class AlertService {
   /**
    * Check CPU metrics and trigger alerts if needed
    */
-  static async checkCpuAndAlert(metric, adminEmail = 'mariemchaabani39@gmail.com') {
+  static async checkCpuAndAlert(metric, server = null, adminEmail = 'mariemchaabani39@gmail.com') {
     try {
       const serverId = metric.server_id || metric.serverId || 'unknown';
       const cpuPercent = metric.cpu_percent;
@@ -59,22 +59,24 @@ class AlertService {
 
       // No alert needed if CPU is OK
       if (!alertType) {
-        // Auto-resolve any ACTIVE CRITICAL alerts when CPU returns to normal
+        // Auto-resolve any ACTIVE CRITICAL CPU alerts when CPU returns to normal.
+        // Filtering by `metric` is required — without it, this would also
+        // wipe out unrelated ACTIVE RAM/Disk CRITICAL alerts for the same server.
         const resolvedCritical = await Alert.updateMany(
-          { serverId, type: 'CRITICAL', status: 'ACTIVE' },
+          { serverId, type: 'CRITICAL', metric: 'cpu_percent', status: 'ACTIVE' },
           { status: 'RESOLVED', resolvedAt: new Date() }
         );
-        
+
         if (resolvedCritical.modifiedCount > 0) {
           console.log(`[AlertService] ✓ Auto-resolved ${resolvedCritical.modifiedCount} CRITICAL alert(s) for ${serverId} - CPU returned to normal (${cpuPercent}%)`);
         }
 
-        // Auto-resolve any ACTIVE WARNING alerts when CPU returns to normal
+        // Auto-resolve any ACTIVE WARNING CPU alerts when CPU returns to normal
         const resolvedWarning = await Alert.updateMany(
-          { serverId, type: 'WARNING', status: 'ACTIVE' },
+          { serverId, type: 'WARNING', metric: 'cpu_percent', status: 'ACTIVE' },
           { status: 'RESOLVED', resolvedAt: new Date() }
         );
-        
+
         if (resolvedWarning.modifiedCount > 0) {
           console.log(`[AlertService] ✓ Auto-resolved ${resolvedWarning.modifiedCount} WARNING alert(s) for ${serverId} - CPU returned to normal (${cpuPercent}%)`);
         }
@@ -99,7 +101,7 @@ class AlertService {
         metric: 'cpu_percent',
         value: cpuPercent,
         threshold,
-        message: `${alertType}: CPU usage is ${cpuPercent}% (threshold: ${threshold}%)`
+        message: `Utilisation CPU à ${cpuPercent}% (seuil : ${threshold}%)`
       });
 
       await alertDoc.save();
@@ -112,6 +114,7 @@ class AlertService {
 
       const emailData = {
         serverId,
+        serverName: server && server.name,
         type: alertType,
         metric: 'cpu_percent',
         value: cpuPercent,

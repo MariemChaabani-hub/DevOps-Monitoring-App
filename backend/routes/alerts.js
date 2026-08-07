@@ -43,7 +43,7 @@ router.get('/:alert_id', async (req, res) => {
 
     const alert = await Alert.findById(alert_id);
     if (!alert) {
-      return res.status(404).json({ error: 'Alert not found' });
+      return res.status(404).json({ error: 'Alerte non trouvée' });
     }
 
     res.json(alert);
@@ -61,7 +61,7 @@ router.put('/:alert_id/acknowledge', async (req, res) => {
 
     const alert = await AlertService.acknowledgeAlert(alert_id, acknowledged_by);
     if (!alert) {
-      return res.status(404).json({ error: 'Alert not found' });
+      return res.status(404).json({ error: 'Alerte non trouvée' });
     }
 
     res.json(alert);
@@ -86,7 +86,7 @@ router.put('/:alert_id/resolve', async (req, res) => {
     );
 
     if (!alert) {
-      return res.status(404).json({ error: 'Alert not found' });
+      return res.status(404).json({ error: 'Alerte non trouvée' });
     }
 
     res.json(alert);

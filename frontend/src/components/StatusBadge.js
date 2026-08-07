@@ -24,13 +24,13 @@ const StatusBadge = ({ status }) => {
 
   if (status === 'WARNING') {
     bgColor = 'bg-yellow-600';
-    label = 'WARNING';
+    label = 'ALERTE';
   } else if (status === 'CRITICAL') {
     bgColor = 'bg-red-600';
-    label = 'CRITICAL';
+    label = 'CRITIQUE';
   } else if (status === 'OFFLINE') {
     bgColor = 'bg-gray-600';
-    label = 'OFFLINE';
+    label = 'HORS LIGNE';
   }
 
   return (

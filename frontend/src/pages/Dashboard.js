@@ -105,16 +105,16 @@ const Dashboard = () => {
   };
 
   if (loading) {
-    return <div className="dashboard loading">Loading dashboard...</div>;
+    return <div className="dashboard loading">Chargement du tableau de bord...</div>;
   }
 
   return (
     <div className="dashboard">
       <div className="header">
-        <h1>DevOps Monitoring Dashboard</h1>
+        <h1>Tableau de Bord de Supervision DevOps</h1>
         <div className="status-indicator">
           <span className={`ws-status ${wsConnected ? 'connected' : 'disconnected'}`}>
-            {wsConnected ? 'Live' : 'Polling'}
+            {wsConnected ? 'En direct' : 'Interrogation'}
           </span>
         </div>
       </div>
@@ -122,45 +122,45 @@ const Dashboard = () => {
       {health && (
         <div className="health-summary">
           <div className="summary-card">
-            <h3>System Health</h3>
+            <h3>Santé du Système</h3>
             <div className="health-percentage">{health.health.health_percentage}%</div>
             <div className="health-breakdown">
               <div className="health-item ok">
                 <span className="dot" style={{ backgroundColor: '#4CAF50' }}></span>
-                OK: {health.health.ok_count}
+                OK : {health.health.ok_count}
               </div>
               <div className="health-item warning">
                 <span className="dot" style={{ backgroundColor: '#FFC107' }}></span>
-                Warning: {health.health.warning_count}
+                Alerte : {health.health.warning_count}
               </div>
               <div className="health-item critical">
                 <span className="dot" style={{ backgroundColor: '#F44336' }}></span>
-                Critical: {health.health.critical_count}
+                Critique : {health.health.critical_count}
               </div>
               <div className="health-item offline">
                 <span className="dot" style={{ backgroundColor: '#9E9E9E' }}></span>
-                Offline: {health.health.offline_count}
+                Hors ligne : {health.health.offline_count}
               </div>
             </div>
           </div>
 
           <div className="summary-card">
-            <h3>Active Alerts</h3>
+            <h3>Alertes Actives</h3>
             <div className="alert-count">{health.alerts.total}</div>
             <div className="alert-breakdown">
               {health.alerts.by_severity && (
                 <>
-                  <div>Critical: {health.alerts.by_severity.CRITICAL || 0}</div>
-                  <div>Warning: {health.alerts.by_severity.WARNING || 0}</div>
+                  <div>Critique : {health.alerts.by_severity.CRITICAL || 0}</div>
+                  <div>Alerte : {health.alerts.by_severity.WARNING || 0}</div>
                 </>
               )}
             </div>
           </div>
 
           <div className="summary-card">
-            <h3>Metrics (24h)</h3>
+            <h3>Métriques (24h)</h3>
             <div className="metric-count">{health.metrics_24h}</div>
-            <div className="metric-label">data points collected</div>
+            <div className="metric-label">points de données collectés</div>
           </div>
         </div>
       )}
@@ -198,7 +198,7 @@ const Dashboard = () => {
           )}
           {!selectedServer && (
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-              <p className="text-gray-400 text-center py-8">Select a server to view historical metrics</p>
+              <p className="text-gray-400 text-center py-8">Sélectionnez un serveur pour voir les métriques historiques</p>
             </div>
           )}
         </div>

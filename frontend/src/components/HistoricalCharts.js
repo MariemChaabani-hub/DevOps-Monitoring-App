@@ -101,7 +101,7 @@ const HistoricalCharts = ({ serverId }) => {
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-100">Historical Metrics</h3>
+        <h3 className="text-lg font-semibold text-gray-100">Métriques Historiques</h3>
 
         {/* Time Range Selector */}
         <div className="flex gap-2">
@@ -125,7 +125,7 @@ const HistoricalCharts = ({ serverId }) => {
       {loading && chartData.length === 0 && (
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-          <p className="ml-3 text-gray-400">Loading metrics...</p>
+          <p className="ml-3 text-gray-400">Chargement des métriques...</p>
         </div>
       )}
 
@@ -133,7 +133,7 @@ const HistoricalCharts = ({ serverId }) => {
       {error && (
         <div className="bg-red-900 border border-red-700 rounded-lg p-4 mb-4">
           <p className="text-red-100">
-            <strong>Error:</strong> {error}
+            <strong>Erreur :</strong> {error}
           </p>
         </div>
       )}
@@ -154,7 +154,7 @@ const HistoricalCharts = ({ serverId }) => {
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
             />
           </svg>
-          <p>No data available for this time range</p>
+          <p>Aucune donnée disponible pour cette période</p>
         </div>
       )}
 
@@ -165,7 +165,7 @@ const HistoricalCharts = ({ serverId }) => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
               {
-                label: 'CPU Average',
+                label: 'CPU Moyenne',
                 value: (chartData.reduce((sum, d) => sum + d.cpu, 0) / chartData.length).toFixed(1),
                 unit: '%',
                 color: 'text-red-400',
@@ -177,7 +177,7 @@ const HistoricalCharts = ({ serverId }) => {
                 color: 'text-red-600',
               },
               {
-                label: 'RAM Average',
+                label: 'RAM Moyenne',
                 value: (chartData.reduce((sum, d) => sum + d.ram, 0) / chartData.length).toFixed(1),
                 unit: '%',
                 color: 'text-blue-400',
@@ -201,7 +201,7 @@ const HistoricalCharts = ({ serverId }) => {
 
           {/* CPU Chart */}
           <div className="mb-8">
-            <h4 className="text-sm font-semibold text-gray-300 mb-4">CPU Usage</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-4">Utilisation CPU</h4>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart
                 data={chartData}
@@ -240,7 +240,7 @@ const HistoricalCharts = ({ serverId }) => {
 
           {/* RAM Chart */}
           <div className="mb-8">
-            <h4 className="text-sm font-semibold text-gray-300 mb-4">RAM Usage</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-4">Utilisation RAM</h4>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart
                 data={chartData}
@@ -279,7 +279,7 @@ const HistoricalCharts = ({ serverId }) => {
 
           {/* CPU vs RAM Comparison Chart */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-300 mb-4">CPU vs RAM Comparison</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-4">Comparaison CPU vs RAM</h4>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart
                 data={chartData}
@@ -325,7 +325,7 @@ const HistoricalCharts = ({ serverId }) => {
 
           {/* Data Info */}
           <p className="text-gray-500 text-xs mt-4">
-            Showing {chartData.length} data points for {timeRange}
+            Affichage de {chartData.length} points de données pour {timeRange}
           </p>
         </>
       )}

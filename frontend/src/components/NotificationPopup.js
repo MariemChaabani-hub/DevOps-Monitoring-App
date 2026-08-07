@@ -45,6 +45,14 @@ const NotificationPopup = ({ alert, onClose, duration = 5000 }) => {
 
   const colors = getColors(alert.severity);
 
+  const translateSeverity = (severity) => {
+    switch (severity) {
+      case 'CRITICAL': return 'Critique';
+      case 'WARNING': return 'Alerte';
+      default: return severity;
+    }
+  };
+
   return (
     <div className={`fixed top-4 right-4 animate-slide-in transform transition-all duration-300 ${
       isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
@@ -67,15 +75,15 @@ const NotificationPopup = ({ alert, onClose, duration = 5000 }) => {
           {/* Content */}
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className={`${colors.text} font-bold text-sm`}>{alert.severity} Alert</h3>
+              <h3 className={`${colors.text} font-bold text-sm`}>{translateSeverity(alert.severity)}</h3>
               <span className="text-xs opacity-75 text-gray-300">
-                {new Date(alert.created_at).toLocaleTimeString()}
+                {new Date(alert.timestamp).toLocaleTimeString()}
               </span>
             </div>
             <p className={`${colors.text} text-sm`}>{alert.message}</p>
             {alert.server_id && (
               <p className={`${colors.text} text-xs opacity-75 mt-1`}>
-                Server: {alert.server_id}
+                Serveur : {alert.server_id}
               </p>
             )}
           </div>

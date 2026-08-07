@@ -95,7 +95,7 @@ router.get('/*server_id', async (req, res) => {
 
     const server = await Server.findOne({ server_id });
     if (!server) {
-      return res.status(404).json({ error: 'Server not found' });
+      return res.status(404).json({ error: 'Serveur non trouvé' });
     }
 
     const latestMetric = await Metric.findOne({ server_id })
@@ -123,7 +123,7 @@ router.post('/', async (req, res) => {
 
     const existingServer = await Server.findOne({ server_id });
     if (existingServer) {
-      return res.status(409).json({ error: 'Server already exists' });
+      return res.status(409).json({ error: 'Ce serveur existe déjà' });
     }
 
     const newServer = new Server({
@@ -154,7 +154,7 @@ router.put('/*server_id', async (req, res) => {
 
     const server = await Server.findOne({ server_id });
     if (!server) {
-      return res.status(404).json({ error: 'Server not found' });
+      return res.status(404).json({ error: 'Serveur non trouvé' });
     }
 
     if (name) server.name = name;
@@ -181,7 +181,7 @@ router.delete('/*server_id', async (req, res) => {
 
     const result = await Server.findOneAndDelete({ server_id });
     if (!result) {
-      return res.status(404).json({ error: 'Server not found' });
+      return res.status(404).json({ error: 'Serveur non trouvé' });
     }
 
     // Also delete associated metrics and alerts
@@ -189,7 +189,7 @@ router.delete('/*server_id', async (req, res) => {
     const Alert = require('../models/Alert');
     await Alert.deleteMany({ server_id });
 
-    res.json({ message: 'Server and associated data deleted' });
+    res.json({ message: 'Serveur et données associées supprimés' });
   } catch (error) {
     console.error('[Servers API] Error deleting server:', error);
     res.status(500).json({ error: error.message });

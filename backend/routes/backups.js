@@ -191,7 +191,7 @@ router.post('/test/run-daily-check', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Daily backup check executed successfully',
+      message: 'Vérification quotidienne des sauvegardes exécutée avec succès',
       timestamp: new Date(),
       results: results
     });
@@ -304,7 +304,7 @@ router.get('/*serverId/latest', async (req, res) => {
 
     if (!latestBackup) {
       return res.status(404).json({
-        error: 'No backup found for this server',
+        error: 'Aucune sauvegarde trouvée pour ce serveur',
         serverId
       });
     }
@@ -421,19 +421,19 @@ router.post('/', async (req, res) => {
     // Validation
     if (!finalServerId || !date || !status || size === undefined || duration === undefined) {
       return res.status(400).json({
-        error: 'Missing required fields: serverId, date, status, size, duration'
+        error: 'Champs requis manquants : serverId, date, status, size, duration'
       });
     }
 
     if (!['OK', 'FAILED', 'LATE'].includes(status)) {
       return res.status(400).json({
-        error: 'Status must be one of: OK, FAILED, LATE'
+        error: 'Le statut doit être : OK, FAILED ou LATE'
       });
     }
 
     if (size < 0 || duration < 0) {
       return res.status(400).json({
-        error: 'Size and duration must be non-negative numbers'
+        error: 'La taille et la durée doivent être des nombres positifs'
       });
     }
 
@@ -492,7 +492,7 @@ router.put('/:id', async (req, res) => {
     if (status !== undefined) {
       if (!['OK', 'FAILED', 'LATE'].includes(status)) {
         return res.status(400).json({
-          error: 'Status must be one of: OK, FAILED, LATE'
+          error: 'Le statut doit être : OK, FAILED ou LATE'
         });
       }
       updateData.status = status;
@@ -500,14 +500,14 @@ router.put('/:id', async (req, res) => {
 
     if (size !== undefined) {
       if (size < 0) {
-        return res.status(400).json({ error: 'Size must be non-negative' });
+        return res.status(400).json({ error: 'La taille doit être positive' });
       }
       updateData.size = size;
     }
 
     if (duration !== undefined) {
       if (duration < 0) {
-        return res.status(400).json({ error: 'Duration must be non-negative' });
+        return res.status(400).json({ error: 'La durée doit être positive' });
       }
       updateData.duration = duration;
     }
@@ -525,7 +525,7 @@ router.put('/:id', async (req, res) => {
     const backup = await Backup.findByIdAndUpdate(id, updateData, { new: true });
 
     if (!backup) {
-      return res.status(404).json({ error: 'Backup not found' });
+      return res.status(404).json({ error: 'Sauvegarde non trouvée' });
     }
 
     console.log('[Backups API] PUT /api/backups/:id - Updated backup:', backup._id);
@@ -574,12 +574,12 @@ router.delete('/:id', async (req, res) => {
     const backup = await Backup.findByIdAndDelete(id);
 
     if (!backup) {
-      return res.status(404).json({ error: 'Backup not found' });
+      return res.status(404).json({ error: 'Sauvegarde non trouvée' });
     }
 
     console.log('[Backups API] DELETE /api/backups/:id - Deleted backup:', backup._id);
 
-    res.json({ message: 'Backup deleted successfully', backup });
+    res.json({ message: 'Sauvegarde supprimée avec succès', backup });
   } catch (error) {
     console.error('[Backups API] Error deleting backup:', error);
     res.status(500).json({ error: error.message });
@@ -604,7 +604,7 @@ router.post('/test/trigger', async (req, res) => {
       .exec();
 
     res.json({
-      message: 'Backup triggered successfully',
+      message: 'Sauvegarde déclenchée avec succès',
       timestamp: new Date(),
       recent_backups: recentBackups
     });
@@ -639,7 +639,7 @@ router.post('/test/check-late', async (req, res) => {
     }).sort({ createdAt: -1 });
 
     res.json({
-      message: 'Late backup check completed successfully',
+      message: 'Vérification des sauvegardes en retard terminée avec succès',
       timestamp: new Date(),
       todays_backup_count: todaysBackups.length,
       late_backups: todaysBackups.filter(b => b.status === 'LATE'),
@@ -695,7 +695,7 @@ router.get('/*id', async (req, res) => {
       // Treat as MongoDB backup _id
       const backup = await Backup.findById(id);
       if (!backup) {
-        return res.status(404).json({ error: 'Backup not found' });
+        return res.status(404).json({ error: 'Sauvegarde non trouvée' });
       }
 
       console.log('[Backups API] GET /api/backups/:id - Found backup:', backup._id);

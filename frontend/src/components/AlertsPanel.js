@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 
-const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false }) => {
+const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false, onShowHistory, onShowSettings }) => {
   const [expandedAlert, setExpandedAlert] = useState(null);
 
   // Get severity styling colors
@@ -55,6 +55,23 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
     }
   };
 
+  const translateSeverity = (severity) => {
+    switch (severity) {
+      case 'CRITICAL': return 'CRITIQUE';
+      case 'WARNING': return 'ALERTE';
+      default: return severity;
+    }
+  };
+
+  const translateStatus = (status) => {
+    switch (status) {
+      case 'ACTIVE': return 'ACTIVE';
+      case 'ACKNOWLEDGED': return 'PRISE EN COMPTE';
+      case 'RESOLVED': return 'RÉSOLUE';
+      default: return status;
+    }
+  };
+
   const handleAcknowledge = (alertId, e) => {
     e.stopPropagation();
     if (onAcknowledge) {
@@ -72,7 +89,27 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
   if (alerts.length === 0) {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-100 mb-4">Alerts</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-100">Alertes</h3>
+          <div className="flex gap-2">
+            {onShowHistory && (
+              <button
+                onClick={onShowHistory}
+                className="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 rounded text-sm font-medium transition-colors"
+              >
+                Historique
+              </button>
+            )}
+            {onShowSettings && (
+              <button
+                onClick={onShowSettings}
+                className="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 rounded text-sm font-medium transition-colors"
+              >
+                Seuils d'Alerte
+              </button>
+            )}
+          </div>
+        </div>
         <div className="text-center py-8 text-gray-400">
           {loading ? (
             <div className="flex justify-center">
@@ -83,7 +120,7 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
               <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p>No active alerts</p>
+              <p>Aucune alerte active</p>
             </>
           )}
         </div>
@@ -96,18 +133,34 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
 
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-100">Alerts</h3>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-gray-100">Alertes</h3>
+        <div className="flex gap-2 items-center flex-wrap">
           {criticalCount > 0 && (
             <span className="bg-red-600 text-red-100 px-3 py-1 rounded-full text-sm font-medium">
-              {criticalCount} Critical
+              {criticalCount} Critique{criticalCount > 1 ? 's' : ''}
             </span>
           )}
           {warningCount > 0 && (
             <span className="bg-orange-600 text-orange-100 px-3 py-1 rounded-full text-sm font-medium">
-              {warningCount} Warning
+              {warningCount} Alerte{warningCount > 1 ? 's' : ''}
             </span>
+          )}
+          {onShowHistory && (
+            <button
+              onClick={onShowHistory}
+              className="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 rounded text-sm font-medium transition-colors"
+            >
+              Historique
+            </button>
+          )}
+          {onShowSettings && (
+            <button
+              onClick={onShowSettings}
+              className="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 rounded text-sm font-medium transition-colors"
+            >
+              Seuils d'Alerte
+            </button>
           )}
         </div>
       </div>
@@ -130,16 +183,16 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`${colors.badge} px-2 py-1 rounded text-xs font-bold`}>
-                        {alert.severity}
+                        {translateSeverity(alert.severity)}
                       </span>
                       <span className={`${statusColor} px-2 py-1 rounded text-xs font-medium`}>
-                        {alert.status}
+                        {translateStatus(alert.status)}
                       </span>
                     </div>
                     <h4 className="font-semibold text-base">{alert.message}</h4>
-                    <p className="text-sm opacity-80 mt-1">Server: {alert.server_id}</p>
+                    <p className="text-sm opacity-80 mt-1">Serveur : {alert.server_id}</p>
                     <p className="text-xs opacity-60 mt-1">
-                      {new Date(alert.created_at).toLocaleString()}
+                      {new Date(alert.timestamp).toLocaleString()}
                     </p>
                   </div>
 
@@ -161,7 +214,7 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
                   {/* Alert Details */}
                   {alert.details && (
                     <div>
-                      <p className={`${colors.text} text-sm font-semibold mb-2`}>Details:</p>
+                      <p className={`${colors.text} text-sm font-semibold mb-2`}>Détails :</p>
                       <p className={`${colors.text} text-sm opacity-85 whitespace-pre-wrap`}>
                         {alert.details}
                       </p>
@@ -169,17 +222,17 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
                   )}
 
                   {/* Metric Information */}
-                  {alert.metric_value !== undefined && alert.threshold !== undefined && (
+                  {alert.value !== undefined && alert.threshold !== undefined && (
                     <div className="bg-gray-900 bg-opacity-30 rounded p-3">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <p className={`${colors.text} opacity-75`}>Current Value:</p>
+                          <p className={`${colors.text} opacity-75`}>Valeur Actuelle :</p>
                           <p className={`${colors.text} font-semibold text-base`}>
-                            {alert.metric_value}%
+                            {alert.value}%
                           </p>
                         </div>
                         <div>
-                          <p className={`${colors.text} opacity-75`}>Threshold:</p>
+                          <p className={`${colors.text} opacity-75`}>Seuil :</p>
                           <p className={`${colors.text} font-semibold text-base`}>
                             {alert.threshold}%
                           </p>
@@ -191,14 +244,14 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
                   {/* Timestamps */}
                   <div className="grid grid-cols-2 gap-2 text-xs border-t border-opacity-20 border-current pt-3">
                     <div>
-                      <p className={`${colors.text} opacity-75`}>Created:</p>
+                      <p className={`${colors.text} opacity-75`}>Créée :</p>
                       <p className={`${colors.text} opacity-60`}>
-                        {new Date(alert.created_at).toLocaleString()}
+                        {new Date(alert.timestamp).toLocaleString()}
                       </p>
                     </div>
                     {alert.acknowledged_at && (
                       <div>
-                        <p className={`${colors.text} opacity-75`}>Acknowledged:</p>
+                        <p className={`${colors.text} opacity-75`}>Prise en compte :</p>
                         <p className={`${colors.text} opacity-60`}>
                           {new Date(alert.acknowledged_at).toLocaleString()}
                         </p>
@@ -214,13 +267,13 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
                           onClick={(e) => handleAcknowledge(alert._id, e)}
                           className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
                         >
-                          Acknowledge
+                          Prendre en compte
                         </button>
                         <button
                           onClick={(e) => handleResolve(alert._id, e)}
                           className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
                         >
-                          Resolve
+                          Résoudre
                         </button>
                       </>
                     )}
@@ -229,7 +282,7 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false })
                         onClick={(e) => handleResolve(alert._id, e)}
                         className="w-full bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
                       >
-                        Resolve
+                        Résoudre
                       </button>
                     )}
                   </div>

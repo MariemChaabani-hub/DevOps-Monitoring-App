@@ -67,7 +67,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
       setLastUpdate(new Date());
       setError(null);
     } catch (err) {
-      setError('Failed to fetch backup statuses: ' + err.message);
+      setError('Échec de la récupération des statuts de sauvegarde : ' + err.message);
       console.error('Error fetching backup statuses:', err);
     } finally {
       setLoading(false);
@@ -116,7 +116,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
    * Format file size
    */
   const formatSize = (sizeInMB) => {
-    if (!sizeInMB) return 'N/A';
+    if (!sizeInMB) return 'Indisponible';
     if (sizeInMB >= 1024) {
       return (sizeInMB / 1024).toFixed(2) + ' GB';
     }
@@ -127,20 +127,20 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
    * Format duration in seconds
    */
   const formatDuration = (seconds) => {
-    if (!seconds) return 'N/A';
+    if (!seconds) return 'Indisponible';
     if (seconds < 60) {
       return seconds + 's';
     }
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${minutes}m ${secs}s`;
+    return `${minutes}min ${secs}s`;
   };
 
   /**
    * Format date/time
    */
   const formatDate = (date) => {
-    if (!date) return 'Never';
+    if (!date) return 'Jamais';
     const d = new Date(date);
     const now = new Date();
     const diffMs = now - d;
@@ -148,10 +148,10 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffMins < 1) return 'À l\'instant';
+    if (diffMins < 60) return `il y a ${diffMins}min`;
+    if (diffHours < 24) return `il y a ${diffHours}h`;
+    if (diffDays < 7) return `il y a ${diffDays}j`;
 
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -170,14 +170,23 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
     setHistoryModal({ isOpen: false, serverId: null, serverName: null });
   };
 
+  const translateBackupStatus = (status) => {
+    switch (status) {
+      case 'OK': return 'OK';
+      case 'Failed': return 'Échouée';
+      case 'Missing': return 'Manquante';
+      default: return status;
+    }
+  };
+
   if (servers.length === 0) {
     return (
       <div className="backups-panel">
         <div className="backups-header">
-          <h2>Backup Monitoring</h2>
+          <h2>Surveillance des Sauvegardes</h2>
           <RefreshButton onRefresh={fetchBackupStatuses} />
         </div>
-        <div className="no-data">No servers available</div>
+        <div className="no-data">Aucun serveur disponible</div>
       </div>
     );
   }
@@ -187,8 +196,8 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
       {/* Header */}
       <div className="backups-header">
         <div className="title-area">
-          <h2>Backup Monitoring</h2>
-          <button 
+          <h2>Surveillance des Sauvegardes</h2>
+          <button
             className="history-all-btn"
             onClick={() => {
               if (selectedServerId) {
@@ -197,16 +206,16 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                 openBackupHistory('all', 'All Servers');
               }
             }}
-            title={selectedServerId ? `View backup history for ${selectedServerId}` : "View backup history for all servers"}
+            title={selectedServerId ? `Voir l'historique de sauvegarde pour ${selectedServerId}` : "Voir l'historique de sauvegarde pour tous les serveurs"}
           >
-            {selectedServerId ? "View Backups" : "All Backups"}
+            {selectedServerId ? "Voir les Sauvegardes" : "Toutes les Sauvegardes"}
           </button>
           {selectedServerId && (
             <div className="filter-badge">
-              <span>Showing: <strong>{selectedServerId}</strong></span>
+              <span>Affichage : <strong>{selectedServerId}</strong></span>
               {onClearFilter && (
-                <button onClick={onClearFilter} className="clear-filter-btn" title="Show all servers">
-                  Show All
+                <button onClick={onClearFilter} className="clear-filter-btn" title="Afficher tous les serveurs">
+                  Tout Afficher
                 </button>
               )}
             </div>
@@ -215,7 +224,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
         <div className="header-controls">
           {lastUpdate && (
             <span className="last-update">
-              Last updated: {lastUpdate.toLocaleTimeString()}
+              Dernière mise à jour : {lastUpdate.toLocaleTimeString()}
             </span>
           )}
           <RefreshButton onRefresh={fetchBackupStatuses} />
@@ -227,7 +236,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
         <div className="error-message">
           <span>{error}</span>
           <button onClick={fetchBackupStatuses} className="retry-btn">
-            Retry
+            Réessayer
           </button>
         </div>
       )}
@@ -235,7 +244,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
       {/* Loading state */}
       {loading && (
         <div className="loading-message">
-          <span>Loading backup statuses...</span>
+          <span>Chargement des statuts de sauvegarde...</span>
         </div>
       )}
 
@@ -269,14 +278,14 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                   <div className="header-actions">
                     <div className={`status-badge ${getStatusClass(currentStatus)}`}>
                       <span className="status-dot"></span>
-                      <span className="status-text">{currentStatus}</span>
+                      <span className="status-text">{translateBackupStatus(currentStatus)}</span>
                     </div>
-                    <button 
+                    <button
                       className="history-btn"
                       onClick={() => openBackupHistory(serverId, server.name || serverId)}
-                      title="View backup history"
+                      title="Voir l'historique de sauvegarde"
                     >
-                      History
+                      Historique
                     </button>
                   </div>
                 </div>
@@ -286,31 +295,31 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                   {latestBackup ? (
                     <>
                       <div className="info-row">
-                        <span className="label">Last Backup:</span>
+                        <span className="label">Dernière Sauvegarde :</span>
                         <span className="value">
                           {formatDate(latestBackup.date)}
                         </span>
                       </div>
 
                       <div className="info-row">
-                        <span className="label">Size:</span>
+                        <span className="label">Taille :</span>
                         <span className="value">{formatSize(latestBackup.size)}</span>
                       </div>
 
                       <div className="info-row">
-                        <span className="label">Duration:</span>
+                        <span className="label">Durée :</span>
                         <span className="value">{formatDuration(latestBackup.duration)}</span>
                       </div>
 
                       {latestBackup.is_from_today && (
                         <div className="info-row today-badge">
-                          <span className="label">Today's Backup</span>
+                          <span className="label">Sauvegarde d'Aujourd'hui</span>
                         </div>
                       )}
                     </>
                   ) : (
                     <div className="no-backup">
-                      <p>No backup found</p>
+                      <p>Aucune sauvegarde trouvée</p>
                     </div>
                   )}
                 </div>
@@ -319,21 +328,21 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                 <div className="card-footer">
                   {lastSuccessful && (
                     <div className="footer-info">
-                      <span className="label">Last Success:</span>
+                      <span className="label">Dernier Succès :</span>
                       <span className="value">{formatDate(lastSuccessful.date)}</span>
                     </div>
                   )}
 
                   {lastFailed && (
                     <div className="footer-info footer-warning">
-                      <span className="label">Last Failed:</span>
+                      <span className="label">Dernier Échec :</span>
                       <span className="value">{formatDate(lastFailed.date)}</span>
                     </div>
                   )}
 
                   {!lastSuccessful && !lastFailed && (
                     <div className="footer-info">
-                      <span className="text-gray">No backup history</span>
+                      <span className="text-gray">Aucun historique de sauvegarde</span>
                     </div>
                   )}
                 </div>
@@ -344,17 +353,17 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
                     <>
                       {backupInfo.summary.is_healthy && (
                         <span className="health-indicator healthy">
-                          Healthy
+                          Saine
                         </span>
                       )}
                       {backupInfo.summary.requires_attention && (
                         <span className="health-indicator warning">
-                          Needs Attention
+                          Attention Requise
                         </span>
                       )}
                       {backupInfo.summary.has_recent_backup && (
                         <span className="health-indicator recent">
-                          Recent
+                          Récente
                         </span>
                       )}
                     </>

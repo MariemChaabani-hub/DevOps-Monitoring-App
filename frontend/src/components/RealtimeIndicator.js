@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
 const RealtimeIndicator = ({ lastUpdate, isUpdating }) => {
-  const [timeSinceUpdate, setTimeSinceUpdate] = useState('Just now');
+  const [timeSinceUpdate, setTimeSinceUpdate] = useState('À l\'instant');
 
   useEffect(() => {
     if (!lastUpdate) {
-      setTimeSinceUpdate('Never');
+      setTimeSinceUpdate('Jamais');
       return;
     }
 
@@ -17,13 +17,13 @@ const RealtimeIndicator = ({ lastUpdate, isUpdating }) => {
       const diffMins = Math.floor(diffSecs / 60);
 
       if (diffSecs < 5) {
-        setTimeSinceUpdate('Just now');
+        setTimeSinceUpdate('À l\'instant');
       } else if (diffSecs < 60) {
-        setTimeSinceUpdate(`${diffSecs}s ago`);
+        setTimeSinceUpdate(`il y a ${diffSecs}s`);
       } else if (diffMins < 60) {
-        setTimeSinceUpdate(`${diffMins}m ago`);
+        setTimeSinceUpdate(`il y a ${diffMins}min`);
       } else {
-        setTimeSinceUpdate('Long ago');
+        setTimeSinceUpdate('Il y a longtemps');
       }
     };
 

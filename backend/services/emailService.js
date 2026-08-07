@@ -1,7 +1,7 @@
 /**
  * Email Notification Service
  * Sends CRITICAL alert email notifications via nodemailer (Gmail SMTP)
- * 
+ *
  * Configuration:
  *   - EMAIL_USER: Gmail address (e.g., user@gmail.com)
  *   - EMAIL_PASS: Gmail App Password (16 character password from Google Account)
@@ -9,6 +9,11 @@
  */
 
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
+
+const LOGO_PATH = path.join(__dirname, '..', '..', 'frontend', 'public', 'logo-clediss.jpg');
+const LOGO_CID = 'clediss-logo';
 
 class EmailService {
   constructor() {
@@ -16,7 +21,7 @@ class EmailService {
     // For Gmail: must use App Password, NOT regular account password
     // See: https://myaccount.google.com/apppasswords
     this.isConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-    
+
     if (this.isConfigured) {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
@@ -33,6 +38,51 @@ class EmailService {
   }
 
   /**
+   * Attach the Clediss logo (referenced in HTML via cid:clediss-logo).
+   * Returns an empty array if the logo file isn't found, so emails still
+   * send successfully without it.
+   */
+  _logoAttachment() {
+    try {
+      if (fs.existsSync(LOGO_PATH)) {
+        return [{ filename: 'logo-clediss.jpg', path: LOGO_PATH, cid: LOGO_CID }];
+      }
+    } catch (error) {
+      console.warn('[Email] Could not attach logo:', error.message);
+    }
+    return [];
+  }
+
+  /**
+   * Shared compact header used by every email template.
+   */
+  _header(color, title, subtitle) {
+    // Table-based layout on purpose: Gmail and most email clients ignore
+    // flexbox/justify-content in HTML emails, so a <table> is the only
+    // reliable way to pin the logo to the top-right corner.
+    return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: ${color}; border-radius: 8px 8px 0 0;">
+        <tr>
+          <td style="padding: 18px 24px; vertical-align: middle;">
+            <h1 style="margin: 0; font-size: 17px; color: white; font-weight: 600;">${title}</h1>
+            <p style="margin: 2px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.9);">${subtitle}</p>
+          </td>
+          <td width="1" style="padding: 18px 24px 18px 0; vertical-align: middle; text-align: right; white-space: nowrap;">
+            <img src="cid:${LOGO_CID}" alt="Clediss" style="height: 40px; width: auto; border-radius: 4px; background: white; padding: 2px; display: block;" />
+          </td>
+        </tr>
+      </table>`;
+  }
+
+  _footer() {
+    return `
+      <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0 14px 0;">
+      <p style="color: #888; font-size: 12px; text-align: center; margin: 0;">
+        Système de Supervision CLEDISS — notification automatique
+      </p>`;
+  }
+
+  /**
    * Send CRITICAL alert email via Gmail SMTP
    * Only sends real emails for CRITICAL alerts
    * Logs other alert types in demo mode
@@ -41,6 +91,7 @@ class EmailService {
     try {
       const {
         serverId,
+        serverName,
         type,
         metric,
         value,
@@ -49,12 +100,23 @@ class EmailService {
         adminEmail
       } = alertData;
 
-      const timeStr = new Date(timestamp).toISOString();
+      const displayName = serverName || serverId;
+      const timeStr = new Date(timestamp).toLocaleString('fr-FR');
+
+      // Metric-specific wording (this used to be hardcoded to "CPU" no
+      // matter which metric actually triggered the alert, which produced
+      // misleading "CPU OVERLOAD" emails for RAM/Disk alerts).
+      const METRIC_INFO = {
+        cpu_percent: { label: 'CPU', resourceName: 'ressources CPU' },
+        ram_percent: { label: 'RAM', resourceName: 'ressources RAM' },
+        disk_percent: { label: 'Disque', resourceName: 'espace disque' }
+      };
+      const metricInfo = METRIC_INFO[metric] || METRIC_INFO.cpu_percent;
 
       // Only send real emails for CRITICAL alerts
       if (type !== 'CRITICAL') {
         console.log(`[Email] Skipping non-CRITICAL alert (${type}) - demo mode only`);
-        console.log(`  Server: ${serverId} | Metric: ${metric} = ${value}% (threshold: ${threshold}%)`);
+        console.log(`  Server: ${displayName} | Metric: ${metric} = ${value}% (threshold: ${threshold}%)`);
         return { success: true, mode: 'demo', type: type, reason: 'non-critical' };
       }
 
@@ -62,116 +124,47 @@ class EmailService {
       if (!this.isConfigured) {
         console.log(`[Email] CRITICAL Alert - DEMO MODE (real email disabled):`);
         console.log(`  To: ${adminEmail}`);
-        console.log(`  Server: ${serverId}`);
+        console.log(`  Server: ${displayName}`);
         console.log(`  Metric: ${metric} = ${value}% (threshold: ${threshold}%)`);
         console.log(`  Time: ${timeStr}`);
         return { success: true, mode: 'demo', type: 'CRITICAL' };
       }
 
-      // Send real email via Gmail SMTP
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: adminEmail,
-        subject: `🚨 [CRITICAL] CPU OVERLOAD on Server ${serverId} - IMMEDIATE ACTION REQUIRED`,
+        subject: `🚨 [CRITIQUE] ${metricInfo.label} — ${displayName}`,
+        attachments: this._logoAttachment(),
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <!-- Header -->
-            <div style="background-color: #d32f2f; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
-              <h1 style="margin: 0; font-size: 24px;">🚨 CRITICAL ALERT - IMMEDIATE ACTION REQUIRED</h1>
-              <p style="margin: 10px 0 0 0; font-size: 14px;">CPU Usage Exceeds Safe Operating Limits</p>
-            </div>
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+            ${this._header('#d32f2f', 'Alerte Critique', `${metricInfo.label} à ${value}% — seuil dépassé`)}
 
-            <!-- Main Content -->
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 5px 5px;">
-              
-              <!-- Alert Details -->
-              <h2 style="color: #d32f2f; margin-top: 0;">Alert Details</h2>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; width: 30%;">Server:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${serverId}</td>
+            <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                  <td style="padding: 8px 0; color: #777; width: 40%;">Serveur</td>
+                  <td style="padding: 8px 0; font-weight: 600;">${displayName}</td>
                 </tr>
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Current CPU Usage:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;"><span style="color: red; font-weight: bold; font-size: 18px;">${value}%</span></td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Utilisation ${metricInfo.label}</td>
+                  <td style="padding: 8px 0; font-weight: 600; color: #d32f2f;">${value}%</td>
                 </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Critical Threshold:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${threshold}%</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Seuil critique</td>
+                  <td style="padding: 8px 0;">${threshold}%</td>
                 </tr>
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Alert Time:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${timeStr}</td>
-                </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Severity:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;"><span style="background-color: #d32f2f; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold;">CRITICAL</span></td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Date</td>
+                  <td style="padding: 8px 0;">${timeStr}</td>
                 </tr>
               </table>
 
-              <!-- Problem Description -->
-              <h2 style="color: #d32f2f; margin-top: 25px;">What is the Problem?</h2>
-              <p style="background-color: #fff3cd; border-left: 4px solid #ff9800; padding: 12px; border-radius: 3px; margin: 10px 0;">
-                <strong>High CPU Usage Detected:</strong> Your server is using <strong>${value}%</strong> of its CPU resources, 
-                which exceeds the critical safety threshold of <strong>${threshold}%</strong>.
-              </p>
-              <p style="line-height: 1.6; color: #333;">
-                This means one or more processes on the server are consuming excessive computational resources. 
-                When CPU usage remains this high, the system struggles to respond to new requests and may become unstable.
+              <p style="font-size: 14px; line-height: 1.6; color: #333; margin: 18px 0 0 0;">
+                Le serveur <strong>${displayName}</strong> dépasse le seuil critique de ses ${metricInfo.resourceName}.
+                Une vérification est recommandée pour éviter tout impact sur la disponibilité du service.
               </p>
 
-              <!-- Dangers & Impact -->
-              <h2 style="color: #d32f2f; margin-top: 25px;">⚠️ Dangers Threatening Your Application</h2>
-              <ul style="background-color: #ffebee; border-left: 4px solid #d32f2f; padding: 15px 15px 15px 40px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
-                <li><strong>Service Slowdown:</strong> Your application will respond much slower to user requests</li>
-                <li><strong>Request Timeouts:</strong> Requests may fail or timeout, causing poor user experience</li>
-                <li><strong>System Crash Risk:</strong> Sustained high CPU can lead to server crashes or forced restarts</li>
-                <li><strong>Data Loss Risk:</strong> If the server crashes, unsaved data could be permanently lost</li>
-                <li><strong>Cascading Failures:</strong> Other services depending on this server may fail</li>
-                <li><strong>Business Impact:</strong> Downtime directly affects revenue and customer satisfaction</li>
-              </ul>
-
-              <!-- Actions to Take -->
-              <h2 style="color: #1565c0; margin-top: 25px;">✅ Recommended Actions (Priority Order)</h2>
-              <ol style="background-color: #e3f2fd; border-left: 4px solid #1565c0; padding: 15px 15px 15px 40px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
-                <li><strong>Monitor Now:</strong> Check the server immediately to identify which process is consuming CPU</li>
-                <li><strong>Kill Heavy Process:</strong> Terminate or restart the misbehaving process/service</li>
-                <li><strong>Check Logs:</strong> Review application logs for errors or memory leaks</li>
-                <li><strong>Scale Up (if needed):</strong> Consider adding resources or load-balancing if this is normal traffic</li>
-                <li><strong>Optimize Code:</strong> Review and optimize inefficient database queries or algorithms</li>
-                <li><strong>Update Threshold:</strong> If sustained high CPU is expected, adjust alert thresholds accordingly</li>
-              </ol>
-
-              <!-- Debugging Tips -->
-              <h2 style="color: #1565c0; margin-top: 25px;">🔧 Quick Debugging Commands</h2>
-              <div style="background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; padding: 12px; font-family: monospace; font-size: 12px; overflow-x: auto;">
-                <p style="margin: 0 0 8px 0;"><strong># Check top CPU consuming processes:</strong></p>
-                <p style="margin: 0 0 8px 0; color: #d84315;">top -b -o %CPU | head -20</p>
-                
-                <p style="margin: 15px 0 8px 0;"><strong># Monitor CPU in real-time:</strong></p>
-                <p style="margin: 0; color: #d84315;">watch -n 1 'top -b | head -15'</p>
-              </div>
-
-              <!-- System Health -->
-              <h2 style="color: #1565c0; margin-top: 25px;">📊 System Health Status</h2>
-              <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-                <tr style="background-color: #fff9c4;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">CPU Status:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; color: #d32f2f;"><strong>⚠️ CRITICAL - Immediate attention needed</strong></td>
-                </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Risk Level:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; color: #d32f2f;"><strong>🔴 VERY HIGH</strong></td>
-                </tr>
-              </table>
-
-              <!-- Footer -->
-              <hr style="border: none; border-top: 2px solid #ddd; margin: 25px 0;">
-              <p style="color: #666; font-size: 13px; text-align: center; margin: 15px 0 0 0;">
-                <strong>This is an automated CRITICAL alert</strong> from your DevOps Monitoring System<br>
-                <strong>Time-sensitive issue:</strong> Address this within the next few minutes<br>
-                <a href="http://localhost:3000/api/dashboard/summary" style="color: #1565c0; text-decoration: none;">View Dashboard →</a>
-              </p>
+              ${this._footer()}
             </div>
           </div>
         `
@@ -179,7 +172,7 @@ class EmailService {
 
       const info = await this.transporter.sendMail(mailOptions);
       console.log(`[Email] ✓ CRITICAL alert email sent successfully`);
-      console.log(`  To: ${adminEmail} | Server: ${serverId} | Message ID: ${info.messageId}`);
+      console.log(`  To: ${adminEmail} | Server: ${displayName} | Message ID: ${info.messageId}`);
       return { success: true, mode: 'real', type: 'CRITICAL', messageId: info.messageId };
 
     } catch (error) {
@@ -197,24 +190,25 @@ class EmailService {
     try {
       const {
         serverId,
+        serverName,
         type,
         severity,
         status,
         duration,
         size,
         date,
-        message,
         timestamp,
         adminEmail
       } = alertData;
 
-      const timeStr = new Date(timestamp).toISOString();
-      const dateStr = new Date(date).toISOString();
+      const displayName = serverName || serverId;
+      const timeStr = new Date(timestamp).toLocaleString('fr-FR');
+      const dateStr = new Date(date).toLocaleString('fr-FR');
 
       // Only send real emails for CRITICAL alerts
       if (severity !== 'CRITICAL') {
         console.log(`[Email] Skipping non-CRITICAL backup alert (${severity}) - logging only`);
-        console.log(`  Server: ${serverId} | Status: ${status} | Message: ${message}`);
+        console.log(`  Server: ${displayName} | Status: ${status}`);
         return { success: true, mode: 'demo', severity: severity, reason: 'non-critical' };
       }
 
@@ -222,122 +216,59 @@ class EmailService {
       if (!this.isConfigured) {
         console.log(`[Email] CRITICAL Backup Alert - DEMO MODE (real email disabled):`);
         console.log(`  To: ${adminEmail}`);
-        console.log(`  Server: ${serverId}`);
+        console.log(`  Server: ${displayName}`);
         console.log(`  Status: ${status}`);
-        console.log(`  Message: ${message}`);
         console.log(`  Time: ${timeStr}`);
         return { success: true, mode: 'demo', severity: 'CRITICAL' };
       }
 
-      // Determine alert emoji and color based on type
       const isLate = type === 'BACKUP_LATE';
-      const alertEmoji = isLate ? '⏰' : '✕';
       const headerColor = isLate ? '#ff9800' : '#d32f2f';
-      const statusText = isLate ? 'Missing or Late' : 'Failed';
+      const statusText = isLate ? 'manquante ou en retard' : 'échouée';
 
-      // Send real email via Gmail SMTP
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: adminEmail,
-        subject: `🚨 [CRITICAL] Backup ${statusText} on Server ${serverId} - IMMEDIATE ACTION REQUIRED`,
+        subject: `🚨 [CRITIQUE] Sauvegarde ${statusText} — ${displayName}`,
+        attachments: this._logoAttachment(),
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <!-- Header -->
-            <div style="background-color: ${headerColor}; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
-              <h1 style="margin: 0; font-size: 24px;">🚨 CRITICAL ALERT - BACKUP ${isLate ? 'MISSING/LATE' : 'FAILURE'}</h1>
-              <p style="margin: 10px 0 0 0; font-size: 14px;">Data Protection System Requires Immediate Attention</p>
-            </div>
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+            ${this._header(headerColor, 'Alerte Critique — Sauvegarde', `Sauvegarde ${statusText}`)}
 
-            <!-- Main Content -->
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 5px 5px;">
-              
-              <!-- Alert Details -->
-              <h2 style="color: ${headerColor}; margin-top: 0;">Alert Details</h2>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; width: 30%;">Server:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${serverId}</td>
+            <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                  <td style="padding: 8px 0; color: #777; width: 40%;">Serveur</td>
+                  <td style="padding: 8px 0; font-weight: 600;">${displayName}</td>
                 </tr>
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Status:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;"><span style="color: ${headerColor}; font-weight: bold; font-size: 18px;">${alertEmoji} ${statusText}</span></td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Statut</td>
+                  <td style="padding: 8px 0; font-weight: 600; color: ${headerColor}; text-transform: capitalize;">${statusText}</td>
                 </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Time:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${dateStr}</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Heure de la sauvegarde</td>
+                  <td style="padding: 8px 0;">${dateStr}</td>
                 </tr>
                 ${status === 'FAILED' ? `
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Duration:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${duration}s</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Durée</td>
+                  <td style="padding: 8px 0;">${duration}s</td>
                 </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Size:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${size} MB</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Taille</td>
+                  <td style="padding: 8px 0;">${size} MB</td>
                 </tr>
                 ` : ''}
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Alert Time:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${timeStr}</td>
-                </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Severity:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;"><span style="background-color: ${headerColor}; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold;">CRITICAL</span></td>
-                </tr>
               </table>
 
-              <!-- Problem Description -->
-              <h2 style="color: ${headerColor}; margin-top: 25px;">What is the Problem?</h2>
-              <p style="background-color: ${isLate ? '#fff3cd' : '#ffebee'}; border-left: 4px solid ${headerColor}; padding: 12px; border-radius: 3px; margin: 10px 0;">
-                <strong>${isLate ? 'Backup Missing or Late:' : 'Backup Failed:'}</strong> 
-                ${isLate 
-                  ? `Today's backup has not been completed. Your data is not being protected and you are at risk of data loss.`
-                  : `The backup process failed to complete successfully. Your latest data has not been backed up and you are at risk of data loss.`
+              <p style="font-size: 14px; line-height: 1.6; color: #333; margin: 18px 0 0 0;">
+                ${isLate
+                  ? `La sauvegarde d'aujourd'hui n'a pas été effectuée pour <strong>${displayName}</strong>. Vos données ne sont pas protégées.`
+                  : `La sauvegarde de <strong>${displayName}</strong> n'a pas pu se terminer avec succès. Une intervention est recommandée dès que possible.`
                 }
               </p>
 
-              <!-- Dangers & Impact -->
-              <h2 style="color: ${headerColor}; margin-top: 25px;">⚠️ Dangers Threatening Your Data</h2>
-              <ul style="background-color: ${isLate ? '#fff3cd' : '#ffebee'}; border-left: 4px solid ${headerColor}; padding: 15px 15px 15px 40px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
-                <li><strong>Data Loss Risk:</strong> Without a successful backup, any data loss is permanent and unrecoverable</li>
-                <li><strong>System Failure Impact:</strong> In case of hardware failure, you have no recovery mechanism</li>
-                <li><strong>Ransomware Vulnerability:</strong> You have no clean backup to restore from if attacked</li>
-                <li><strong>Business Continuity:</strong> Your disaster recovery plan is compromised</li>
-                <li><strong>Compliance Issues:</strong> Regulatory requirements for data backup may be violated</li>
-                <li><strong>Recovery Time:</strong> Recovery will be slow or impossible if backups are outdated</li>
-              </ul>
-
-              <!-- Actions to Take -->
-              <h2 style="color: #1565c0; margin-top: 25px;">✅ Recommended Actions (Priority Order)</h2>
-              <ol style="background-color: #e3f2fd; border-left: 4px solid #1565c0; padding: 15px 15px 15px 40px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
-                <li><strong>Investigate Now:</strong> Check backup service logs to identify the root cause</li>
-                <li><strong>Verify Storage:</strong> Ensure backup storage has sufficient disk space</li>
-                <li><strong>Check Network:</strong> Verify network connectivity to backup destination</li>
-                <li><strong>Restart Service:</strong> Try restarting the backup service/job</li>
-                <li><strong>Manual Backup:</strong> Perform an immediate manual backup as a temporary solution</li>
-                <li><strong>Review Logs:</strong> Check system and application logs for errors or warnings</li>
-              </ol>
-
-              <!-- Key Metrics -->
-              <h2 style="color: #1565c0; margin-top: 25px;">📊 Backup System Health</h2>
-              <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-                <tr style="background-color: #fff9c4;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Backup Status:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; color: ${headerColor};"><strong>${alertEmoji} ${statusText}</strong></td>
-                </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Risk Level:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; color: ${headerColor};"><strong>🔴 VERY HIGH</strong></td>
-                </tr>
-              </table>
-
-              <!-- Footer -->
-              <hr style="border: none; border-top: 2px solid #ddd; margin: 25px 0;">
-              <p style="color: #666; font-size: 13px; text-align: center; margin: 15px 0 0 0;">
-                <strong>This is an automated CRITICAL alert</strong> from your DevOps Monitoring System<br>
-                <strong>Data protection is critical:</strong> Address this immediately<br>
-                <a href="http://localhost:3000/backups" style="color: #1565c0; text-decoration: none;">View Backup Dashboard →</a>
-              </p>
+              ${this._footer()}
             </div>
           </div>
         `
@@ -345,13 +276,111 @@ class EmailService {
 
       const info = await this.transporter.sendMail(mailOptions);
       console.log(`[Email] ✓ CRITICAL backup alert email sent successfully`);
-      console.log(`  To: ${adminEmail} | Server: ${serverId} | Status: ${statusText} | Message ID: ${info.messageId}`);
+      console.log(`  To: ${adminEmail} | Server: ${displayName} | Status: ${statusText} | Message ID: ${info.messageId}`);
       return { success: true, mode: 'real', severity: 'CRITICAL', messageId: info.messageId };
 
     } catch (error) {
       console.error(`[Email] ✗ FAILED to send CRITICAL backup alert email`);
       console.error(`  Error: ${error.message}`);
       console.error(`  This could be due to: incorrect credentials, Gmail security settings, or network issues`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send a backup completion notification email after EVERY daily backup
+   * run (both SUCCESS and FAILED), unlike sendBackupAlertEmail() above
+   * which only emails for CRITICAL failures/late backups.
+   */
+  async sendBackupCompletionEmail(data) {
+    try {
+      const {
+        serverId,
+        serverName,
+        status, // 'OK' | 'FAILED'
+        size,
+        duration,
+        timestamp,
+        adminEmail,
+        errorMessage
+      } = data;
+
+      const isSuccess = status === 'OK';
+      const timeStr = new Date(timestamp).toLocaleString('fr-FR');
+      const displayName = serverName || serverId;
+      const statusLabel = isSuccess ? 'Succès' : 'Échec';
+      const headerColor = isSuccess ? '#2e7d32' : '#d32f2f';
+
+      // If not configured, log to console instead
+      if (!this.isConfigured) {
+        console.log(`[Email] Backup Completion Notification - DEMO MODE (real email disabled):`);
+        console.log(`  To: ${adminEmail}`);
+        console.log(`  Server: ${displayName}`);
+        console.log(`  Status: ${statusLabel}`);
+        console.log(`  Size: ${size} MB | Duration: ${duration}s`);
+        console.log(`  Time: ${timeStr}`);
+        return { success: true, mode: 'demo', status: statusLabel };
+      }
+
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: adminEmail,
+        subject: `[Sauvegarde — ${statusLabel}] ${displayName}`,
+        attachments: this._logoAttachment(),
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+            ${this._header(headerColor, 'Rapport de Sauvegarde Quotidienne', displayName)}
+
+            <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                  <td style="padding: 8px 0; color: #777; width: 40%;">Serveur</td>
+                  <td style="padding: 8px 0; font-weight: 600;">${displayName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Statut</td>
+                  <td style="padding: 8px 0; font-weight: 600; color: ${headerColor};">${statusLabel}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Taille</td>
+                  <td style="padding: 8px 0;">${size} MB</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Durée</td>
+                  <td style="padding: 8px 0;">${duration}s</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Horodatage</td>
+                  <td style="padding: 8px 0;">${timeStr}</td>
+                </tr>
+                ${!isSuccess && errorMessage ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Erreur</td>
+                  <td style="padding: 8px 0; color: #d32f2f;">${errorMessage}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              ${!isSuccess ? `
+              <p style="font-size: 14px; line-height: 1.6; color: #333; margin: 18px 0 0 0;">
+                Cette sauvegarde a échoué. Une vérification du service de sauvegarde est recommandée.
+              </p>
+              ` : ''}
+
+              ${this._footer()}
+            </div>
+          </div>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`[Email] ✓ Backup completion email sent successfully`);
+      console.log(`  To: ${adminEmail} | Server: ${displayName} | Status: ${statusLabel} | Message ID: ${info.messageId}`);
+      return { success: true, mode: 'real', status: statusLabel, messageId: info.messageId };
+
+    } catch (error) {
+      console.error(`[Email] ✗ FAILED to send backup completion email`);
+      console.error(`  Error: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -369,13 +398,28 @@ class EmailService {
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: testEmail,
-        subject: 'DevOps Monitoring System - Test Email',
+        subject: 'CLEDISS Monitor — Email de Test',
+        attachments: this._logoAttachment(),
         html: `
-          <h2>Email Configuration Test</h2>
-          <p>If you received this, your Gmail SMTP configuration is working correctly!</p>
-          <p><strong>Email User:</strong> ${process.env.EMAIL_USER}</p>
-          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-          <p>You can now expect CRITICAL CPU alerts to be sent to this email address.</p>
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+            ${this._header('#1565c0', 'Test de Configuration', 'CLEDISS Monitor')}
+            <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
+              <p style="font-size: 14px; line-height: 1.6; color: #333; margin: 0;">
+                Si vous recevez cet email, la configuration Gmail SMTP fonctionne correctement.
+                Les alertes critiques seront envoyées à cette adresse.
+              </p>
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 16px;">
+                <tr>
+                  <td style="padding: 8px 0; color: #777; width: 40%;">Adresse d'envoi</td>
+                  <td style="padding: 8px 0;">${process.env.EMAIL_USER}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Horodatage</td>
+                  <td style="padding: 8px 0;">${new Date().toLocaleString('fr-FR')}</td>
+                </tr>
+              </table>
+            </div>
+          </div>
         `
       };
 
@@ -406,106 +450,76 @@ class EmailService {
         target,
         admin_email,
         server_id,
+        server_name,
         result,
         timestamp,
         details
       } = auditData;
 
-      const timeStr = new Date(timestamp).toLocaleString();
+      const displayName = server_name || server_id;
+      const timeStr = new Date(timestamp).toLocaleString('fr-FR');
+      const isSuccess = result === 'SUCCESS';
 
       // If not configured, log to console instead
       if (!this.isConfigured) {
         console.log(`[Email] Audit Notification - DEMO MODE (real email disabled):`);
         console.log(`  To: ${admin_email}`);
         console.log(`  Action: ${action} on ${target}`);
-        console.log(`  Server: ${server_id}`);
+        console.log(`  Server: ${displayName}`);
         console.log(`  Result: ${result}`);
         console.log(`  Time: ${timeStr}`);
         return { success: true, mode: 'demo', type: 'AUDIT' };
       }
 
-      // Send real email via Gmail SMTP
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: admin_email,
-        subject: `🔐 [AUDIT] ${action} on ${target} - ${result}`,
+        subject: `🔐 [AUDIT] ${action} — ${displayName}`,
+        attachments: this._logoAttachment(),
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <!-- Header -->
-            <div style="background-color: #2e7d32; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
-              <h1 style="margin: 0; font-size: 24px;">🔐 AUDIT LOG - Remote Action</h1>
-              <p style="margin: 10px 0 0 0; font-size: 14px;">Administrative action performed on server infrastructure</p>
-            </div>
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+            ${this._header('#2e7d32', 'Journal d\'Audit', 'Action à distance effectuée')}
 
-            <!-- Main Content -->
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 5px 5px;">
-              
-              <!-- Action Details -->
-              <h2 style="color: #2e7d32; margin-top: 0;">Action Details</h2>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; width: 30%;">Action:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${action}</td>
+            <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                  <td style="padding: 8px 0; color: #777; width: 40%;">Action</td>
+                  <td style="padding: 8px 0; font-weight: 600;">${action}</td>
                 </tr>
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Target:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${target}</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Cible</td>
+                  <td style="padding: 8px 0;">${target}</td>
                 </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Server:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${server_id}</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Serveur</td>
+                  <td style="padding: 8px 0;">${displayName}</td>
                 </tr>
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Result:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">
-                    <span style="background-color: ${result === 'SUCCESS' ? '#4caf50' : '#f44336'}; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold;">
-                      ${result}
-                    </span>
-                  </td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Résultat</td>
+                  <td style="padding: 8px 0; font-weight: 600; color: ${isSuccess ? '#2e7d32' : '#d32f2f'};">${isSuccess ? 'Succès' : 'Échec'}</td>
                 </tr>
-                <tr style="background-color: white;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Time:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${timeStr}</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Administrateur</td>
+                  <td style="padding: 8px 0;">${admin_email}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Heure</td>
+                  <td style="padding: 8px 0;">${timeStr}</td>
                 </tr>
                 ${details ? `
-                <tr style="background-color: #fafafa;">
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Details:</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${details}</td>
+                <tr>
+                  <td style="padding: 8px 0; color: #777;">Détails</td>
+                  <td style="padding: 8px 0;">${details}</td>
                 </tr>
                 ` : ''}
               </table>
 
-              <!-- Security Information -->
-              <h2 style="color: #1565c0; margin-top: 25px;">🔒 Security Information</h2>
-              <div style="background-color: #e3f2fd; border-left: 4px solid #1565c0; padding: 15px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
-                <p><strong>✅ Authenticated Administrator:</strong> ${admin_email}</p>
-                <p><strong>📝 Action Logged:</strong> All remote actions are recorded for audit purposes</p>
-                <p><strong>🔐 Secure Protocol:</strong> Action performed through authenticated API</p>
-                <p><strong>📊 Monitoring Active:</strong> System health monitoring continues</p>
-              </div>
+              <p style="font-size: 13px; line-height: 1.6; color: #666; margin: 18px 0 0 0;">
+                Cette action a été authentifiée et journalisée à des fins d'audit et de sécurité.
+              </p>
 
-              <!-- Important Notice -->
-              <h2 style="color: #f57c00; margin-top: 25px;">⚠️ Important Notice</h2>
-              <div style="background-color: #fff3cd; border-left: 4px solid #f57c00; padding: 15px; border-radius: 3px; margin: 10px 0; line-height: 1.8;">
-                <p><strong>🔍 This action has been:</strong></p>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
-                  <li><strong>Logged in audit trail</strong> with full details</li>
-                  <li><strong>Verified for authorization</strong> (admin permissions)</li>
-                  <li><strong>Monitored for impact</strong> on system performance</li>
-                  <li><strong>Documented for compliance</strong> and security review</li>
-                </ul>
-                <p><strong>📧 Email notification sent to:</strong> ${admin_email}</p>
-              </div>
+              ${this._footer()}
             </div>
-
-            <!-- Footer -->
-            <hr style="border: none; border-top: 2px solid #ddd; margin: 25px 0;">
-            <p style="color: #666; font-size: 13px; text-align: center; margin: 15px 0 0 0;">
-              <strong>This is an automated AUDIT notification</strong> from your DevOps Monitoring System<br>
-              <strong>Remote management action performed:</strong> ${action}<br>
-              <strong>For security purposes:</strong> This action has been logged and tracked<br>
-              <a href="http://localhost:3000/api/servers/${server_id}/audit-log" style="color: #1565c0; text-decoration: none;">View Audit Log →</a>
-            </p>
           </div>
         `
       };

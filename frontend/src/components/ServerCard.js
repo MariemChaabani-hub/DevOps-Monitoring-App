@@ -5,8 +5,8 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
   if (!metrics || metrics.length === 0) {
     return (
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-xl font-semibold text-white mb-4">{server.serverId || 'Unknown'}</h3>
-        <p className="text-gray-400">No metrics available</p>
+        <h3 className="text-xl font-semibold text-white mb-4">{server.serverId || 'Inconnu'}</h3>
+        <p className="text-gray-400">Aucune métrique disponible</p>
       </div>
     );
   }
@@ -44,7 +44,7 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h3 className="text-2xl font-bold text-white mb-2">{server.serverId || 'Unknown'}</h3>
+          <h3 className="text-2xl font-bold text-white mb-2">{server.serverId || 'Inconnu'}</h3>
           <p className="text-sm text-gray-400">
             {new Date(latestMetric.timestamp).toLocaleString()}
           </p>
@@ -79,7 +79,7 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
         {/* CPU */}
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-semibold text-gray-300">CPU Usage</label>
+            <label className="text-sm font-semibold text-gray-300">Utilisation CPU</label>
             <span className="text-sm font-bold text-white">{cpu.toFixed(1)}%</span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
@@ -93,7 +93,7 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
         {/* RAM */}
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-semibold text-gray-300">Memory Usage</label>
+            <label className="text-sm font-semibold text-gray-300">Utilisation Mémoire</label>
             <span className="text-sm font-bold text-white">{ram.toFixed(1)}%</span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
@@ -107,7 +107,7 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
         {/* Disk */}
         <div>
           <div className="flex justify-between mb-2">
-            <label className="text-sm font-semibold text-gray-300">Disk Usage</label>
+            <label className="text-sm font-semibold text-gray-300">Utilisation Disque</label>
             <span className="text-sm font-bold text-white">{disk.toFixed(1)}%</span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
@@ -122,18 +122,18 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
       {/* Additional Info */}
       <div className="mt-6 pt-6 border-t border-gray-700 grid grid-cols-2 gap-4">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Network I/O</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide">Entrée/Sortie Réseau</p>
           <p className="text-sm font-semibold text-white">
             {(latestMetric.network_in || 0).toLocaleString()} B/s
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Uptime</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide">Disponibilité</p>
           <p className="text-sm font-semibold text-white">
             {(() => {
               const uptimeSeconds = latestMetric.uptime_seconds ?? latestMetric.uptime ?? 0;
               const uptimeHours = !isNaN(uptimeSeconds) ? Math.floor(uptimeSeconds / 3600) : 0;
-              return `${uptimeHours} hrs`;
+              return `${uptimeHours} h`;
             })()}
           </p>
         </div>

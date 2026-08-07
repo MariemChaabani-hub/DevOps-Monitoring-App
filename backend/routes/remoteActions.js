@@ -163,11 +163,13 @@ const logAuditAction = async (auditData, result) => {
 
     // Envoyer un email de notification pour l'audit
     const emailService = require('../services/emailService');
+    const server = await Server.findOne({ server_id: auditData.server_id }).select('name').lean();
     await emailService.sendAuditNotificationEmail({
       action: auditData.action,
       target: auditData.target,
       admin_email: auditData.admin_email,
       server_id: auditData.server_id,
+      server_name: server && server.name,
       result: result.success ? 'SUCCESS' : 'FAILED',
       timestamp: auditData.timestamp,
       details: result.details || result.error

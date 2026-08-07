@@ -13,30 +13,30 @@ const BackupStatusIndicator = ({ status, animated = true }) => {
       case 'SUCCESS':
         return {
           className: 'indicator-ok',
-          label: 'Backup OK',
-          message: 'Latest backup successful',
+          label: 'Sauvegarde OK',
+          message: 'Dernière sauvegarde réussie',
           color: '#4caf50'
         };
       case 'FAILED':
       case 'FAILURE':
         return {
           className: 'indicator-failed',
-          label: 'Backup Failed',
-          message: 'Latest backup failed',
+          label: 'Sauvegarde Échouée',
+          message: 'La dernière sauvegarde a échoué',
           color: '#f44336'
         };
       case 'LATE':
         return {
           className: 'indicator-late',
-          label: 'Backup Late',
-          message: 'Backup is missing or late',
+          label: 'Sauvegarde en Retard',
+          message: 'Sauvegarde manquante ou en retard',
           color: '#ff9800'
         };
       default:
         return {
           className: 'indicator-unknown',
-          label: 'Unknown Status',
-          message: 'No backup data',
+          label: 'Statut Inconnu',
+          message: 'Aucune donnée de sauvegarde',
           color: '#999'
         };
     }

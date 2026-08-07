@@ -72,9 +72,9 @@ async function checkBackupStatusAndCreateAlert(backup) {
     // Determine alert severity based on backup status
     const severity = status === 'LATE' ? 'CRITICAL' : 'WARNING';
     const alertType = status === 'LATE' ? 'BACKUP_MISSING' : 'BACKUP_FAILED';
-    const message = status === 'LATE' 
-      ? `Backup is missing for server ${serverId}`
-      : `Backup failed for server ${serverId}`;
+    const message = status === 'LATE'
+      ? `Sauvegarde manquante pour le serveur ${serverId}`
+      : `Échec de la sauvegarde pour le serveur ${serverId}`;
 
     // Check if alert already exists for this backup status
     const existingAlert = await Alert.findOne({

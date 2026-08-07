@@ -33,10 +33,10 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
         setPagination(data.pagination || { total: 0, limit: 50, skip: 0 });
         setError(null);
       } else {
-        throw new Error('Failed to fetch backup history');
+        throw new Error('Échec de la récupération de l\'historique de sauvegarde');
       }
     } catch (err) {
-      setError('Failed to fetch backup history: ' + err.message);
+      setError('Échec de la récupération de l\'historique de sauvegarde : ' + err.message);
       console.error('Error fetching backup history:', err);
     } finally {
       setLoading(false);
@@ -75,7 +75,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
   };
 
   const formatSize = (sizeInMB) => {
-    if (!sizeInMB) return 'N/A';
+    if (!sizeInMB) return 'Indisponible';
     if (sizeInMB >= 1024) {
       return (sizeInMB / 1024).toFixed(2) + ' GB';
     }
@@ -83,13 +83,22 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return 'N/A';
+    if (!seconds) return 'Indisponible';
     if (seconds < 60) {
       return seconds + 's';
     }
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${minutes}m ${secs}s`;
+    return `${minutes}min ${secs}s`;
+  };
+
+  const translateStatus = (status) => {
+    switch (status) {
+      case 'OK': return 'OK';
+      case 'FAILED': return 'ÉCHOUÉE';
+      case 'LATE': return 'EN RETARD';
+      default: return status;
+    }
   };
 
   const getStats = () => {
@@ -113,7 +122,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
       <div className="modal-content">
         {/* Header */}
         <div className="modal-header">
-          <h2>Backup History</h2>
+          <h2>Historique des Sauvegardes</h2>
           <h3>{serverName || serverId}</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
@@ -121,19 +130,19 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
         {/* Stats Summary */}
         <div className="stats-summary">
           <div className="stat-item">
-            <span className="stat-label">Total:</span>
+            <span className="stat-label">Total :</span>
             <span className="stat-value">{stats.total}</span>
           </div>
           <div className="stat-item status-ok">
-            <span className="stat-label">Success:</span>
+            <span className="stat-label">Réussies :</span>
             <span className="stat-value">{stats.ok}</span>
           </div>
           <div className="stat-item status-failed">
-            <span className="stat-label">Failed:</span>
+            <span className="stat-label">Échouées :</span>
             <span className="stat-value">{stats.failed}</span>
           </div>
           <div className="stat-item status-late">
-            <span className="stat-label">Late:</span>
+            <span className="stat-label">En Retard :</span>
             <span className="stat-value">{stats.late}</span>
           </div>
         </div>
@@ -143,7 +152,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
           <div className="error-message">
             <span>{error}</span>
             <button onClick={fetchBackupHistory} className="retry-btn">
-              Retry
+              Réessayer
             </button>
           </div>
         )}
@@ -152,7 +161,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
         {loading && (
           <div className="loading-message">
             <div className="loading-spinner"></div>
-            <span>Loading backup history...</span>
+            <span>Chargement de l'historique...</span>
           </div>
         )}
 
@@ -161,31 +170,31 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
           <div className="history-list">
             {backups.length === 0 ? (
               <div className="no-data">
-                <p>No backup history found for this server</p>
+                <p>Aucun historique de sauvegarde trouvé pour ce serveur</p>
               </div>
             ) : (
               backups.map((backup, index) => (
                 <div key={backup._id} className="history-item">
                   <div className="item-header">
                     <span className={`status-badge ${getStatusClass(backup.status)}`}>
-                      {getStatusIcon(backup.status)} {backup.status}
+                      {getStatusIcon(backup.status)} {translateStatus(backup.status)}
                     </span>
                     <span className="backup-date">
                       {formatDate(backup.date)}
                     </span>
                   </div>
-                  
+
                   <div className="item-details">
                     <div className="detail-item">
-                      <span className="label">Size:</span>
+                      <span className="label">Taille :</span>
                       <span className="value">{formatSize(backup.size)}</span>
                     </div>
                     <div className="detail-item">
-                      <span className="label">Duration:</span>
+                      <span className="label">Durée :</span>
                       <span className="value">{formatDuration(backup.duration)}</span>
                     </div>
                     <div className="detail-item">
-                      <span className="label">Created:</span>
+                      <span className="label">Créée le :</span>
                       <span className="value">{formatDate(backup.createdAt)}</span>
                     </div>
                   </div>
@@ -198,10 +207,10 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
         {/* Footer */}
         <div className="modal-footer">
           <div className="pagination-info">
-            Showing {backups.length} of {pagination.total} backups
+            Affichage de {backups.length} sur {pagination.total} sauvegardes
           </div>
           <button className="refresh-btn" onClick={fetchBackupHistory}>
-            Refresh
+            Actualiser
           </button>
         </div>
       </div>

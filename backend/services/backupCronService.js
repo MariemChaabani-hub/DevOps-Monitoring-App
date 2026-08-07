@@ -9,6 +9,7 @@ const Server = require('../models/Server');
 const BackupSocketService = require('./backupSocketService');
 const BackupAlertService = require('./backupAlertService');
 const BackupService = require('./backupService');
+const EmailService = require('./emailService');
 
 class BackupCronService {
   /**
@@ -97,11 +98,31 @@ class BackupCronService {
       // Save to database
       await backup.save();
 
-      // Check backup status and trigger alerts if needed
+      // Check backup status and trigger alerts if needed (only emails for
+      // CRITICAL failures/late backups)
       try {
         await BackupAlertService.checkBackupAndAlert(backup, server);
       } catch (error) {
         console.error('[Backup Cron] Error checking backup alerts:', error);
+      }
+
+      // Send a completion notification email for THIS backup regardless of
+      // status (SUCCESS or FAILED), as required for the daily midnight report.
+      try {
+        const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+        const emailResult = await EmailService.sendBackupCompletionEmail({
+          serverId: server.server_id,
+          serverName: server.name,
+          status: backup.status,
+          size: backup.size,
+          duration: backup.duration,
+          timestamp: backup.date,
+          adminEmail,
+          errorMessage: backup.status === 'FAILED' ? 'Backup process did not complete successfully' : null
+        });
+        console.log(`[Backup Cron] Completion email result for ${server.server_id}:`, emailResult);
+      } catch (error) {
+        console.error('[Backup Cron] Error sending backup completion email:', error);
       }
 
       // Emit real-time socket.io event

@@ -46,7 +46,7 @@ const BackupDashboard = () => {
   if (loading) {
     return (
       <div className="backup-dashboard">
-        <div className="loading">Loading servers...</div>
+        <div className="loading">Chargement des serveurs...</div>
       </div>
     );
   }
@@ -54,7 +54,7 @@ const BackupDashboard = () => {
   if (error) {
     return (
       <div className="backup-dashboard">
-        <div className="error">Error: {error}</div>
+        <div className="error">Erreur : {error}</div>
       </div>
     );
   }
@@ -62,7 +62,7 @@ const BackupDashboard = () => {
   if (servers.length === 0) {
     return (
       <div className="backup-dashboard">
-        <div className="no-servers">No servers found. Please add servers first.</div>
+        <div className="no-servers">Aucun serveur trouvé. Veuillez d'abord ajouter des serveurs.</div>
       </div>
     );
   }
@@ -71,7 +71,7 @@ const BackupDashboard = () => {
     <div className="backup-dashboard">
       {/* Server Selector */}
       <div className="server-selector-container">
-        <label htmlFor="server-select">Select Server:</label>
+        <label htmlFor="server-select">Sélectionner un Serveur :</label>
         <select
           id="server-select"
           value={selectedServerId || ''}
@@ -80,7 +80,7 @@ const BackupDashboard = () => {
         >
           {servers.map((server) => (
             <option key={server._id} value={server._id || server.server_id}>
-              {server.name || server.server_id} ({server.location || 'Unknown'})
+              {server.name || server.server_id} ({server.location || 'Inconnu'})
             </option>
           ))}
         </select>

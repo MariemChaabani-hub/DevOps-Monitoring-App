@@ -36,10 +36,10 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         setBackups(data.backups || []);
         setError(null);
       } else {
-        throw new Error('Failed to fetch backup history');
+        throw new Error('Échec de la récupération de l\'historique de sauvegarde');
       }
     } catch (err) {
-      setError('Failed to fetch backup history: ' + err.message);
+      setError('Échec de la récupération de l\'historique de sauvegarde : ' + err.message);
       console.error('Error fetching backup history:', err);
     } finally {
       setLoading(false);
@@ -78,7 +78,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   };
 
   const formatSize = (sizeInMB) => {
-    if (!sizeInMB) return 'N/A';
+    if (!sizeInMB) return 'Indisponible';
     if (sizeInMB >= 1024) {
       return (sizeInMB / 1024).toFixed(2) + ' GB';
     }
@@ -86,13 +86,22 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return 'N/A';
+    if (!seconds) return 'Indisponible';
     if (seconds < 60) {
       return seconds + 's';
     }
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${minutes}m ${secs}s`;
+    return `${minutes}min ${secs}s`;
+  };
+
+  const translateStatus = (status) => {
+    switch (status) {
+      case 'OK': return 'OK';
+      case 'FAILED': return 'ÉCHOUÉE';
+      case 'LATE': return 'EN RETARD';
+      default: return status;
+    }
   };
 
   const getStats = () => {
@@ -125,7 +134,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         {/* Header */}
         <div className="modal-header">
           <div className="header-content">
-            <h2>Backup History</h2>
+            <h2>Historique des Sauvegardes</h2>
             <h3>{serverName || serverId}</h3>
           </div>
           <button className="close-button" onClick={onClose}>
@@ -141,45 +150,45 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
           <div 
             className={`stat-card total ${statusFilter === 'ALL' ? 'active' : ''}`}
             onClick={() => setStatusFilter('ALL')}
-            title="Show all backups"
+            title="Afficher toutes les sauvegardes"
           >
             <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.total}</div>
-              <div className="stat-label">Total Backups</div>
+              <div className="stat-label">Total Sauvegardes</div>
             </div>
           </div>
-          <div 
+          <div
             className={`stat-card success ${statusFilter === 'OK' ? 'active' : ''}`}
             onClick={() => setStatusFilter('OK')}
-            title="Show successful backups"
+            title="Afficher les sauvegardes réussies"
           >
             <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.ok}</div>
-              <div className="stat-label">Successful</div>
+              <div className="stat-label">Réussies</div>
             </div>
           </div>
-          <div 
+          <div
             className={`stat-card error ${statusFilter === 'FAILED' ? 'active' : ''}`}
             onClick={() => setStatusFilter('FAILED')}
-            title="Show failed backups"
+            title="Afficher les sauvegardes échouées"
           >
             <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.failed}</div>
-              <div className="stat-label">Failed</div>
+              <div className="stat-label">Échouées</div>
             </div>
           </div>
-          <div 
+          <div
             className={`stat-card warning ${statusFilter === 'LATE' ? 'active' : ''}`}
             onClick={() => setStatusFilter('LATE')}
-            title="Show late backups"
+            title="Afficher les sauvegardes en retard"
           >
             <div className="stat-icon"></div>
             <div className="stat-info">
               <div className="stat-number">{stats.late}</div>
-              <div className="stat-label">Late</div>
+              <div className="stat-label">En Retard</div>
             </div>
           </div>
         </div>
@@ -190,7 +199,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             <div className="error-icon"></div>
             <div className="error-message">{error}</div>
             <button className="retry-button" onClick={fetchBackupHistory}>
-              Retry
+              Réessayer
             </button>
           </div>
         )}
@@ -199,7 +208,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         {loading && (
           <div className="loading-container">
             <div className="loading-spinner"></div>
-            <div className="loading-text">Loading backup history...</div>
+            <div className="loading-text">Chargement de l'historique...</div>
           </div>
         )}
 
@@ -209,11 +218,11 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
             {sortedBackups.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon"></div>
-                <h3>No Backup History</h3>
+                <h3>Aucun Historique de Sauvegarde</h3>
                 <p>
-                  {statusFilter === 'ALL' 
-                    ? 'No backup records found for this server.' 
-                    : `No ${statusFilter === 'OK' ? 'successful' : statusFilter.toLowerCase()} backup records found.`}
+                  {statusFilter === 'ALL'
+                    ? 'Aucune sauvegarde trouvée pour ce serveur.'
+                    : `Aucune sauvegarde ${statusFilter === 'OK' ? 'réussie' : statusFilter === 'FAILED' ? 'échouée' : 'en retard'} trouvée.`}
                 </p>
               </div>
             ) : (
@@ -223,7 +232,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
                     <div className="backup-header">
                       <div className={`backup-status ${getStatusClass(backup.status)}`}>
                         <span className="status-icon">{getStatusIcon(backup.status)}</span>
-                        <span className="status-text">{backup.status}</span>
+                        <span className="status-text">{translateStatus(backup.status)}</span>
                       </div>
                       <div className="backup-date">
                         {formatDate(backup.date)}
@@ -234,22 +243,22 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
                       <div className="detail-grid">
                         {serverId === 'all' && (
                           <div className="detail-item">
-                            <span className="detail-label">Server</span>
+                            <span className="detail-label">Serveur</span>
                             <span className="detail-value" style={{ color: '#60a5fa', fontWeight: 'bold' }}>
                               {backup.serverId || backup.server_id}
                             </span>
                           </div>
                         )}
                         <div className="detail-item">
-                          <span className="detail-label">Size</span>
+                          <span className="detail-label">Taille</span>
                           <span className="detail-value">{formatSize(backup.size)}</span>
                         </div>
                         <div className="detail-item">
-                          <span className="detail-label">Duration</span>
+                          <span className="detail-label">Durée</span>
                           <span className="detail-value">{formatDuration(backup.duration)}</span>
                         </div>
                         <div className="detail-item">
-                          <span className="detail-label">Created</span>
+                          <span className="detail-label">Créée le</span>
                           <span className="detail-value">{formatDate(backup.createdAt)}</span>
                         </div>
                       </div>
@@ -265,13 +274,13 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
         <div className="modal-footer">
           <div className="footer-info">
             <span className="backup-count">
-              Showing {sortedBackups.length} {statusFilter !== 'ALL' ? (statusFilter === 'OK' ? 'successful' : statusFilter.toLowerCase()) : ''} backups
-              {statusFilter !== 'ALL' && ` (out of ${backups.length})`}
+              Affichage de {sortedBackups.length} sauvegarde{sortedBackups.length > 1 ? 's' : ''} {statusFilter !== 'ALL' ? (statusFilter === 'OK' ? 'réussies' : statusFilter === 'FAILED' ? 'échouées' : 'en retard') : ''}
+              {statusFilter !== 'ALL' && ` (sur ${backups.length})`}
             </span>
-            <span className="server-id">Server: {serverId === 'all' ? 'All Servers' : serverId}</span>
+            <span className="server-id">Serveur : {serverId === 'all' ? 'Tous les Serveurs' : serverId}</span>
           </div>
           <button className="refresh-button" onClick={fetchBackupHistory}>
-            Refresh
+            Actualiser
           </button>
         </div>
       </div>

@@ -217,30 +217,30 @@ const ServicesPanel = ({ servers = [] }) => {
 
                 <div className="service-details">
                   <div className="detail-row">
-                    <span className="detail-label">État:</span>
-                    <span className="detail-value">{service.status}</span>
+                    <span className="detail-label">État :</span>
+                    <span className="detail-value">{getStatusBadge(service.status).text}</span>
                   </div>
                   {service.uptime && (
                     <div className="detail-row">
-                      <span className="detail-label">Uptime:</span>
+                      <span className="detail-label">Disponibilité :</span>
                       <span className="detail-value">{service.uptime}</span>
                     </div>
                   )}
                   {service.restart_count > 0 && (
                     <div className="detail-row">
-                      <span className="detail-label">Redémarrages:</span>
+                      <span className="detail-label">Redémarrages :</span>
                       <span className="detail-value">{service.restart_count}</span>
                     </div>
                   )}
                   {service.memory_usage > 0 && (
                     <div className="detail-row">
-                      <span className="detail-label">Mémoire:</span>
+                      <span className="detail-label">Mémoire :</span>
                       <span className="detail-value">{service.memory_usage.toFixed(2)} MB</span>
                     </div>
                   )}
                   {service.cpu_usage > 0 && (
                     <div className="detail-row">
-                      <span className="detail-label">CPU:</span>
+                      <span className="detail-label">CPU :</span>
                       <span className="detail-value">{service.cpu_usage.toFixed(2)}%</span>
                     </div>
                   )}
@@ -268,7 +268,7 @@ const ServicesPanel = ({ servers = [] }) => {
                 <div className="service-footer">
                   {service.last_health_check && (
                     <span className="last-check">
-                      Dernière vérification: {new Date(service.last_health_check).toLocaleTimeString()}
+                      Dernière vérification : {new Date(service.last_health_check).toLocaleTimeString()}
                     </span>
                   )}
                 </div>

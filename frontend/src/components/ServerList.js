@@ -47,7 +47,7 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
 
   return (
     <div className="server-list-container">
-      <h2>Monitored Servers</h2>
+      <h2>Serveurs Surveillés</h2>
       <div className="server-list">
         {servers.map((server) => {
           const alertStatus = getServerStatus(server.server_id);
@@ -81,11 +81,11 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
 
               <div className="server-details">
                 <div className="detail-item">
-                  <span className="label">ID:</span>
+                  <span className="label">ID :</span>
                   <span className="value">{server.server_id}</span>
                 </div>
                 <div className="detail-item">
-                  <span className="label">Location:</span>
+                  <span className="label">Emplacement :</span>
                   <span className="value">{server.location}</span>
                 </div>
               </div>
@@ -157,7 +157,7 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
 
             {server.last_metric_time && (
               <div className="last-update">
-                Updated: {new Date(server.last_metric_time).toLocaleTimeString()}
+                Mis à jour : {new Date(server.last_metric_time).toLocaleTimeString()}
               </div>
             )}
           </div>
@@ -165,8 +165,8 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
 
         {servers.length === 0 && (
           <div className="no-servers">
-            <p>No servers connected yet</p>
-            <p className="hint">Start the monitoring agents to see servers appear</p>
+            <p>Aucun serveur connecté pour le moment</p>
+            <p className="hint">Démarrez les agents de surveillance pour voir apparaître les serveurs</p>
           </div>
         )}
       </div>

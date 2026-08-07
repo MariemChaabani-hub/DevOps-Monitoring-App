@@ -14,7 +14,7 @@ import {
 
 const MetricsChart = ({ data, title, lines = ['cpu_percent'] }) => {
   if (!data || data.length === 0) {
-    return <div className="p-4 text-gray-400">No data available</div>;
+    return <div className="p-4 text-gray-400">Aucune donnée disponible</div>;
   }
 
   // Prepare data for chart (last 12 data points, every 5 seconds = 1 minute)

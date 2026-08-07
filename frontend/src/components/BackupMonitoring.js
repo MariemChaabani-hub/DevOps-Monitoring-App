@@ -161,7 +161,7 @@ const BackupMonitoring = ({ serverId }) => {
    * Format date for display
    */
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return 'Indisponible';
     return new Date(dateString).toLocaleString();
   };
 
@@ -181,7 +181,7 @@ const BackupMonitoring = ({ serverId }) => {
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${minutes}m ${secs}s`;
+    return `${minutes}min ${secs}s`;
   };
 
   // Fetch data on component mount
@@ -201,7 +201,7 @@ const BackupMonitoring = ({ serverId }) => {
   if (loading && !latestBackup) {
     return (
       <div className="backup-monitor">
-        <div className="loading">Loading backup data...</div>
+        <div className="loading">Chargement des données de sauvegarde...</div>
       </div>
     );
   }
@@ -210,13 +210,13 @@ const BackupMonitoring = ({ serverId }) => {
     <div className="backup-monitor">
       {/* Header */}
       <div className="backup-header">
-        <h2>Backup Monitoring - {serverId}</h2>
+        <h2>Surveillance des Sauvegardes - {serverId}</h2>
         <div className="realtime-indicator">
           <span
             className={`status-dot ${realtimeStatus}`}
-            title={`Real-time status: ${realtimeStatus}`}
+            title={`Statut temps réel : ${realtimeStatus}`}
           />
-          <span className="status-text">{realtimeStatus}</span>
+          <span className="status-text">{realtimeStatus === 'connected' ? 'connecté' : realtimeStatus === 'disconnected' ? 'déconnecté' : realtimeStatus}</span>
         </div>
       </div>
 
@@ -233,7 +233,7 @@ const BackupMonitoring = ({ serverId }) => {
       <div className="backup-cards">
         {/* Latest Backup Status Card */}
         <div className="card">
-          <div className="card-header">Latest Backup</div>
+          <div className="card-header">Dernière Sauvegarde</div>
           <div className="card-body">
             {latestBackup ? (
               <>
@@ -241,20 +241,20 @@ const BackupMonitoring = ({ serverId }) => {
                   <BackupStatusBadge status={latestBackup.status} size="large" showIcon={true} />
                 </div>
                 <div className="backup-detail">
-                  <span className="label">Date:</span>
+                  <span className="label">Date :</span>
                   <span className="value">{formatDate(latestBackup.date)}</span>
                 </div>
                 <div className="backup-detail">
-                  <span className="label">Duration:</span>
+                  <span className="label">Durée :</span>
                   <span className="value">{formatDuration(latestBackup.duration)}</span>
                 </div>
                 <div className="backup-detail">
-                  <span className="label">Size:</span>
+                  <span className="label">Taille :</span>
                   <span className="value">{formatBytes(latestBackup.size)}</span>
                 </div>
               </>
             ) : (
-              <div className="no-data">No backup data available</div>
+              <div className="no-data">Aucune donnée de sauvegarde disponible</div>
             )}
           </div>
         </div>
@@ -262,27 +262,27 @@ const BackupMonitoring = ({ serverId }) => {
         {/* Health Indicators Card */}
         {indicators && (
           <div className="card">
-            <div className="card-header">Health Indicators</div>
+            <div className="card-header">Indicateurs de Santé</div>
             <div className="card-body">
               <div className="health-score">
                 <div className="score-value">{indicators.health_score}</div>
-                <div className="score-label">Health Score</div>
+                <div className="score-label">Score de Santé</div>
               </div>
               <div className="stats-grid">
                 <div className="stat">
-                  <span className="stat-label">Total Backups</span>
+                  <span className="stat-label">Total Sauvegardes</span>
                   <span className="stat-value">{indicators.total_backups}</span>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">Successful</span>
+                  <span className="stat-label">Réussies</span>
                   <span className="stat-value ok">{indicators.status_breakdown.ok}</span>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">Failed</span>
+                  <span className="stat-label">Échouées</span>
                   <span className="stat-value failed">{indicators.status_breakdown.failed}</span>
                 </div>
                 <div className="stat">
-                  <span className="stat-label">Late</span>
+                  <span className="stat-label">En Retard</span>
                   <span className="stat-value late">{indicators.status_breakdown.late}</span>
                 </div>
               </div>
@@ -293,19 +293,19 @@ const BackupMonitoring = ({ serverId }) => {
         {/* Average Stats Card */}
         {indicators && (
           <div className="card">
-            <div className="card-header">Average Stats</div>
+            <div className="card-header">Statistiques Moyennes</div>
             <div className="card-body">
               <div className="backup-detail">
-                <span className="label">Avg Duration:</span>
+                <span className="label">Durée Moyenne :</span>
                 <span className="value">{formatDuration(indicators.average_duration_seconds)}</span>
               </div>
               <div className="backup-detail">
-                <span className="label">Avg Size:</span>
+                <span className="label">Taille Moyenne :</span>
                 <span className="value">{formatBytes(indicators.average_size_mb)}</span>
               </div>
               {indicators.last_successful_backup_date && (
                 <div className="backup-detail">
-                  <span className="label">Last Success:</span>
+                  <span className="label">Dernier Succès :</span>
                   <span className="value">{formatDate(indicators.last_successful_backup_date)}</span>
                 </div>
               )}
@@ -316,15 +316,15 @@ const BackupMonitoring = ({ serverId }) => {
 
       {/* Backup History Table */}
       <div className="backup-table-container">
-        <h3>Backup History</h3>
+        <h3>Historique des Sauvegardes</h3>
         {backupHistory.length > 0 ? (
           <table className="backup-table">
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Status</th>
-                <th>Duration</th>
-                <th>Size</th>
+                <th>Statut</th>
+                <th>Durée</th>
+                <th>Taille</th>
               </tr>
             </thead>
             <tbody>
@@ -341,15 +341,15 @@ const BackupMonitoring = ({ serverId }) => {
             </tbody>
           </table>
         ) : (
-          <div className="no-data">No backup history available</div>
+          <div className="no-data">Aucun historique de sauvegarde disponible</div>
         )}
       </div>
 
       {/* Footer */}
       <div className="backup-footer">
-        <small>Last updated: {lastUpdate ? formatDate(lastUpdate) : 'Never'}</small>
+        <small>Dernière mise à jour : {lastUpdate ? formatDate(lastUpdate) : 'Jamais'}</small>
         <button className="refresh-btn" onClick={fetchBackupData}>
-          Refresh
+          Actualiser
         </button>
       </div>
     </div>

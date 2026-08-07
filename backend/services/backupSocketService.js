@@ -121,7 +121,7 @@ class BackupSocketService {
     const event = {
       event: 'late_backup_alert',
       serverId,
-      message: `Backup is late for server ${serverId}`,
+      message: `Sauvegarde en retard pour le serveur ${serverId}`,
       timestamp: new Date()
     };
 

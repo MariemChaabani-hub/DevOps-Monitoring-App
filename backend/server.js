@@ -109,19 +109,26 @@ async function initializeDefaultAdmin() {
   }
 }
 
-// Initialize default thresholds if not exist
+// Initialize/repair default thresholds (upsert so existing wrong values get corrected too)
 async function initializeDefaultThresholds() {
   try {
-    const count = await Threshold.countDocuments();
-    if (count === 0) {
-      const defaults = [
-        { metric_name: 'cpu', warning_level: 70, critical_level: 90 },
-        { metric_name: 'ram', warning_level: 80, critical_level: 95 },
-        { metric_name: 'disk', warning_level: 85, critical_level: 95 }
-      ];
-      await Threshold.insertMany(defaults);
-      console.log('[Backend] Default thresholds initialized');
+    const defaults = [
+      { metric_name: 'cpu', warning_level: 70, critical_level: 90 },
+      { metric_name: 'ram', warning_level: 80, critical_level: 95 },
+      { metric_name: 'disk', warning_level: 80, critical_level: 90 }
+    ];
+
+    // No UI/route currently exists to customize thresholds, so it's safe to
+    // force-correct values here on every startup (fixes already-seeded DBs
+    // that were created with the old, incorrect disk thresholds).
+    for (const threshold of defaults) {
+      await Threshold.updateOne(
+        { metric_name: threshold.metric_name },
+        { $set: { warning_level: threshold.warning_level, critical_level: threshold.critical_level, enabled: true } },
+        { upsert: true }
+      );
     }
+    console.log('[Backend] Default thresholds verified/initialized (disk: warning=80%, critical=90%)');
   } catch (error) {
     console.error('[Backend] Error initializing thresholds:', error);
   }
@@ -207,7 +214,7 @@ app.post('/metrics', async (req, res) => {
       server = new Server({
         server_id: serverId,
         name: metric.server_name || serverId,
-        location: metric.location || 'Unknown'
+        location: metric.location || 'Inconnu'
       });
       await server.save();
       console.log(`[Backend] New server registered: ${serverId}`);
@@ -235,7 +242,7 @@ app.post('/metrics', async (req, res) => {
     await AlertService.checkAndGenerateAlerts(metric, server, statusResult);
     
     // Check CPU and send email alerts if needed
-    await CpuAlertService.checkCpuAndAlert(metric, 'mariemchaabani39@gmail.com');
+    await CpuAlertService.checkCpuAndAlert(metric, server, process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com');
 
     // Broadcast update to WebSocket clients
     broadcastUpdate({
@@ -320,10 +327,29 @@ app.get('/api/thresholds', async (req, res) => {
   }
 });
 
-app.put('/api/thresholds/:metric_name', async (req, res) => {
+app.put('/api/thresholds/:metric_name', verifyToken, async (req, res) => {
   try {
     const { metric_name } = req.params;
-    const { warning_level, critical_level } = req.body;
+    const warning_level = Number(req.body.warning_level);
+    const critical_level = Number(req.body.critical_level);
+
+    if (
+      Number.isNaN(warning_level) || Number.isNaN(critical_level) ||
+      warning_level < 0 || warning_level > 100 ||
+      critical_level < 0 || critical_level > 100
+    ) {
+      return res.status(400).json({
+        error: 'Valeurs invalides',
+        message: 'Les seuils doivent être des nombres compris entre 0 et 100.'
+      });
+    }
+
+    if (warning_level >= critical_level) {
+      return res.status(400).json({
+        error: 'Valeurs invalides',
+        message: 'Le seuil ALERTE doit être inférieur au seuil CRITIQUE.'
+      });
+    }
 
     const threshold = await Threshold.findOneAndUpdate(
       { metric_name },
@@ -331,6 +357,11 @@ app.put('/api/thresholds/:metric_name', async (req, res) => {
       { new: true }
     );
 
+    if (!threshold) {
+      return res.status(404).json({ error: 'Métrique non trouvée' });
+    }
+
+    console.log(`[Backend] Threshold updated: ${metric_name} warning=${warning_level}% critical=${critical_level}%`);
     res.json(threshold);
   } catch (error) {
     res.status(500).json({ error: error.message });

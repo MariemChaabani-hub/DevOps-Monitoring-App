@@ -60,11 +60,11 @@ class BackupAlertService {
       if (status === 'FAILED') {
         alertType = 'BACKUP_FAILED';
         severity = 'CRITICAL';
-        message = `Backup failed on ${server?.name || serverId}`;
+        message = `Échec de la sauvegarde sur ${server?.name || serverId}`;
       } else if (status === 'LATE') {
         alertType = 'BACKUP_LATE';
         severity = 'WARNING';
-        message = `Backup is missing or late on ${server?.name || serverId}`;
+        message = `Sauvegarde manquante ou en retard sur ${server?.name || serverId}`;
       }
 
       // No alert needed if backup is OK
@@ -119,6 +119,7 @@ class BackupAlertService {
       if (severity === 'CRITICAL') {
         const emailResult = await EmailService.sendBackupAlertEmail({
           serverId,
+          serverName: server && server.name,
           type: alertType,
           severity: severity,
           status: status,

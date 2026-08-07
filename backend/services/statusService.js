@@ -26,7 +26,7 @@ class StatusService {
       const defaultThresholds = {
         cpu: { warning: 70, critical: 90 },
         ram: { warning: 80, critical: 95 },
-        disk: { warning: 85, critical: 95 }
+        disk: { warning: 80, critical: 90 }
       };
 
       const finalThresholds = { ...defaultThresholds, ...thresholds };
