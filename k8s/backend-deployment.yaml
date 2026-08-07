@@ -15,11 +15,7 @@ spec:
     spec:
       containers:
       - name: backend
-<<<<<<< HEAD
-        image: mariemchaabani/monitoring-backend:27
-=======
         image: mariemchaabani/monitoring-backend:33
->>>>>>> 69f6490627bff613d391556f18a5b5d6323f2686
         ports:
         - containerPort: 3000
         envFrom:
