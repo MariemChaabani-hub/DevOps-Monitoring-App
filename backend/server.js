@@ -109,26 +109,26 @@ async function initializeDefaultAdmin() {
   }
 }
 
-// Initialize/repair default thresholds (upsert so existing wrong values get corrected too)
+// Initialize default thresholds if missing. Insert-only on purpose: the
+// admin can now edit thresholds from the app (ThresholdSettingsModal /
+// PUT /api/thresholds/:metric_name), so this must NOT overwrite existing
+// values on every restart or it would silently undo that configuration.
 async function initializeDefaultThresholds() {
   try {
     const defaults = [
-      { metric_name: 'cpu', warning_level: 70, critical_level: 90 },
-      { metric_name: 'ram', warning_level: 80, critical_level: 95 },
-      { metric_name: 'disk', warning_level: 80, critical_level: 90 }
+      { metric_name: 'cpu', warning_level: 70, critical_level: 80 },
+      { metric_name: 'ram', warning_level: 70, critical_level: 80 },
+      { metric_name: 'disk', warning_level: 70, critical_level: 80 }
     ];
 
-    // No UI/route currently exists to customize thresholds, so it's safe to
-    // force-correct values here on every startup (fixes already-seeded DBs
-    // that were created with the old, incorrect disk thresholds).
     for (const threshold of defaults) {
       await Threshold.updateOne(
         { metric_name: threshold.metric_name },
-        { $set: { warning_level: threshold.warning_level, critical_level: threshold.critical_level, enabled: true } },
+        { $setOnInsert: threshold },
         { upsert: true }
       );
     }
-    console.log('[Backend] Default thresholds verified/initialized (disk: warning=80%, critical=90%)');
+    console.log('[Backend] Default thresholds verified/initialized');
   } catch (error) {
     console.error('[Backend] Error initializing thresholds:', error);
   }
@@ -238,11 +238,12 @@ app.post('/metrics', async (req, res) => {
     };
     await server.save();
 
-    // Check and generate alerts
+    // Check and generate alerts for CPU, RAM and Disk (handles WARNING and
+    // CRITICAL emails for all three metrics). CpuAlertService's own
+    // checkCpuAndAlert() is intentionally NOT called here anymore — it was
+    // a second, redundant CPU-only pipeline that would have produced
+    // duplicate alerts/emails now that AlertService also emails on WARNING.
     await AlertService.checkAndGenerateAlerts(metric, server, statusResult);
-    
-    // Check CPU and send email alerts if needed
-    await CpuAlertService.checkCpuAndAlert(metric, server, process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com');
 
     // Broadcast update to WebSocket clients
     broadcastUpdate({

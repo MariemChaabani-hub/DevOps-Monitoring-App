@@ -25,9 +25,9 @@ class AlertService {
       // instead of duplicating hardcoded numbers here (that's what caused
       // disk alerts to use the wrong 85/95 thresholds instead of 80/90).
       const defaultThresholds = {
-        cpu: { warning: 70, critical: 90 },
-        ram: { warning: 80, critical: 95 },
-        disk: { warning: 80, critical: 90 }
+        cpu: { warning: 70, critical: 80 },
+        ram: { warning: 70, critical: 80 },
+        disk: { warning: 70, critical: 80 }
       };
       const thresholds = { ...defaultThresholds, ...(statusResult.thresholds || {}) };
 

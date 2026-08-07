@@ -83,16 +83,16 @@ class EmailService {
   }
 
   /**
-   * Send CRITICAL alert email via Gmail SMTP
-   * Only sends real emails for CRITICAL alerts
-   * Logs other alert types in demo mode
+   * Send an alert email via Gmail SMTP for both WARNING and CRITICAL alerts.
+   * CRITICAL alerts are marked urgent (red, "URGENT" in the subject);
+   * WARNING alerts use a lighter, orange, non-urgent treatment.
    */
   async sendAlertEmail(alertData) {
     try {
       const {
         serverId,
         serverName,
-        type,
+        type, // 'WARNING' | 'CRITICAL'
         metric,
         value,
         threshold,
@@ -113,31 +113,45 @@ class EmailService {
       };
       const metricInfo = METRIC_INFO[metric] || METRIC_INFO.cpu_percent;
 
-      // Only send real emails for CRITICAL alerts
-      if (type !== 'CRITICAL') {
-        console.log(`[Email] Skipping non-CRITICAL alert (${type}) - demo mode only`);
-        console.log(`  Server: ${displayName} | Metric: ${metric} = ${value}% (threshold: ${threshold}%)`);
-        return { success: true, mode: 'demo', type: type, reason: 'non-critical' };
-      }
+      const isCritical = type === 'CRITICAL';
+      const SEVERITY_INFO = isCritical
+        ? {
+          color: '#d32f2f',
+          emoji: '🚨',
+          subjectTag: '[CRITIQUE — URGENT]',
+          headerTitle: 'Alerte Critique — Urgent',
+          severityLabel: 'CRITIQUE',
+          thresholdLabel: 'Seuil critique',
+          sentence: `Le serveur <strong>${displayName}</strong> dépasse le seuil critique de ses ${metricInfo.resourceName}. Une intervention immédiate est recommandée pour éviter tout impact sur la disponibilité du service.`
+        }
+        : {
+          color: '#f59e0b',
+          emoji: '⚠️',
+          subjectTag: '[ALERTE]',
+          headerTitle: 'Alerte',
+          severityLabel: 'ALERTE',
+          thresholdLabel: 'Seuil d\'alerte',
+          sentence: `Le serveur <strong>${displayName}</strong> approche d'un niveau élevé sur ses ${metricInfo.resourceName}. Une surveillance est recommandée.`
+        };
 
       // If not configured, log to console instead
       if (!this.isConfigured) {
-        console.log(`[Email] CRITICAL Alert - DEMO MODE (real email disabled):`);
+        console.log(`[Email] ${SEVERITY_INFO.severityLabel} Alert - DEMO MODE (real email disabled):`);
         console.log(`  To: ${adminEmail}`);
         console.log(`  Server: ${displayName}`);
         console.log(`  Metric: ${metric} = ${value}% (threshold: ${threshold}%)`);
         console.log(`  Time: ${timeStr}`);
-        return { success: true, mode: 'demo', type: 'CRITICAL' };
+        return { success: true, mode: 'demo', type };
       }
 
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: adminEmail,
-        subject: `🚨 [CRITIQUE] ${metricInfo.label} — ${displayName}`,
+        subject: `${SEVERITY_INFO.emoji} ${SEVERITY_INFO.subjectTag} ${metricInfo.label} — ${displayName}`,
         attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
-            ${this._header('#d32f2f', 'Alerte Critique', `${metricInfo.label} à ${value}% — seuil dépassé`)}
+            ${this._header(SEVERITY_INFO.color, SEVERITY_INFO.headerTitle, `${metricInfo.label} à ${value}% — seuil dépassé`)}
 
             <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
               <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
@@ -147,10 +161,10 @@ class EmailService {
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">Utilisation ${metricInfo.label}</td>
-                  <td style="padding: 8px 0; font-weight: 600; color: #d32f2f;">${value}%</td>
+                  <td style="padding: 8px 0; font-weight: 600; color: ${SEVERITY_INFO.color};">${value}%</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px 0; color: #777;">Seuil critique</td>
+                  <td style="padding: 8px 0; color: #777;">${SEVERITY_INFO.thresholdLabel}</td>
                   <td style="padding: 8px 0;">${threshold}%</td>
                 </tr>
                 <tr>
@@ -160,8 +174,7 @@ class EmailService {
               </table>
 
               <p style="font-size: 14px; line-height: 1.6; color: #333; margin: 18px 0 0 0;">
-                Le serveur <strong>${displayName}</strong> dépasse le seuil critique de ses ${metricInfo.resourceName}.
-                Une vérification est recommandée pour éviter tout impact sur la disponibilité du service.
+                ${SEVERITY_INFO.sentence}
               </p>
 
               ${this._footer()}
@@ -171,12 +184,12 @@ class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      console.log(`[Email] ✓ CRITICAL alert email sent successfully`);
+      console.log(`[Email] ✓ ${SEVERITY_INFO.severityLabel} alert email sent successfully`);
       console.log(`  To: ${adminEmail} | Server: ${displayName} | Message ID: ${info.messageId}`);
-      return { success: true, mode: 'real', type: 'CRITICAL', messageId: info.messageId };
+      return { success: true, mode: 'real', type, messageId: info.messageId };
 
     } catch (error) {
-      console.error(`[Email] ✗ FAILED to send CRITICAL alert email`);
+      console.error(`[Email] ✗ FAILED to send alert email`);
       console.error(`  Error: ${error.message}`);
       console.error(`  This could be due to: incorrect credentials, Gmail security settings, or network issues`);
       return { success: false, error: error.message };
