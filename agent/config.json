@@ -5,7 +5,7 @@
     "location": "OVH VPS"
   },
   "api": {
-    "url": "http://10.43.210.38:3000",
+    "url":"http://backend:3000",
     "timeout": 120,
     "max_retries": 3,
     "backoff_factor": 1.0
