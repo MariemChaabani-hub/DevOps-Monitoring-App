@@ -6,10 +6,10 @@
   },
   "api": {
     "url": "http://10.43.210.38:3000",
-    "timeout": 30,
-    "max_retries": 5,
-    "backoff_factor": 2.0
-  },
+    "timeout": 60,
+    "max_retries": 3,
+    "backoff_factor": 1.0
+},
   "collection": {
     "interval": 5,
     "enabled_metrics": [
