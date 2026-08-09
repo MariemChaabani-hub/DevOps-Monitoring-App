@@ -254,8 +254,9 @@ class MonitoringAgent:
             True if successful, False otherwise
         """
         try:
-            logger.debug("[INFO] Sending metrics to API...")
+            send_start = time.time()
             success, message = self.sender.send(metrics)
+            elapsed = time.time() - send_start
 
             with self._stats_lock:
                 if success:
@@ -264,9 +265,9 @@ class MonitoringAgent:
                     self.failed_sends += 1
 
             if success:
-                logger.info(f"[OK] {message}")
+                logger.info(f"[OK] {message} ({elapsed:.1f}s)")
             else:
-                logger.warning(f"[FAIL] {message}")
+                logger.warning(f"[FAIL] {message} ({elapsed:.1f}s)")
 
             return success
 
@@ -283,13 +284,14 @@ class MonitoringAgent:
         of the collection loop, so a slow or unreachable backend only
         delays sending — it never delays the next collection cycle.
         """
-        logger.debug("[OK] Sender thread started")
+        logger.info("[OK] Sender thread started")
         while self.running:
             try:
                 metrics = self.metrics_queue.get(timeout=1)
             except queue.Empty:
                 continue
 
+            logger.info(f"[SEND] Picked up queued metric (queue size now: {self.metrics_queue.qsize()})")
             self._send_metrics(metrics)
             self.metrics_queue.task_done()
 

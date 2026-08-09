@@ -10,48 +10,62 @@ from typing import Dict, Any, Optional, Tuple
 
 class MetricsSender:
     """Sends metrics to a backend API with retry logic."""
-    
+
     def __init__(
         self,
         api_url: str,
         timeout: int = 10,
         max_retries: int = 3,
-        backoff_factor: float = 2.0
+        backoff_factor: float = 2.0,
+        connect_timeout: int = 10
     ):
         """
         Initialize the metrics sender.
-        
+
         Args:
             api_url: Base API URL (e.g., 'http://localhost:3000')
-            timeout: Request timeout in seconds (default: 10)
+            timeout: Read timeout in seconds — how long to wait for a
+                response once connected (default: 10)
             max_retries: Maximum number of retry attempts (default: 3)
             backoff_factor: Exponential backoff multiplier (default: 2.0)
+            connect_timeout: How long to wait to establish the TCP
+                connection, kept short and separate from `timeout` so a
+                DNS/network hang fails fast instead of stalling for the
+                full read timeout (default: 10)
         """
         self.api_url = api_url
         self.endpoint = '/metrics'
         self.full_url = f"{self.api_url}{self.endpoint}"
         self.timeout = timeout
+        self.connect_timeout = min(connect_timeout, timeout)
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
-    
+
+        # A dedicated Session with trust_env=False so this never silently
+        # picks up HTTP_PROXY/HTTPS_PROXY/NO_PROXY from the pod's
+        # environment — a proxy misconfigured for cluster-internal hosts
+        # is a classic cause of "curl works, requests hangs forever".
+        self._session = requests.Session()
+        self._session.trust_env = False
+
     def send(self, metrics: Dict[str, Any]) -> Tuple[bool, str]:
         """
         Send metrics to the API with retry logic.
-        
+
         Args:
             metrics: Dictionary of metrics to send
-            
+
         Returns:
             Tuple of (success: bool, message: str)
         """
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(
+                response = self._session.post(
                     self.full_url,
                     json=metrics,
-                    timeout=self.timeout
+                    timeout=(self.connect_timeout, self.timeout)
                 )
-                
+
                 # Success response codes
                 if response.status_code in [200, 201]:
                     return True, f"[OK] Sent successfully (Status: {response.status_code})"
@@ -128,9 +142,9 @@ class MetricsSender:
             True if API is reachable, False otherwise
         """
         try:
-            response = requests.get(
+            response = self._session.get(
                 self.api_url,
-                timeout=self.timeout
+                timeout=(self.connect_timeout, self.timeout)
             )
             return response.status_code < 500
         except Exception:
