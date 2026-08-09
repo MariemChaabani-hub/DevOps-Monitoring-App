@@ -10,6 +10,7 @@ const Server = require('../models/Server');
 const BackupService = require('../services/backupService');
 const BackupSocketService = require('../services/backupSocketService');
 const BackupAlertService = require('../services/backupAlertService');
+const EmailService = require('../services/emailService');
 
 // GET /api/backups
 // Returns all backups with optional filters and pagination
@@ -462,13 +463,37 @@ router.post('/', async (req, res) => {
       console.error('[Backups API] Error emitting socket event:', error);
     }
 
+    // Look up the server (by its server_id string, e.g. "vps-debian-ovh" —
+    // not a Mongo ObjectId, so findById would never match it)
+    const server = await Server.findOne({ server_id: finalServerId });
+
     // Check backup status and create alerts if needed (FAILED or LATE)
     try {
-      const server = await Server.findById(finalServerId);
       await BackupAlertService.checkBackupAndAlert(backup, server);
     } catch (error) {
       console.error('[Backups API] Error checking backup alerts:', error);
       // Continue even if alert creation fails
+    }
+
+    // Send a completion notification email for THIS backup regardless of
+    // status (OK or FAILED). This endpoint is used to record a backup
+    // reported from outside the app's own cron job (e.g. an external
+    // backup script), so it needs the same "always email" behavior.
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+      const emailResult = await EmailService.sendBackupCompletionEmail({
+        serverId: finalServerId,
+        serverName: server && server.name,
+        status: backup.status,
+        size: backup.size,
+        duration: backup.duration,
+        timestamp: backup.date,
+        adminEmail,
+        errorMessage: backup.status === 'FAILED' ? 'Backup process did not complete successfully' : null
+      });
+      console.log(`[Backups API] Completion email result for ${finalServerId}:`, emailResult);
+    } catch (error) {
+      console.error('[Backups API] Error sending backup completion email:', error);
     }
 
     res.status(201).json(backup);
@@ -549,12 +574,33 @@ router.put('/:id', async (req, res) => {
 
     // Check backup status and create alerts if needed (especially if status was updated)
     if (status !== undefined) {
+      const server = await Server.findOne({ server_id: backup.serverId });
+
       try {
-        const server = await Server.findById(backup.serverId);
         await BackupAlertService.checkBackupAndAlert(backup, server);
       } catch (error) {
         console.error('[Backups API] Error checking backup alerts:', error);
         // Continue even if alert creation fails
+      }
+
+      // Send a completion notification email whenever a backup's final
+      // status is reported this way (e.g. an external script creates a
+      // pending record, then PUTs the real result once it finishes).
+      try {
+        const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+        const emailResult = await EmailService.sendBackupCompletionEmail({
+          serverId: backup.serverId,
+          serverName: server && server.name,
+          status: backup.status,
+          size: backup.size,
+          duration: backup.duration,
+          timestamp: backup.date,
+          adminEmail,
+          errorMessage: backup.status === 'FAILED' ? 'Backup process did not complete successfully' : null
+        });
+        console.log(`[Backups API] Completion email result for ${backup.serverId}:`, emailResult);
+      } catch (error) {
+        console.error('[Backups API] Error sending backup completion email:', error);
       }
     }
 

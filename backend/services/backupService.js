@@ -52,6 +52,27 @@ async function checkBackupStatusAndCreateAlert(backup) {
   try {
     const { serverId, status } = backup;
 
+    // Send a daily completion email for THIS backup regardless of status
+    // (OK, FAILED or LATE) — separate from the CRITICAL-only alert email
+    // sent further below for FAILED/LATE.
+    try {
+      const server = await Server.findOne({ server_id: serverId });
+      const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+      const emailResult = await EmailService.sendBackupCompletionEmail({
+        serverId,
+        serverName: server && server.name,
+        status,
+        size: backup.size || 0,
+        duration: backup.duration || 0,
+        timestamp: backup.date,
+        adminEmail,
+        errorMessage: status === 'FAILED' ? 'Backup process did not complete successfully' : null
+      });
+      console.log(`[Backup Service] Completion email result for ${serverId}:`, emailResult);
+    } catch (emailError) {
+      console.error(`[Backup Service] Failed to send backup completion email for ${serverId}:`, emailError);
+    }
+
     if (status === 'OK') {
       // Resolve any existing backup-related alerts for this server
       await Alert.updateMany(
