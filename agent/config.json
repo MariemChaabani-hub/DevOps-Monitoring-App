@@ -6,8 +6,8 @@
   },
   "api": {
     "url": "http://backend.monitoring.svc.cluster.local:3000",
-    "timeout": 10,
-    "max_retries": 3,
+    "timeout": 30,
+    "max_retries": 5,
     "backoff_factor": 2.0
   },
   "collection": {
