@@ -20,7 +20,7 @@ class Config:
     # Retry Configuration
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", 3))
     RETRY_BACKOFF_FACTOR = float(os.getenv("RETRY_BACKOFF_FACTOR", 2.0))
-    TIMEOUT = int(os.getenv("TIMEOUT", 10))  # HTTP request timeout
+    TIMEOUT = int(os.getenv("TIMEOUT", 120))  # HTTP request timeout
     
     # Logging Configuration
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
