@@ -10,8 +10,6 @@ import logging
 import logging.handlers
 import json
 import os
-import queue
-import threading
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -147,15 +145,6 @@ class MonitoringAgent:
         self.collection_count = 0
         self.successful_sends = 0
         self.failed_sends = 0
-        self._stats_lock = threading.Lock()
-
-        # Metrics are handed off to a background sender thread through this
-        # queue so a slow/unreachable backend can never delay collection.
-        # Bounded + drop-oldest so a prolonged outage can't grow memory
-        # without bound; we'd rather send the freshest metrics anyway.
-        max_queue_size = behavior_config.get('max_queue_size', 20)
-        self.metrics_queue = queue.Queue(maxsize=max_queue_size)
-        self._sender_thread = None
 
         # Initialize sender with config
         try:
@@ -243,9 +232,7 @@ class MonitoringAgent:
     
     def _send_metrics(self, metrics: Dict[str, Any]) -> bool:
         """
-        Safely send metrics to API. This performs the actual (blocking)
-        HTTP call and is only ever invoked from the background sender
-        thread — never from the collection loop.
+        Safely send metrics to API.
 
         Args:
             metrics: Metrics dictionary to send
@@ -258,83 +245,31 @@ class MonitoringAgent:
             success, message = self.sender.send(metrics)
             elapsed = time.time() - send_start
 
-            with self._stats_lock:
-                if success:
-                    self.successful_sends += 1
-                else:
-                    self.failed_sends += 1
-
             if success:
+                self.successful_sends += 1
                 logger.info(f"[OK] {message} ({elapsed:.1f}s)")
             else:
+                self.failed_sends += 1
                 logger.warning(f"[FAIL] {message} ({elapsed:.1f}s)")
 
             return success
 
         except Exception as e:
-            with self._stats_lock:
-                self.failed_sends += 1
+            self.failed_sends += 1
             logger.error(f"[ERROR] Error sending metrics: {e}", exc_info=True)
             return False
-
-    def _sender_worker(self):
-        """
-        Background thread loop: pulls queued metrics and sends them one
-        at a time via the (blocking, retrying) sender. Runs independently
-        of the collection loop, so a slow or unreachable backend only
-        delays sending — it never delays the next collection cycle.
-        """
-        logger.info("[OK] Sender thread started")
-        while self.running:
-            try:
-                metrics = self.metrics_queue.get(timeout=1)
-            except queue.Empty:
-                continue
-
-            logger.info(f"[SEND] Picked up queued metric (queue size now: {self.metrics_queue.qsize()})")
-            self._send_metrics(metrics)
-            self.metrics_queue.task_done()
-
-        logger.debug("[STOP] Sender thread exiting")
-
-    def _enqueue_metrics(self, metrics: Dict[str, Any]) -> None:
-        """
-        Hand metrics off to the background sender thread without blocking.
-        If the queue is full (backend can't keep up), drop the oldest
-        pending item so the most recent metrics are prioritized.
-        """
-        try:
-            self.metrics_queue.put_nowait(metrics)
-        except queue.Full:
-            try:
-                self.metrics_queue.get_nowait()
-                self.metrics_queue.task_done()
-            except queue.Empty:
-                pass
-            try:
-                self.metrics_queue.put_nowait(metrics)
-            except queue.Full:
-                pass
-            logger.warning(
-                "[QUEUE] Send queue full - dropped oldest pending metric "
-                "(backend is slow or unreachable)"
-            )
 
     def _log_statistics(self):
         """Log periodic statistics."""
         if self.collection_count == 0:
             return
 
-        with self._stats_lock:
-            successful_sends = self.successful_sends
-            failed_sends = self.failed_sends
-        success_rate = (successful_sends / self.collection_count) * 100
+        success_rate = (self.successful_sends / self.collection_count) * 100
         logger.info(
             f"[STATS] "
             f"Collected: {self.collection_count} | "
-            f"Sent: {successful_sends} | "
-            f"Failed: {failed_sends} | "
-            f"Queued: {self.metrics_queue.qsize()} | "
+            f"Sent: {self.successful_sends} | "
+            f"Failed: {self.failed_sends} | "
             f"Success Rate: {success_rate:.1f}%"
         )
     
@@ -348,14 +283,6 @@ class MonitoringAgent:
             logger.error("[ERROR] API is not reachable and continue_if_api_down is False")
             sys.exit(1)
         
-        # Start the background sender thread. Collection below only ever
-        # enqueues metrics (non-blocking); this thread does the actual
-        # (potentially slow) HTTP calls independently.
-        self._sender_thread = threading.Thread(
-            target=self._sender_worker, name="metrics-sender", daemon=True
-        )
-        self._sender_thread.start()
-
         logger.info(f"[START] Starting collection loop ({self.collection_interval}s interval)")
         logger.info("Press Ctrl+C to stop\n")
 
@@ -371,8 +298,8 @@ class MonitoringAgent:
                     if metrics is None:
                         continue
 
-                    # 2. Hand off to the sender thread (never blocks)
-                    self._enqueue_metrics(metrics)
+                    # 2. Send metrics immediately
+                    self._send_metrics(metrics)
 
                     # 3. Log statistics periodically
                     current_time = time.time()
@@ -403,23 +330,14 @@ class MonitoringAgent:
         """Graceful shutdown with statistics."""
         self.running = False
 
-        # Give the sender thread a brief window to finish whatever it's
-        # currently sending before we report final stats.
-        if self._sender_thread is not None:
-            self._sender_thread.join(timeout=3)
-
-        with self._stats_lock:
-            successful_sends = self.successful_sends
-            failed_sends = self.failed_sends
-
         logger.info("\n" + "=" * 70)
         logger.info("[SHUTDOWN] MONITORING AGENT SHUTTING DOWN")
         logger.info(f"Total Collections: {self.collection_count}")
-        logger.info(f"Successful Sends: {successful_sends}")
-        logger.info(f"Failed Sends: {failed_sends}")
+        logger.info(f"Successful Sends: {self.successful_sends}")
+        logger.info(f"Failed Sends: {self.failed_sends}")
 
         if self.collection_count > 0:
-            success_rate = (successful_sends / self.collection_count) * 100
+            success_rate = (self.successful_sends / self.collection_count) * 100
             logger.info(f"Overall Success Rate: {success_rate:.1f}%")
 
         logger.info("=" * 70)
