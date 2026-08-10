@@ -130,10 +130,17 @@ class MonitoringAgent:
         behavior_config = config.get('behavior', {})
         server_config = config.get('server', {})
         
-        # Server identification (environment variables override config.json values)
-        self.server_id = os.getenv("MONITORING_SERVER_ID", server_config.get('id', 'unknown-server'))
-        self.server_name = os.getenv("MONITORING_SERVER_NAME", server_config.get('name', self.server_id))
-        self.server_location = os.getenv("MONITORING_SERVER_LOCATION", server_config.get('location', 'Unknown'))
+        # Server identification (environment variables override config.json
+        # values). `os.getenv(key, default)` only falls back to `default`
+        # when the variable is completely unset — if Kubernetes injects it
+        # as an empty string (e.g. from a blank ConfigMap/Secret key), the
+        # default is skipped and we'd end up with server_name = "". Using
+        # `os.getenv(key) or default` treats an empty string the same as
+        # unset, so config.json's server.name is always used as a real
+        # fallback.
+        self.server_id = os.getenv("MONITORING_SERVER_ID") or server_config.get('id', 'unknown-server')
+        self.server_name = os.getenv("MONITORING_SERVER_NAME") or server_config.get('name', self.server_id)
+        self.server_location = os.getenv("MONITORING_SERVER_LOCATION") or server_config.get('location', 'Unknown')
         
         self.api_url = api_config.get('url', 'http://localhost:3000')
         self.collection_interval = collection_config.get('interval', 5)

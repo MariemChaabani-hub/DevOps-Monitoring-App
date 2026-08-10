@@ -75,14 +75,14 @@ class SystemCollector:
             'uptime': SystemCollector.get_uptime(),
         }
         
-        # Add server identification if provided
-        if server_id:
-            metrics['server_id'] = server_id
-        if server_name:
-            metrics['server_name'] = server_name
-        if location:
-            metrics['location'] = location
-        
+        # Server identification: always included as keys (the backend
+        # requires server_id/server_name), even if a value ends up empty —
+        # that way a missing value is visible in the payload/logs instead
+        # of the key silently disappearing.
+        metrics['server_id'] = server_id or ''
+        metrics['server_name'] = server_name or ''
+        metrics['location'] = location or ''
+
         return metrics
     
     @staticmethod
