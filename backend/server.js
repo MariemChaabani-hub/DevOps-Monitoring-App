@@ -237,9 +237,10 @@ app.post('/metrics', async (req, res) => {
       disk_percent: metric.disk_percent
     };
     // Detected services list sent by the agent (systemctl-based detection).
-    // Only overwrite when the agent actually sent an array, so servers
-    // running an older agent build keep whatever was last detected.
-    if (Array.isArray(metric.services)) {
+    // Only overwrite when the agent actually sent a non-empty array, so a
+    // transient detection failure (agent sends []) doesn't wipe out the
+    // last known-good list.
+    if (Array.isArray(metric.services) && metric.services.length > 0) {
       server.services = metric.services;
     }
     await server.save();
