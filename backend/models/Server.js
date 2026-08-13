@@ -52,6 +52,10 @@ const ServerSchema = new mongoose.Schema({
       default: 0
     }
   },
+  services: {
+    type: [String],
+    default: []
+  },
   created_at: {
     type: Date,
     default: Date.now

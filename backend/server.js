@@ -236,6 +236,12 @@ app.post('/metrics', async (req, res) => {
       ram_percent: metric.ram_percent,
       disk_percent: metric.disk_percent
     };
+    // Detected services list sent by the agent (systemctl-based detection).
+    // Only overwrite when the agent actually sent an array, so servers
+    // running an older agent build keep whatever was last detected.
+    if (Array.isArray(metric.services)) {
+      server.services = metric.services;
+    }
     await server.save();
 
     // Check and generate alerts for CPU, RAM and Disk (handles WARNING and

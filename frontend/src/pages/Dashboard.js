@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import ServerList from '../components/ServerList';
 import AlertsPanel from '../components/AlertsPanel';
 import MetricsPanel from '../components/MetricsPanel';
+import ServicesPanel from '../components/ServicesPanel';
 import HistoricalCharts from '../components/HistoricalCharts';
 import './Dashboard.css';
 
@@ -184,7 +185,7 @@ const Dashboard = () => {
         </div>
 
         <div className="full-width">
-          <AlertsPanel 
+          <AlertsPanel
             alerts={alerts}
             servers={servers}
           />
@@ -192,7 +193,15 @@ const Dashboard = () => {
 
         <div className="full-width">
           {selectedServer && (
-            <HistoricalCharts 
+            <ServicesPanel
+              server={selectedServer}
+            />
+          )}
+        </div>
+
+        <div className="full-width">
+          {selectedServer && (
+            <HistoricalCharts
               serverId={selectedServer.server_id || selectedServer._id}
             />
           )}

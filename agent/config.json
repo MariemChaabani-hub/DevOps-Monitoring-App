@@ -1,15 +1,15 @@
 {
-  "server": {
-    "id": "vps-debian-ovh",
-    "name": "VPS Debian OVH",
-    "location": "OVH VPS"
+ "server": {
+    "id": "default-server",
+    "name": "Monitoring Agent",
+    "location": "Local PC"
   },
   "api": {
-    "url":"http://backend:3000",
+    "url": "http://localhost:3000",
     "timeout": 120,
     "max_retries": 3,
     "backoff_factor": 1.0
-},
+  },
   "collection": {
     "interval": 5,
     "enabled_metrics": [

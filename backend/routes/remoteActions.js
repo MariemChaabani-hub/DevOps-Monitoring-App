@@ -35,11 +35,73 @@ const execCommand = (command, timeoutMs = 30000) => {
 };
 
 // ============================================================
+// Dynamic services: name validation + SSH-based control for any
+// service name the agent actually detected on that server (via
+// `systemctl list-units`), instead of the fixed legacy list below.
+// ============================================================
+const SERVICE_NAME_REGEX = /^[a-zA-Z0-9_.@-]+$/;
+
+// Runs `systemctl <action> <serviceName>` on the target server over SSH.
+// Only called after the caller has already validated serviceName against
+// both SERVICE_NAME_REGEX and the server's own detected `services` list,
+// so it's safe to interpolate into the remote command.
+const runDynamicServiceCommand = async (server, serviceName, action) => {
+  if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
+    const err = new Error('Informations SSH incomplètes');
+    err.httpStatus = 400;
+    err.payload = {
+      error: 'Informations SSH incomplètes',
+      message: 'Le serveur doit avoir ip_address, ssh_username et ssh_password configurés pour gérer ce service à distance',
+      missing_fields: {
+        ip_address: !server.ip_address,
+        ssh_username: !server.ssh_username,
+        ssh_password: !server.ssh_password
+      }
+    };
+    throw err;
+  }
+
+  const ssh = new NodeSSH();
+  try {
+    await ssh.connect({
+      host: server.ip_address,
+      username: server.ssh_username,
+      password: server.ssh_password,
+      port: server.ssh_port || 22
+    });
+    const result = await ssh.execCommand(`sudo systemctl ${action} ${serviceName}`);
+    await ssh.dispose();
+
+    if (result.code !== 0) {
+      const err = new Error(`Échec de la commande systemctl ${action}`);
+      err.httpStatus = 500;
+      err.payload = {
+        error: `Échec de l'exécution: ${result.stderr || result.stdout || 'commande terminée avec une erreur'}`,
+        stderr: result.stderr,
+        service_name: serviceName,
+        command: `sudo systemctl ${action} ${serviceName}`,
+        server_id: server.server_id
+      };
+      throw err;
+    }
+
+    return { stdout: result.stdout, stderr: result.stderr };
+  } catch (err) {
+    if (err.httpStatus) throw err;
+    const sshErr = new Error(err.message);
+    sshErr.httpStatus = 500;
+    sshErr.payload = { error: `Erreur SSH: ${err.message}` };
+    throw sshErr;
+  }
+};
+
+// ============================================================
 // Helper: Verify the real status of a service after an action
 // Returns { status: 'active'|'inactive'|'unknown', raw: string }
-// Services run as Docker containers (except Docker daemon itself)
+// Legacy services run as Docker containers (except Apache); services
+// dynamically detected by the agent are checked over SSH instead.
 // ============================================================
-const verifyServiceStatus = async (serviceName) => {
+const verifyServiceStatus = async (serviceName, server) => {
   // Map service names to their Docker container names
   const containerNames = {
     'pm2': 'backend',
@@ -62,7 +124,32 @@ const verifyServiceStatus = async (serviceName) => {
   }
 
   const containerName = containerNames[serviceName];
-  if (!containerName) return { status: 'unknown', raw: 'unsupported service' };
+
+  // Dynamically detected service: verify over SSH on the target server
+  if (!containerName) {
+    if (
+      server &&
+      server.ip_address && server.ssh_username && server.ssh_password &&
+      Array.isArray(server.services) && server.services.includes(serviceName)
+    ) {
+      const ssh = new NodeSSH();
+      try {
+        await ssh.connect({
+          host: server.ip_address,
+          username: server.ssh_username,
+          password: server.ssh_password,
+          port: server.ssh_port || 22
+        });
+        const result = await ssh.execCommand(`systemctl is-active ${serviceName}`);
+        await ssh.dispose();
+        const status = (result.stdout || '').trim().toLowerCase();
+        return { status: status === 'active' ? 'active' : 'inactive', raw: result.stdout || result.stderr };
+      } catch (err) {
+        return { status: 'unknown', raw: err.message || 'verification failed' };
+      }
+    }
+    return { status: 'unknown', raw: 'unsupported service' };
+  }
 
   try {
     const { stdout } = await execCommand(
@@ -213,51 +300,81 @@ router.post('/:server_id/restart-service',
       };
 
       const service = supportedServices[service_name];
-      if (!service) {
-        return res.status(400).json({
-          error: 'Service non supporté',
-          supported_services: Object.keys(supportedServices)
-        });
-      }
 
-      console.log(`[Remote Action] Redémarrage du service ${service.name} sur le serveur ${server_id}`);
+      // Legacy hardcoded services (pm2/nginx/mongodb/apache) keep their
+      // exact existing local-docker/systemctl behavior.
+      if (service) {
+        console.log(`[Remote Action] Redémarrage du service ${service.name} sur le serveur ${server_id}`);
 
-      // REAL EXECUTION via child_process
-      let execResult;
-      try {
-        execResult = await execCommand(service.command);
-      } catch (execError) {
-        const failResult = {
-          success: false,
-          error: `Échec de l'exécution: ${execError.message}`,
-          stderr: execError.stderr,
+        let execResult;
+        try {
+          execResult = await execCommand(service.command);
+        } catch (execError) {
+          const failResult = {
+            success: false,
+            error: `Échec de l'exécution: ${execError.message}`,
+            stderr: execError.stderr,
+            service_name: service.name,
+            command: service.command,
+            server_id: server_id,
+            timestamp: new Date()
+          };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(500).json(failResult);
+        }
+
+        const verifiedStatus = await verifyServiceStatus(service_name, server);
+
+        const result = {
+          success: true,
+          message: `Service ${service.name} redémarré avec succès`,
           service_name: service.name,
           command: service.command,
           server_id: server_id,
+          verified_status: verifiedStatus.status,
+          command_output: execResult.stdout,
           timestamp: new Date()
         };
-        await logAuditAction(req.auditData, failResult);
-        return res.status(500).json(failResult);
+
+        await logAuditAction(req.auditData, result);
+        return res.json(result);
       }
 
-      // VERIFY real status after restart
-      const verifiedStatus = await verifyServiceStatus(service_name);
+      // Dynamic service: any name the agent actually detected on this
+      // server via `systemctl list-units`, controlled over SSH.
+      if (!SERVICE_NAME_REGEX.test(service_name)) {
+        return res.status(400).json({ error: 'Nom de service invalide' });
+      }
+      if (!Array.isArray(server.services) || !server.services.includes(service_name)) {
+        return res.status(400).json({
+          error: 'Service non détecté sur ce serveur',
+          detected_services: server.services || []
+        });
+      }
 
-      const result = {
-        success: true,
-        message: `Service ${service.name} redémarré avec succès`,
-        service_name: service.name,
-        command: service.command,
-        server_id: server_id,
-        verified_status: verifiedStatus.status,
-        command_output: execResult.stdout,
-        timestamp: new Date()
-      };
+      console.log(`[Remote Action] Redémarrage dynamique du service ${service_name} sur le serveur ${server_id} via SSH`);
 
-      // Logger l'action
-      await logAuditAction(req.auditData, result);
+      try {
+        const execResult = await runDynamicServiceCommand(server, service_name, 'restart');
+        const verifiedStatus = await verifyServiceStatus(service_name, server);
 
-      res.json(result);
+        const result = {
+          success: true,
+          message: `Service ${service_name} redémarré avec succès`,
+          service_name: service_name,
+          command: `sudo systemctl restart ${service_name}`,
+          server_id: server_id,
+          verified_status: verifiedStatus.status,
+          command_output: execResult.stdout,
+          timestamp: new Date()
+        };
+        await logAuditAction(req.auditData, result);
+        return res.json(result);
+      } catch (dynamicError) {
+        const failResult = { success: false, ...(dynamicError.payload || { error: dynamicError.message }) };
+        await logAuditAction(req.auditData, failResult);
+        return res.status(dynamicError.httpStatus || 500).json(failResult);
+      }
 
     } catch (error) {
       console.error('[Remote Action] Erreur lors du redémarrage du service:', error);
@@ -511,51 +628,78 @@ router.post('/:server_id/start-service',
       };
 
       const service = supportedServices[service_name];
-      if (!service) {
-        return res.status(400).json({
-          error: 'Service non supporté',
-          supported_services: Object.keys(supportedServices)
-        });
-      }
 
-      console.log(`[Remote Action] Démarrage du service ${service.name} sur le serveur ${server_id}`);
+      if (service) {
+        console.log(`[Remote Action] Démarrage du service ${service.name} sur le serveur ${server_id}`);
 
-      // REAL EXECUTION via child_process
-      let execResult;
-      try {
-        execResult = await execCommand(service.command);
-      } catch (execError) {
-        const failResult = {
-          success: false,
-          error: `Échec de l'exécution: ${execError.message}`,
-          stderr: execError.stderr,
+        let execResult;
+        try {
+          execResult = await execCommand(service.command);
+        } catch (execError) {
+          const failResult = {
+            success: false,
+            error: `Échec de l'exécution: ${execError.message}`,
+            stderr: execError.stderr,
+            service_name: service.name,
+            command: service.command,
+            server_id: server_id,
+            timestamp: new Date()
+          };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(500).json(failResult);
+        }
+
+        const verifiedStatus = await verifyServiceStatus(service_name, server);
+
+        const result = {
+          success: true,
+          message: `Service ${service.name} démarré avec succès`,
           service_name: service.name,
           command: service.command,
           server_id: server_id,
+          verified_status: verifiedStatus.status,
+          command_output: execResult.stdout,
           timestamp: new Date()
         };
-        await logAuditAction(req.auditData, failResult);
-        return res.status(500).json(failResult);
+
+        await logAuditAction(req.auditData, result);
+        return res.json(result);
       }
 
-      // VERIFY real status after start
-      const verifiedStatus = await verifyServiceStatus(service_name);
+      // Dynamic service, controlled over SSH
+      if (!SERVICE_NAME_REGEX.test(service_name)) {
+        return res.status(400).json({ error: 'Nom de service invalide' });
+      }
+      if (!Array.isArray(server.services) || !server.services.includes(service_name)) {
+        return res.status(400).json({
+          error: 'Service non détecté sur ce serveur',
+          detected_services: server.services || []
+        });
+      }
 
-      const result = {
-        success: true,
-        message: `Service ${service.name} démarré avec succès`,
-        service_name: service.name,
-        command: service.command,
-        server_id: server_id,
-        verified_status: verifiedStatus.status,
-        command_output: execResult.stdout,
-        timestamp: new Date()
-      };
+      console.log(`[Remote Action] Démarrage dynamique du service ${service_name} sur le serveur ${server_id} via SSH`);
 
-      // Logger l'action
-      await logAuditAction(req.auditData, result);
+      try {
+        const execResult = await runDynamicServiceCommand(server, service_name, 'start');
+        const verifiedStatus = await verifyServiceStatus(service_name, server);
 
-      res.json(result);
+        const result = {
+          success: true,
+          message: `Service ${service_name} démarré avec succès`,
+          service_name: service_name,
+          command: `sudo systemctl start ${service_name}`,
+          server_id: server_id,
+          verified_status: verifiedStatus.status,
+          command_output: execResult.stdout,
+          timestamp: new Date()
+        };
+        await logAuditAction(req.auditData, result);
+        return res.json(result);
+      } catch (dynamicError) {
+        const failResult = { success: false, ...(dynamicError.payload || { error: dynamicError.message }) };
+        await logAuditAction(req.auditData, failResult);
+        return res.status(dynamicError.httpStatus || 500).json(failResult);
+      }
 
     } catch (error) {
       console.error('[Remote Action] Erreur lors du démarrage du service:', error);
@@ -599,51 +743,78 @@ router.post('/:server_id/stop-service',
       };
 
       const service = supportedServices[service_name];
-      if (!service) {
-        return res.status(400).json({
-          error: 'Service non supporté',
-          supported_services: Object.keys(supportedServices)
-        });
-      }
 
-      console.log(`[Remote Action] Arrêt du service ${service.name} sur le serveur ${server_id}`);
+      if (service) {
+        console.log(`[Remote Action] Arrêt du service ${service.name} sur le serveur ${server_id}`);
 
-      // REAL EXECUTION via child_process
-      let execResult;
-      try {
-        execResult = await execCommand(service.command);
-      } catch (execError) {
-        const failResult = {
-          success: false,
-          error: `Échec de l'exécution: ${execError.message}`,
-          stderr: execError.stderr,
+        let execResult;
+        try {
+          execResult = await execCommand(service.command);
+        } catch (execError) {
+          const failResult = {
+            success: false,
+            error: `Échec de l'exécution: ${execError.message}`,
+            stderr: execError.stderr,
+            service_name: service.name,
+            command: service.command,
+            server_id: server_id,
+            timestamp: new Date()
+          };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(500).json(failResult);
+        }
+
+        const verifiedStatus = await verifyServiceStatus(service_name, server);
+
+        const result = {
+          success: true,
+          message: `Service ${service.name} arrêté avec succès`,
           service_name: service.name,
           command: service.command,
           server_id: server_id,
+          verified_status: verifiedStatus.status,
+          command_output: execResult.stdout,
           timestamp: new Date()
         };
-        await logAuditAction(req.auditData, failResult);
-        return res.status(500).json(failResult);
+
+        await logAuditAction(req.auditData, result);
+        return res.json(result);
       }
 
-      // VERIFY real status after stop
-      const verifiedStatus = await verifyServiceStatus(service_name);
+      // Dynamic service, controlled over SSH
+      if (!SERVICE_NAME_REGEX.test(service_name)) {
+        return res.status(400).json({ error: 'Nom de service invalide' });
+      }
+      if (!Array.isArray(server.services) || !server.services.includes(service_name)) {
+        return res.status(400).json({
+          error: 'Service non détecté sur ce serveur',
+          detected_services: server.services || []
+        });
+      }
 
-      const result = {
-        success: true,
-        message: `Service ${service.name} arrêté avec succès`,
-        service_name: service.name,
-        command: service.command,
-        server_id: server_id,
-        verified_status: verifiedStatus.status,
-        command_output: execResult.stdout,
-        timestamp: new Date()
-      };
+      console.log(`[Remote Action] Arrêt dynamique du service ${service_name} sur le serveur ${server_id} via SSH`);
 
-      // Logger l'action
-      await logAuditAction(req.auditData, result);
+      try {
+        const execResult = await runDynamicServiceCommand(server, service_name, 'stop');
+        const verifiedStatus = await verifyServiceStatus(service_name, server);
 
-      res.json(result);
+        const result = {
+          success: true,
+          message: `Service ${service_name} arrêté avec succès`,
+          service_name: service_name,
+          command: `sudo systemctl stop ${service_name}`,
+          server_id: server_id,
+          verified_status: verifiedStatus.status,
+          command_output: execResult.stdout,
+          timestamp: new Date()
+        };
+        await logAuditAction(req.auditData, result);
+        return res.json(result);
+      } catch (dynamicError) {
+        const failResult = { success: false, ...(dynamicError.payload || { error: dynamicError.message }) };
+        await logAuditAction(req.auditData, failResult);
+        return res.status(dynamicError.httpStatus || 500).json(failResult);
+      }
 
     } catch (error) {
       console.error('[Remote Action] Erreur lors de l\'arrêt du service:', error);
@@ -672,12 +843,15 @@ router.get('/:server_id/services-status',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // REAL status check for all services
-      const serviceNames = ['pm2', 'nginx', 'mongodb', 'apache'];
+      // REAL status check for the legacy services plus every service the
+      // agent actually detected as active on this server
+      const legacyNames = ['pm2', 'nginx', 'mongodb', 'apache'];
+      const detectedNames = Array.isArray(server.services) ? server.services : [];
+      const serviceNames = [...new Set([...legacyNames, ...detectedNames])];
       const servicesStatus = {};
 
       for (const svcName of serviceNames) {
-        const verified = await verifyServiceStatus(svcName);
+        const verified = await verifyServiceStatus(svcName, server);
         servicesStatus[svcName] = {
           status: verified.status === 'active' ? 'running' :
             verified.status === 'inactive' ? 'stopped' : 'unknown',

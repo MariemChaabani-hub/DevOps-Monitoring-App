@@ -3,9 +3,10 @@ System metrics collector module.
 Collects system information using psutil and returns as JSON.
 """
 import json
+import subprocess
 import psutil
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 class SystemCollector:
@@ -40,6 +41,39 @@ class SystemCollector:
         }
     
     @staticmethod
+    def detect_active_services() -> List[str]:
+        """
+        Detect all active systemd services on this host.
+
+        Returns:
+            List of active service names (without the '.service' suffix).
+            Returns an empty list on non-systemd hosts or if detection
+            fails for any reason — this must never crash metric collection.
+        """
+        try:
+            result = subprocess.run(
+                ['systemctl', 'list-units', '--type=service', '--state=active', '--no-pager', '--plain'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode != 0:
+                return []
+
+            services = []
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line or line.startswith('UNIT') or line.startswith('*'):
+                    continue
+                unit = line.split()[0]
+                if unit.endswith('.service'):
+                    services.append(unit[:-len('.service')])
+            return services
+
+        except (subprocess.SubprocessError, OSError, FileNotFoundError):
+            return []
+
+    @staticmethod
     def get_uptime() -> Dict[str, Any]:
         """Get system uptime information."""
         uptime_seconds = int(datetime.now().timestamp() - psutil.boot_time())
@@ -73,8 +107,9 @@ class SystemCollector:
             'disk_percent': SystemCollector.get_disk_percent(),
             'network_io': SystemCollector.get_network_io(),
             'uptime': SystemCollector.get_uptime(),
+            'services': SystemCollector.detect_active_services(),
         }
-        
+
         # Server identification: always included as keys (the backend
         # requires server_id/server_name), even if a value ends up empty —
         # that way a missing value is visible in the payload/logs instead
