@@ -8,7 +8,6 @@
  */
 
 const express = require('express');
-const { exec } = require('child_process');
 const { NodeSSH } = require('node-ssh');
 const router = express.Router();
 const Server = require('../models/Server');
@@ -17,34 +16,18 @@ const EmailService = require('../services/emailService');
 const User = require('../models/User');
 
 // ============================================================
-// Helper: Execute a shell command and return { stdout, stderr }
-// ============================================================
-const execCommand = (command, timeoutMs = 30000) => {
-  return new Promise((resolve, reject) => {
-    console.log(`[Remote Action] Executing command: ${command}`);
-    exec(command, { timeout: timeoutMs }, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`[Remote Action] Command failed: ${error.message}`);
-        console.error(`[Remote Action] stderr: ${stderr}`);
-        return reject({ message: error.message, stderr: stderr.trim(), code: error.code });
-      }
-      console.log(`[Remote Action] Command succeeded - stdout: ${stdout.trim()}`);
-      resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-    });
-  });
-};
-
-// ============================================================
-// Dynamic services: name validation + SSH-based control for any
-// service name the agent actually detected on that server (via
-// `systemctl list-units`), instead of the fixed legacy list below.
+// SSH command execution. Every service action (restart/start/stop) and
+// every status check runs against the target server's own credentials
+// stored in MongoDB (ip_address, ssh_username, ssh_password, ssh_port),
+// for any service name — nothing here assumes services run as local
+// Docker containers on the backend's own host.
 // ============================================================
 const SERVICE_NAME_REGEX = /^[a-zA-Z0-9_.@-]+$/;
 
-// Runs an arbitrary command on the target server over SSH, requiring SSH
-// credentials to be configured on that server document. Throws an Error
-// with `httpStatus`/`payload` set so route handlers can forward it as-is.
-const runSshCommand = async (server, command) => {
+// Low-level: connect via SSH and run `command`, returning the raw result
+// without throwing on a non-zero exit code — some commands (like
+// `systemctl is-active`) use the exit code to signal state, not failure.
+const execSshRaw = async (server, command) => {
   if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
     const err = new Error('Informations SSH incomplètes');
     err.httpStatus = 400;
@@ -70,20 +53,7 @@ const runSshCommand = async (server, command) => {
     });
     const result = await ssh.execCommand(command);
     await ssh.dispose();
-
-    if (result.code !== 0) {
-      const err = new Error(`Échec de la commande: ${command}`);
-      err.httpStatus = 500;
-      err.payload = {
-        error: `Échec de l'exécution: ${result.stderr || result.stdout || 'commande terminée avec une erreur'}`,
-        stderr: result.stderr,
-        command,
-        server_id: server.server_id
-      };
-      throw err;
-    }
-
-    return { stdout: result.stdout, stderr: result.stderr };
+    return result; // { stdout, stderr, code, signal }
   } catch (err) {
     if (err.httpStatus) throw err;
     const sshErr = new Error(err.message);
@@ -93,99 +63,66 @@ const runSshCommand = async (server, command) => {
   }
 };
 
-// Runs `systemctl <action> <serviceName>` on the target server over SSH.
-// Only called after the caller has already validated serviceName against
-// both SERVICE_NAME_REGEX and the server's own detected `services` list,
-// so it's safe to interpolate into the remote command.
-const runDynamicServiceCommand = (server, serviceName, action) =>
-  runSshCommand(server, `sudo systemctl ${action} ${serviceName}`);
+// Runs a command over SSH and throws if it exits non-zero — for commands
+// where a non-zero exit genuinely means the action failed (restart/stop/
+// start). Status checks use execSshRaw directly, since their exit code
+// signals service state, not command failure.
+const runSshCommand = async (server, command) => {
+  const result = await execSshRaw(server, command);
+  if (result.code !== 0) {
+    const err = new Error(`Échec de la commande: ${command}`);
+    err.httpStatus = 500;
+    err.payload = {
+      error: `Échec de l'exécution: ${result.stderr || result.stdout || 'commande terminée avec une erreur'}`,
+      stderr: result.stderr,
+      command,
+      server_id: server.server_id
+    };
+    throw err;
+  }
+  return { stdout: result.stdout, stderr: result.stderr };
+};
+
+// Builds the command for a service action. PM2 is a process manager, not
+// a systemd unit, so it's special-cased to `pm2 <action> all`; every
+// other service name (nginx, apache2, mongod, mysql, postgresql, redis,
+// docker, ...) runs through systemctl.
+const buildServiceActionCommand = (serviceName, action) =>
+  serviceName === 'pm2' ? `pm2 ${action} all` : `sudo systemctl ${action} ${serviceName}`;
 
 // ============================================================
-// Helper: Verify the real status of a service after an action
+// Helper: Verify the real status of a service after an action, checked
+// over SSH on the target server for any service name.
 // Returns { status: 'active'|'inactive'|'unknown', raw: string }
-// Legacy services run as Docker containers (except Apache); services
-// dynamically detected by the agent are checked over SSH instead.
 // ============================================================
 const verifyServiceStatus = async (serviceName, server) => {
-  // Map service names to their Docker container names
-  const containerNames = {
-    'nginx': 'frontend',
-    'mongodb': 'mongodb'
-  };
+  if (!server || !server.ip_address || !server.ssh_username || !server.ssh_password) {
+    return { status: 'unknown', raw: 'Informations SSH incomplètes' };
+  }
 
-  // PM2 is checked over SSH on the target server, like every other
-  // dynamically-controlled service — not via a local Docker container.
+  // PM2 is a process manager, not a systemd unit — checked via `pm2 jlist`
   if (serviceName === 'pm2') {
-    if (!server || !server.ip_address || !server.ssh_username || !server.ssh_password) {
-      return { status: 'unknown', raw: 'Informations SSH incomplètes' };
-    }
     try {
-      const { stdout } = await runSshCommand(server, 'pm2 jlist');
+      const result = await execSshRaw(server, 'pm2 jlist');
       let isOnline = false;
       try {
-        const processes = JSON.parse(stdout);
+        const processes = JSON.parse(result.stdout);
         isOnline = Array.isArray(processes) && processes.some(p => p.pm2_env && p.pm2_env.status === 'online');
       } catch (jsonErr) {
-        isOnline = stdout.includes('"status":"online"') || stdout.includes("'status': 'online'");
+        isOnline = result.stdout.includes('"status":"online"') || result.stdout.includes("'status': 'online'");
       }
-      return { status: isOnline ? 'active' : 'inactive', raw: stdout };
+      return { status: isOnline ? 'active' : 'inactive', raw: result.stdout || result.stderr };
     } catch (err) {
       return { status: 'unknown', raw: (err.payload && err.payload.error) || err.message || 'verification failed' };
     }
   }
 
-  // Apache uses systemctl
-  if (serviceName === 'apache' || serviceName === 'apache2') {
-    try {
-      const { stdout } = await execCommand('systemctl is-active apache2', 10000);
-      const status = stdout.trim().toLowerCase();
-      return { status: status === 'active' ? 'active' : 'inactive', raw: stdout };
-    } catch (err) {
-      if (err.stderr && err.stderr.includes('inactive')) {
-        return { status: 'inactive', raw: 'inactive' };
-      }
-      return { status: 'unknown', raw: err.message || 'verification failed' };
-    }
-  }
-
-  const containerName = containerNames[serviceName];
-
-  // Dynamically detected service: verify over SSH on the target server
-  if (!containerName) {
-    if (
-      server &&
-      server.ip_address && server.ssh_username && server.ssh_password &&
-      Array.isArray(server.services) && server.services.includes(serviceName)
-    ) {
-      const ssh = new NodeSSH();
-      try {
-        await ssh.connect({
-          host: server.ip_address,
-          username: server.ssh_username,
-          password: server.ssh_password,
-          port: server.ssh_port || 22
-        });
-        const result = await ssh.execCommand(`systemctl is-active ${serviceName}`);
-        await ssh.dispose();
-        const status = (result.stdout || '').trim().toLowerCase();
-        return { status: status === 'active' ? 'active' : 'inactive', raw: result.stdout || result.stderr };
-      } catch (err) {
-        return { status: 'unknown', raw: err.message || 'verification failed' };
-      }
-    }
-    return { status: 'unknown', raw: 'unsupported service' };
-  }
-
   try {
-    const { stdout } = await execCommand(
-      `docker inspect --format='{{.State.Running}}' ${containerName}`, 10000
-    );
-    const isRunning = stdout.trim().toLowerCase() === 'true';
-
-    return { status: isRunning ? 'active' : 'inactive', raw: stdout };
+    const result = await execSshRaw(server, `sudo systemctl is-active ${serviceName}`);
+    const status = (result.stdout || '').trim().toLowerCase();
+    return { status: status === 'active' ? 'active' : 'inactive', raw: result.stdout || result.stderr };
   } catch (err) {
-    // Container might not exist or docker not running
-    return { status: 'unknown', raw: err.message || 'verification failed' };
+    return { status: 'unknown', raw: (err.payload && err.payload.error) || err.message || 'verification failed' };
   }
 };
 
@@ -267,155 +204,75 @@ const logAuditAction = async (auditData, result) => {
   }
 };
 
+// ============================================================
+// Shared implementation for restart-service / start-service / stop-service.
+// Works for ANY service name on ANY server that has SSH credentials
+// stored in MongoDB — nginx, apache2, mongod, mysql, postgresql, redis,
+// docker, or anything else actually installed on that server.
+// ============================================================
+const SERVICE_ACTION_LABELS = {
+  restart: 'redémarré',
+  start: 'démarré',
+  stop: 'arrêté'
+};
+
+const handleServiceAction = (action) => async (req, res) => {
+  try {
+    const { server_id } = req.params;
+    const { service_name } = req.body;
+
+    if (!service_name) {
+      return res.status(400).json({ error: 'service_name est requis' });
+    }
+    if (!SERVICE_NAME_REGEX.test(service_name)) {
+      return res.status(400).json({ error: 'Nom de service invalide' });
+    }
+
+    const server = await Server.findOne({ server_id });
+    if (!server) {
+      return res.status(404).json({ error: 'Serveur non trouvé' });
+    }
+
+    const command = buildServiceActionCommand(service_name, action);
+    console.log(`[Remote Action] ${action} du service ${service_name} sur le serveur ${server_id} via SSH`);
+
+    try {
+      const execResult = await runSshCommand(server, command);
+      const verifiedStatus = await verifyServiceStatus(service_name, server);
+
+      const result = {
+        success: true,
+        message: `Service ${service_name} ${SERVICE_ACTION_LABELS[action]} avec succès`,
+        service_name,
+        command,
+        server_id,
+        verified_status: verifiedStatus.status,
+        command_output: execResult.stdout,
+        timestamp: new Date()
+      };
+      await logAuditAction(req.auditData, result);
+      return res.json(result);
+    } catch (sshError) {
+      const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
+      await logAuditAction(req.auditData, failResult);
+      return res.status(sshError.httpStatus || 500).json(failResult);
+    }
+
+  } catch (error) {
+    console.error(`[Remote Action] Erreur lors de l'action ${action} sur le service:`, error);
+    const result = { success: false, error: error.message };
+    await logAuditAction(req.auditData, result);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 /**
  * Redémarrage de services spécifiques
  */
 router.post('/:server_id/restart-service',
   requireAdmin,
   auditAction('RESTART_SERVICE', 'SERVICE'),
-  async (req, res) => {
-    try {
-      const { server_id } = req.params;
-      const { service_name, force = false } = req.body;
-
-      if (!service_name) {
-        return res.status(400).json({
-          error: 'service_name est requis',
-          supported_services: ['pm2', 'nginx', 'mongodb', 'apache', 'apache2']
-        });
-      }
-
-      // Vérifier que le serveur existe
-      const server = await Server.findOne({ server_id });
-      if (!server) {
-        return res.status(404).json({ error: 'Serveur non trouvé' });
-      }
-
-      // PM2 is controlled over SSH on the target server, exactly like the
-      // dynamically-detected services below — not via a local Docker
-      // container, which only worked when the backend ran alongside the
-      // app it was managing.
-      if (service_name === 'pm2') {
-        console.log(`[Remote Action] Redémarrage PM2 sur le serveur ${server_id} via SSH`);
-        try {
-          const execResult = await runSshCommand(server, 'pm2 restart all');
-          const verifiedStatus = await verifyServiceStatus('pm2', server);
-
-          const result = {
-            success: true,
-            message: 'Service PM2 redémarré avec succès',
-            service_name: 'pm2',
-            command: 'pm2 restart all',
-            server_id: server_id,
-            verified_status: verifiedStatus.status,
-            command_output: execResult.stdout,
-            timestamp: new Date()
-          };
-          await logAuditAction(req.auditData, result);
-          return res.json(result);
-        } catch (sshError) {
-          const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
-          await logAuditAction(req.auditData, failResult);
-          return res.status(sshError.httpStatus || 500).json(failResult);
-        }
-      }
-
-      // Services supportés — containers Docker (sauf Apache)
-      const supportedServices = {
-        'nginx': { name: 'Nginx (Frontend)', command: 'docker restart frontend' },
-        'mongodb': { name: 'MongoDB', command: 'docker restart mongodb' },
-        'apache': { name: 'Apache', command: 'sudo systemctl restart apache2' },
-        'apache2': { name: 'Apache', command: 'sudo systemctl restart apache2' }
-      };
-
-      const service = supportedServices[service_name];
-
-      // Legacy hardcoded services (pm2/nginx/mongodb/apache) keep their
-      // exact existing local-docker/systemctl behavior.
-      if (service) {
-        console.log(`[Remote Action] Redémarrage du service ${service.name} sur le serveur ${server_id}`);
-
-        let execResult;
-        try {
-          execResult = await execCommand(service.command);
-        } catch (execError) {
-          const failResult = {
-            success: false,
-            error: `Échec de l'exécution: ${execError.message}`,
-            stderr: execError.stderr,
-            service_name: service.name,
-            command: service.command,
-            server_id: server_id,
-            timestamp: new Date()
-          };
-          await logAuditAction(req.auditData, failResult);
-          return res.status(500).json(failResult);
-        }
-
-        const verifiedStatus = await verifyServiceStatus(service_name, server);
-
-        const result = {
-          success: true,
-          message: `Service ${service.name} redémarré avec succès`,
-          service_name: service.name,
-          command: service.command,
-          server_id: server_id,
-          verified_status: verifiedStatus.status,
-          command_output: execResult.stdout,
-          timestamp: new Date()
-        };
-
-        await logAuditAction(req.auditData, result);
-        return res.json(result);
-      }
-
-      // Dynamic service: any name the agent actually detected on this
-      // server via `systemctl list-units`, controlled over SSH.
-      if (!SERVICE_NAME_REGEX.test(service_name)) {
-        return res.status(400).json({ error: 'Nom de service invalide' });
-      }
-      if (!Array.isArray(server.services) || !server.services.includes(service_name)) {
-        return res.status(400).json({
-          error: 'Service non détecté sur ce serveur',
-          detected_services: server.services || []
-        });
-      }
-
-      console.log(`[Remote Action] Redémarrage dynamique du service ${service_name} sur le serveur ${server_id} via SSH`);
-
-      try {
-        const execResult = await runDynamicServiceCommand(server, service_name, 'restart');
-        const verifiedStatus = await verifyServiceStatus(service_name, server);
-
-        const result = {
-          success: true,
-          message: `Service ${service_name} redémarré avec succès`,
-          service_name: service_name,
-          command: `sudo systemctl restart ${service_name}`,
-          server_id: server_id,
-          verified_status: verifiedStatus.status,
-          command_output: execResult.stdout,
-          timestamp: new Date()
-        };
-        await logAuditAction(req.auditData, result);
-        return res.json(result);
-      } catch (dynamicError) {
-        const failResult = { success: false, ...(dynamicError.payload || { error: dynamicError.message }) };
-        await logAuditAction(req.auditData, failResult);
-        return res.status(dynamicError.httpStatus || 500).json(failResult);
-      }
-
-    } catch (error) {
-      console.error('[Remote Action] Erreur lors du redémarrage du service:', error);
-      const result = {
-        success: false,
-        error: error.message
-      };
-      await logAuditAction(req.auditData, result);
-
-      res.status(500).json({ error: error.message });
-    }
-  }
+  handleServiceAction('restart')
 );
 
 /**
@@ -634,138 +491,7 @@ router.post('/:server_id/shutdown',
 router.post('/:server_id/start-service',
   requireAdmin,
   auditAction('START_SERVICE', 'SERVICE'),
-  async (req, res) => {
-    try {
-      const { server_id } = req.params;
-      const { service_name } = req.body;
-
-      if (!service_name) {
-        return res.status(400).json({ error: 'service_name est requis' });
-      }
-
-      const server = await Server.findOne({ server_id });
-      if (!server) {
-        return res.status(404).json({ error: 'Serveur non trouvé' });
-      }
-
-      // PM2 is controlled over SSH on the target server
-      if (service_name === 'pm2') {
-        console.log(`[Remote Action] Démarrage PM2 sur le serveur ${server_id} via SSH`);
-        try {
-          const execResult = await runSshCommand(server, 'pm2 start all');
-          const verifiedStatus = await verifyServiceStatus('pm2', server);
-
-          const result = {
-            success: true,
-            message: 'Service PM2 démarré avec succès',
-            service_name: 'pm2',
-            command: 'pm2 start all',
-            server_id: server_id,
-            verified_status: verifiedStatus.status,
-            command_output: execResult.stdout,
-            timestamp: new Date()
-          };
-          await logAuditAction(req.auditData, result);
-          return res.json(result);
-        } catch (sshError) {
-          const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
-          await logAuditAction(req.auditData, failResult);
-          return res.status(sshError.httpStatus || 500).json(failResult);
-        }
-      }
-
-      const supportedServices = {
-        'nginx': { name: 'Nginx (Frontend)', command: 'docker start frontend' },
-        'mongodb': { name: 'MongoDB', command: 'docker start mongodb' },
-        'apache': { name: 'Apache', command: 'sudo systemctl start apache2' },
-        'apache2': { name: 'Apache', command: 'sudo systemctl start apache2' }
-      };
-
-      const service = supportedServices[service_name];
-
-      if (service) {
-        console.log(`[Remote Action] Démarrage du service ${service.name} sur le serveur ${server_id}`);
-
-        let execResult;
-        try {
-          execResult = await execCommand(service.command);
-        } catch (execError) {
-          const failResult = {
-            success: false,
-            error: `Échec de l'exécution: ${execError.message}`,
-            stderr: execError.stderr,
-            service_name: service.name,
-            command: service.command,
-            server_id: server_id,
-            timestamp: new Date()
-          };
-          await logAuditAction(req.auditData, failResult);
-          return res.status(500).json(failResult);
-        }
-
-        const verifiedStatus = await verifyServiceStatus(service_name, server);
-
-        const result = {
-          success: true,
-          message: `Service ${service.name} démarré avec succès`,
-          service_name: service.name,
-          command: service.command,
-          server_id: server_id,
-          verified_status: verifiedStatus.status,
-          command_output: execResult.stdout,
-          timestamp: new Date()
-        };
-
-        await logAuditAction(req.auditData, result);
-        return res.json(result);
-      }
-
-      // Dynamic service, controlled over SSH
-      if (!SERVICE_NAME_REGEX.test(service_name)) {
-        return res.status(400).json({ error: 'Nom de service invalide' });
-      }
-      if (!Array.isArray(server.services) || !server.services.includes(service_name)) {
-        return res.status(400).json({
-          error: 'Service non détecté sur ce serveur',
-          detected_services: server.services || []
-        });
-      }
-
-      console.log(`[Remote Action] Démarrage dynamique du service ${service_name} sur le serveur ${server_id} via SSH`);
-
-      try {
-        const execResult = await runDynamicServiceCommand(server, service_name, 'start');
-        const verifiedStatus = await verifyServiceStatus(service_name, server);
-
-        const result = {
-          success: true,
-          message: `Service ${service_name} démarré avec succès`,
-          service_name: service_name,
-          command: `sudo systemctl start ${service_name}`,
-          server_id: server_id,
-          verified_status: verifiedStatus.status,
-          command_output: execResult.stdout,
-          timestamp: new Date()
-        };
-        await logAuditAction(req.auditData, result);
-        return res.json(result);
-      } catch (dynamicError) {
-        const failResult = { success: false, ...(dynamicError.payload || { error: dynamicError.message }) };
-        await logAuditAction(req.auditData, failResult);
-        return res.status(dynamicError.httpStatus || 500).json(failResult);
-      }
-
-    } catch (error) {
-      console.error('[Remote Action] Erreur lors du démarrage du service:', error);
-      const result = {
-        success: false,
-        error: error.message
-      };
-      await logAuditAction(req.auditData, result);
-
-      res.status(500).json({ error: error.message });
-    }
-  }
+  handleServiceAction('start')
 );
 
 /**
@@ -774,138 +500,7 @@ router.post('/:server_id/start-service',
 router.post('/:server_id/stop-service',
   requireAdmin,
   auditAction('STOP_SERVICE', 'SERVICE'),
-  async (req, res) => {
-    try {
-      const { server_id } = req.params;
-      const { service_name } = req.body;
-
-      if (!service_name) {
-        return res.status(400).json({ error: 'service_name est requis' });
-      }
-
-      const server = await Server.findOne({ server_id });
-      if (!server) {
-        return res.status(404).json({ error: 'Serveur non trouvé' });
-      }
-
-      // PM2 is controlled over SSH on the target server
-      if (service_name === 'pm2') {
-        console.log(`[Remote Action] Arrêt PM2 sur le serveur ${server_id} via SSH`);
-        try {
-          const execResult = await runSshCommand(server, 'pm2 stop all');
-          const verifiedStatus = await verifyServiceStatus('pm2', server);
-
-          const result = {
-            success: true,
-            message: 'Service PM2 arrêté avec succès',
-            service_name: 'pm2',
-            command: 'pm2 stop all',
-            server_id: server_id,
-            verified_status: verifiedStatus.status,
-            command_output: execResult.stdout,
-            timestamp: new Date()
-          };
-          await logAuditAction(req.auditData, result);
-          return res.json(result);
-        } catch (sshError) {
-          const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
-          await logAuditAction(req.auditData, failResult);
-          return res.status(sshError.httpStatus || 500).json(failResult);
-        }
-      }
-
-      const supportedServices = {
-        'nginx': { name: 'Nginx (Frontend)', command: 'docker stop frontend' },
-        'mongodb': { name: 'MongoDB', command: 'docker stop mongodb' },
-        'apache': { name: 'Apache', command: 'sudo systemctl stop apache2' },
-        'apache2': { name: 'Apache', command: 'sudo systemctl stop apache2' }
-      };
-
-      const service = supportedServices[service_name];
-
-      if (service) {
-        console.log(`[Remote Action] Arrêt du service ${service.name} sur le serveur ${server_id}`);
-
-        let execResult;
-        try {
-          execResult = await execCommand(service.command);
-        } catch (execError) {
-          const failResult = {
-            success: false,
-            error: `Échec de l'exécution: ${execError.message}`,
-            stderr: execError.stderr,
-            service_name: service.name,
-            command: service.command,
-            server_id: server_id,
-            timestamp: new Date()
-          };
-          await logAuditAction(req.auditData, failResult);
-          return res.status(500).json(failResult);
-        }
-
-        const verifiedStatus = await verifyServiceStatus(service_name, server);
-
-        const result = {
-          success: true,
-          message: `Service ${service.name} arrêté avec succès`,
-          service_name: service.name,
-          command: service.command,
-          server_id: server_id,
-          verified_status: verifiedStatus.status,
-          command_output: execResult.stdout,
-          timestamp: new Date()
-        };
-
-        await logAuditAction(req.auditData, result);
-        return res.json(result);
-      }
-
-      // Dynamic service, controlled over SSH
-      if (!SERVICE_NAME_REGEX.test(service_name)) {
-        return res.status(400).json({ error: 'Nom de service invalide' });
-      }
-      if (!Array.isArray(server.services) || !server.services.includes(service_name)) {
-        return res.status(400).json({
-          error: 'Service non détecté sur ce serveur',
-          detected_services: server.services || []
-        });
-      }
-
-      console.log(`[Remote Action] Arrêt dynamique du service ${service_name} sur le serveur ${server_id} via SSH`);
-
-      try {
-        const execResult = await runDynamicServiceCommand(server, service_name, 'stop');
-        const verifiedStatus = await verifyServiceStatus(service_name, server);
-
-        const result = {
-          success: true,
-          message: `Service ${service_name} arrêté avec succès`,
-          service_name: service_name,
-          command: `sudo systemctl stop ${service_name}`,
-          server_id: server_id,
-          verified_status: verifiedStatus.status,
-          command_output: execResult.stdout,
-          timestamp: new Date()
-        };
-        await logAuditAction(req.auditData, result);
-        return res.json(result);
-      } catch (dynamicError) {
-        const failResult = { success: false, ...(dynamicError.payload || { error: dynamicError.message }) };
-        await logAuditAction(req.auditData, failResult);
-        return res.status(dynamicError.httpStatus || 500).json(failResult);
-      }
-
-    } catch (error) {
-      console.error('[Remote Action] Erreur lors de l\'arrêt du service:', error);
-      const result = {
-        success: false,
-        error: error.message
-      };
-      await logAuditAction(req.auditData, result);
-
-      res.status(500).json({ error: error.message });
-    }
-  }
+  handleServiceAction('stop')
 );
 
 /**
@@ -922,11 +517,12 @@ router.get('/:server_id/services-status',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      // REAL status check for the legacy services plus every service the
-      // agent actually detected as active on this server
-      const legacyNames = ['pm2', 'nginx', 'mongodb', 'apache'];
+      // REAL status check for every service the agent actually detected
+      // as active on this server, plus PM2 (special-cased since it's a
+      // process manager rather than a systemd unit, so it's never part
+      // of the agent's systemctl-based detection).
       const detectedNames = Array.isArray(server.services) ? server.services : [];
-      const serviceNames = [...new Set([...legacyNames, ...detectedNames])];
+      const serviceNames = detectedNames.includes('pm2') ? detectedNames : ['pm2', ...detectedNames];
       const servicesStatus = {};
 
       for (const svcName of serviceNames) {
