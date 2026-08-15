@@ -11,7 +11,7 @@
     "backoff_factor": 1.0
   },
   "collection": {
-    "interval": 5,
+    "interval": 300,
     "enabled_metrics": [
       "cpu",
       "ram",

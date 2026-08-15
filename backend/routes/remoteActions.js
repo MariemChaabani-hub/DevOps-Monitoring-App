@@ -41,11 +41,10 @@ const execCommand = (command, timeoutMs = 30000) => {
 // ============================================================
 const SERVICE_NAME_REGEX = /^[a-zA-Z0-9_.@-]+$/;
 
-// Runs `systemctl <action> <serviceName>` on the target server over SSH.
-// Only called after the caller has already validated serviceName against
-// both SERVICE_NAME_REGEX and the server's own detected `services` list,
-// so it's safe to interpolate into the remote command.
-const runDynamicServiceCommand = async (server, serviceName, action) => {
+// Runs an arbitrary command on the target server over SSH, requiring SSH
+// credentials to be configured on that server document. Throws an Error
+// with `httpStatus`/`payload` set so route handlers can forward it as-is.
+const runSshCommand = async (server, command) => {
   if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
     const err = new Error('Informations SSH incomplètes');
     err.httpStatus = 400;
@@ -69,17 +68,16 @@ const runDynamicServiceCommand = async (server, serviceName, action) => {
       password: server.ssh_password,
       port: server.ssh_port || 22
     });
-    const result = await ssh.execCommand(`sudo systemctl ${action} ${serviceName}`);
+    const result = await ssh.execCommand(command);
     await ssh.dispose();
 
     if (result.code !== 0) {
-      const err = new Error(`Échec de la commande systemctl ${action}`);
+      const err = new Error(`Échec de la commande: ${command}`);
       err.httpStatus = 500;
       err.payload = {
         error: `Échec de l'exécution: ${result.stderr || result.stdout || 'commande terminée avec une erreur'}`,
         stderr: result.stderr,
-        service_name: serviceName,
-        command: `sudo systemctl ${action} ${serviceName}`,
+        command,
         server_id: server.server_id
       };
       throw err;
@@ -95,6 +93,13 @@ const runDynamicServiceCommand = async (server, serviceName, action) => {
   }
 };
 
+// Runs `systemctl <action> <serviceName>` on the target server over SSH.
+// Only called after the caller has already validated serviceName against
+// both SERVICE_NAME_REGEX and the server's own detected `services` list,
+// so it's safe to interpolate into the remote command.
+const runDynamicServiceCommand = (server, serviceName, action) =>
+  runSshCommand(server, `sudo systemctl ${action} ${serviceName}`);
+
 // ============================================================
 // Helper: Verify the real status of a service after an action
 // Returns { status: 'active'|'inactive'|'unknown', raw: string }
@@ -104,10 +109,30 @@ const runDynamicServiceCommand = async (server, serviceName, action) => {
 const verifyServiceStatus = async (serviceName, server) => {
   // Map service names to their Docker container names
   const containerNames = {
-    'pm2': 'backend',
     'nginx': 'frontend',
     'mongodb': 'mongodb'
   };
+
+  // PM2 is checked over SSH on the target server, like every other
+  // dynamically-controlled service — not via a local Docker container.
+  if (serviceName === 'pm2') {
+    if (!server || !server.ip_address || !server.ssh_username || !server.ssh_password) {
+      return { status: 'unknown', raw: 'Informations SSH incomplètes' };
+    }
+    try {
+      const { stdout } = await runSshCommand(server, 'pm2 jlist');
+      let isOnline = false;
+      try {
+        const processes = JSON.parse(stdout);
+        isOnline = Array.isArray(processes) && processes.some(p => p.pm2_env && p.pm2_env.status === 'online');
+      } catch (jsonErr) {
+        isOnline = stdout.includes('"status":"online"') || stdout.includes("'status': 'online'");
+      }
+      return { status: isOnline ? 'active' : 'inactive', raw: stdout };
+    } catch (err) {
+      return { status: 'unknown', raw: (err.payload && err.payload.error) || err.message || 'verification failed' };
+    }
+  }
 
   // Apache uses systemctl
   if (serviceName === 'apache' || serviceName === 'apache2') {
@@ -156,30 +181,6 @@ const verifyServiceStatus = async (serviceName, server) => {
       `docker inspect --format='{{.State.Running}}' ${containerName}`, 10000
     );
     const isRunning = stdout.trim().toLowerCase() === 'true';
-
-    if (isRunning && serviceName === 'pm2') {
-      try {
-        const { stdout: pm2Stdout } = await execCommand(
-          'docker exec backend pm2 jlist', 10000
-        );
-        let isOnline = false;
-        try {
-          const processes = JSON.parse(pm2Stdout);
-          isOnline = Array.isArray(processes) && processes.some(p => p.pm2_env && p.pm2_env.status === 'online');
-        } catch (jsonErr) {
-          isOnline = pm2Stdout.includes('"status":"online"') || pm2Stdout.includes("'status': 'online'");
-        }
-        return {
-          status: isOnline ? 'active' : 'inactive',
-          raw: `Container running, PM2 process: ${isOnline ? 'online' : 'not online'}\nRaw: ${pm2Stdout}`
-        };
-      } catch (pm2Err) {
-        return {
-          status: 'inactive',
-          raw: `Container running but PM2 check failed: ${pm2Err.message}`
-        };
-      }
-    }
 
     return { status: isRunning ? 'active' : 'inactive', raw: stdout };
   } catch (err) {
@@ -290,9 +291,37 @@ router.post('/:server_id/restart-service',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
+      // PM2 is controlled over SSH on the target server, exactly like the
+      // dynamically-detected services below — not via a local Docker
+      // container, which only worked when the backend ran alongside the
+      // app it was managing.
+      if (service_name === 'pm2') {
+        console.log(`[Remote Action] Redémarrage PM2 sur le serveur ${server_id} via SSH`);
+        try {
+          const execResult = await runSshCommand(server, 'pm2 restart all');
+          const verifiedStatus = await verifyServiceStatus('pm2', server);
+
+          const result = {
+            success: true,
+            message: 'Service PM2 redémarré avec succès',
+            service_name: 'pm2',
+            command: 'pm2 restart all',
+            server_id: server_id,
+            verified_status: verifiedStatus.status,
+            command_output: execResult.stdout,
+            timestamp: new Date()
+          };
+          await logAuditAction(req.auditData, result);
+          return res.json(result);
+        } catch (sshError) {
+          const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(sshError.httpStatus || 500).json(failResult);
+        }
+      }
+
       // Services supportés — containers Docker (sauf Apache)
       const supportedServices = {
-        'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 restart server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker restart frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker restart mongodb' },
         'apache': { name: 'Apache', command: 'sudo systemctl restart apache2' },
@@ -619,8 +648,33 @@ router.post('/:server_id/start-service',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
+      // PM2 is controlled over SSH on the target server
+      if (service_name === 'pm2') {
+        console.log(`[Remote Action] Démarrage PM2 sur le serveur ${server_id} via SSH`);
+        try {
+          const execResult = await runSshCommand(server, 'pm2 start all');
+          const verifiedStatus = await verifyServiceStatus('pm2', server);
+
+          const result = {
+            success: true,
+            message: 'Service PM2 démarré avec succès',
+            service_name: 'pm2',
+            command: 'pm2 start all',
+            server_id: server_id,
+            verified_status: verifiedStatus.status,
+            command_output: execResult.stdout,
+            timestamp: new Date()
+          };
+          await logAuditAction(req.auditData, result);
+          return res.json(result);
+        } catch (sshError) {
+          const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(sshError.httpStatus || 500).json(failResult);
+        }
+      }
+
       const supportedServices = {
-        'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 start server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker start frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker start mongodb' },
         'apache': { name: 'Apache', command: 'sudo systemctl start apache2' },
@@ -734,8 +788,33 @@ router.post('/:server_id/stop-service',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
+      // PM2 is controlled over SSH on the target server
+      if (service_name === 'pm2') {
+        console.log(`[Remote Action] Arrêt PM2 sur le serveur ${server_id} via SSH`);
+        try {
+          const execResult = await runSshCommand(server, 'pm2 stop all');
+          const verifiedStatus = await verifyServiceStatus('pm2', server);
+
+          const result = {
+            success: true,
+            message: 'Service PM2 arrêté avec succès',
+            service_name: 'pm2',
+            command: 'pm2 stop all',
+            server_id: server_id,
+            verified_status: verifiedStatus.status,
+            command_output: execResult.stdout,
+            timestamp: new Date()
+          };
+          await logAuditAction(req.auditData, result);
+          return res.json(result);
+        } catch (sshError) {
+          const failResult = { success: false, ...(sshError.payload || { error: sshError.message }) };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(sshError.httpStatus || 500).json(failResult);
+        }
+      }
+
       const supportedServices = {
-        'pm2': { name: 'PM2 (Backend)', command: 'docker exec backend pm2 stop server.js' },
         'nginx': { name: 'Nginx (Frontend)', command: 'docker stop frontend' },
         'mongodb': { name: 'MongoDB', command: 'docker stop mongodb' },
         'apache': { name: 'Apache', command: 'sudo systemctl stop apache2' },
