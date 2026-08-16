@@ -103,37 +103,71 @@ const buildServiceActionCommand = (serviceName, action) => {
 // ============================================================
 // Helper: Verify the real status of a service after an action, checked
 // over SSH on the target server for any service name.
-// Returns { status: 'active'|'inactive'|'unknown', raw: string }
+//
+// `status` is a canonical machine-readable state — 'active', 'inactive',
+// 'failed' (systemd only — a crashed unit), or 'unknown' (SSH/verification
+// failure, or a transitional systemd state like 'activating'). `label` is
+// the matching French text, ready to display as-is.
+// Returns { status, label, raw }
 // ============================================================
+const STATUS_LABELS_FR = {
+  active: 'Actif',
+  inactive: 'Inactif',
+  failed: 'Échec',
+  unknown: 'Inconnu'
+};
+
+const buildStatusResult = (status, raw) => ({
+  status,
+  label: STATUS_LABELS_FR[status] || STATUS_LABELS_FR.unknown,
+  raw
+});
+
 const verifyServiceStatus = async (serviceName, server) => {
   if (!server || !server.ip_address || !server.ssh_username || !server.ssh_password) {
-    return { status: 'unknown', raw: 'Informations SSH incomplètes' };
+    return buildStatusResult('unknown', 'Informations SSH incomplètes');
   }
 
-  // PM2 is a process manager, not a systemd unit — checked via `pm2 jlist`
+  // PM2 is a process manager, not a systemd unit — checked via `pm2 jlist`.
+  // A process listed as "online" maps to 'active'; a reachable pm2 daemon
+  // with no online process maps to 'inactive'; anything unparseable stays
+  // 'unknown'.
   if (serviceName === 'pm2') {
     try {
       const result = await execSshRaw(server, 'pm2 jlist');
-      let isOnline = false;
+      let status = 'unknown';
       try {
         const processes = JSON.parse(result.stdout);
-        isOnline = Array.isArray(processes) && processes.some(p => p.pm2_env && p.pm2_env.status === 'online');
+        if (Array.isArray(processes)) {
+          status = processes.some(p => p.pm2_env && p.pm2_env.status === 'online') ? 'active' : 'inactive';
+        }
       } catch (jsonErr) {
-        isOnline = result.stdout.includes('"status":"online"') || result.stdout.includes("'status': 'online'");
+        if (result.stdout.includes('"status":"online"') || result.stdout.includes("'status': 'online'")) {
+          status = 'active';
+        } else if (result.code === 0) {
+          status = 'inactive';
+        }
       }
-      return { status: isOnline ? 'active' : 'inactive', raw: result.stdout || result.stderr };
+      return buildStatusResult(status, result.stdout || result.stderr);
     } catch (err) {
-      return { status: 'unknown', raw: (err.payload && err.payload.error) || err.message || 'verification failed' };
+      return buildStatusResult('unknown', (err.payload && err.payload.error) || err.message || 'verification failed');
     }
   }
 
+  // `systemctl is-active` prints exactly one of: active, activating,
+  // deactivating, inactive, failed, unknown — to stdout, regardless of
+  // its (non-zero for anything but "active") exit code. Only the three
+  // states the caller asked for get their own label; anything else
+  // (including the transitional activating/deactivating states) is
+  // reported as 'unknown' rather than silently folded into 'inactive'.
   try {
     const resolvedName = SERVICE_NAME_ALIASES[serviceName] || serviceName;
     const result = await execSshRaw(server, `sudo systemctl is-active ${resolvedName}`);
-    const status = (result.stdout || '').trim().toLowerCase();
-    return { status: status === 'active' ? 'active' : 'inactive', raw: result.stdout || result.stderr };
+    const rawStatus = (result.stdout || '').trim().toLowerCase();
+    const status = ['active', 'inactive', 'failed'].includes(rawStatus) ? rawStatus : 'unknown';
+    return buildStatusResult(status, result.stdout || result.stderr);
   } catch (err) {
-    return { status: 'unknown', raw: (err.payload && err.payload.error) || err.message || 'verification failed' };
+    return buildStatusResult('unknown', (err.payload && err.payload.error) || err.message || 'verification failed');
   }
 };
 
@@ -258,6 +292,7 @@ const handleServiceAction = (action) => async (req, res) => {
         command,
         server_id,
         verified_status: verifiedStatus.status,
+        verified_status_label: verifiedStatus.label,
         command_output: execResult.stdout,
         timestamp: new Date()
       };
@@ -539,8 +574,8 @@ router.get('/:server_id/services-status',
       for (const svcName of serviceNames) {
         const verified = await verifyServiceStatus(svcName, server);
         servicesStatus[svcName] = {
-          status: verified.status === 'active' ? 'running' :
-            verified.status === 'inactive' ? 'stopped' : 'unknown',
+          status: verified.status,
+          label: verified.label,
           raw: verified.raw
         };
       }

@@ -103,15 +103,19 @@ const ServicesPanel = ({ server }) => {
     }
   };
 
-  // Get status badge
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      'running': { text: 'Actif', color: '#10B981' },
-      'stopped': { text: 'Arrêté', color: '#EF4444' },
-      'error': { text: 'Erreur', color: '#F59E0B' },
-      'unknown': { text: 'Inconnu', color: '#6B7280' }
+  // Get status badge — the backend already returns a ready-to-display
+  // French label (statusInfo.label); only the badge color is decided here.
+  const getStatusBadge = (statusInfo) => {
+    const colorByStatus = {
+      'active': '#10B981',
+      'inactive': '#EF4444',
+      'failed': '#F59E0B',
+      'unknown': '#6B7280'
     };
-    return statusConfig[status] || statusConfig.unknown;
+    return {
+      text: statusInfo?.label || 'Inconnu',
+      color: colorByStatus[statusInfo?.status] || colorByStatus.unknown
+    };
   };
 
   // Fetch status when the selected server changes, then auto-refresh
@@ -165,7 +169,7 @@ const ServicesPanel = ({ server }) => {
         <div className="services-grid">
           {detectedServices.map((serviceName) => {
             const statusInfo = statusMap[serviceName];
-            const statusBadge = getStatusBadge(statusInfo?.status);
+            const statusBadge = getStatusBadge(statusInfo);
 
             return (
               <div key={serviceName} className="service-card">
