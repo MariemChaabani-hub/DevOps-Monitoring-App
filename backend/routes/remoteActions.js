@@ -83,12 +83,22 @@ const runSshCommand = async (server, command) => {
   return { stdout: result.stdout, stderr: result.stderr };
 };
 
+// Some service names commonly used in the UI don't match the actual
+// systemd unit name on most distros — map them before building the
+// command. Any name not listed here is passed straight through unchanged.
+const SERVICE_NAME_ALIASES = {
+  'apache': 'apache2',
+  'mongodb': 'mongod'
+};
+
 // Builds the command for a service action. PM2 is a process manager, not
 // a systemd unit, so it's special-cased to `pm2 <action> all`; every
 // other service name (nginx, apache2, mongod, mysql, postgresql, redis,
-// docker, ...) runs through systemctl.
-const buildServiceActionCommand = (serviceName, action) =>
-  serviceName === 'pm2' ? `pm2 ${action} all` : `sudo systemctl ${action} ${serviceName}`;
+// docker, ...) runs through systemctl, after alias resolution.
+const buildServiceActionCommand = (serviceName, action) => {
+  const resolvedName = SERVICE_NAME_ALIASES[serviceName] || serviceName;
+  return resolvedName === 'pm2' ? `pm2 ${action} all` : `sudo systemctl ${action} ${resolvedName}`;
+};
 
 // ============================================================
 // Helper: Verify the real status of a service after an action, checked
@@ -118,7 +128,8 @@ const verifyServiceStatus = async (serviceName, server) => {
   }
 
   try {
-    const result = await execSshRaw(server, `sudo systemctl is-active ${serviceName}`);
+    const resolvedName = SERVICE_NAME_ALIASES[serviceName] || serviceName;
+    const result = await execSshRaw(server, `sudo systemctl is-active ${resolvedName}`);
     const status = (result.stdout || '').trim().toLowerCase();
     return { status: status === 'active' ? 'active' : 'inactive', raw: result.stdout || result.stderr };
   } catch (err) {
