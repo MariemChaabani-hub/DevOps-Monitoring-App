@@ -1,0 +1,19 @@
+\chapter*{Introduction Générale}
+\addcontentsline{toc}{chapter}{Introduction Générale}
+\markboth{Introduction Générale}{}
+
+Dans un contexte où les infrastructures informatiques des entreprises reposent de plus en plus sur des architectures distribuées — serveurs on-premise et instances hébergées chez des fournisseurs cloud (IaaS/PaaS) — la capacité à superviser en temps réel l'état de santé de ces ressources et à intervenir à distance de manière sécurisée est devenue un enjeu opérationnel majeur. Une panne non détectée, une saturation de ressources non anticipée ou un service applicatif interrompu peuvent avoir des répercussions directes sur la continuité de service et, par conséquent, sur l'activité de l'entreprise.
+
+C'est dans cette optique que s'inscrit le présent projet de fin d'études, réalisé au sein de l'entreprise \textbf{CLEDISS}, éditeur tunisien de solutions logicielles SaaS. L'objectif est de concevoir et de développer une plateforme complète de monitoring et de gestion à distance d'infrastructure serveur, accessible à la fois via une application web et une application mobile, consommant un socle applicatif commun (backend Node.js et base de données \textbf{MongoDB Atlas}), déployés sur un serveur \textbf{VPS OVH sous Debian Linux}. Au-delà du développement fonctionnel de la plateforme, le projet couvre également sa mise en production selon une démarche \textbf{DevSecOps}~: conteneurisation, intégration continue avec analyse de qualité et de sécurité, déploiement orchestré sur Kubernetes, et supervision de l'infrastructure elle-même au moyen de Prometheus et Grafana.
+
+Le projet a été mené selon une méthodologie agile \textbf{Scrum}, organisée en quatre sprints de développement, précédés d'un Sprint~0 d'analyse, chacun correspondant à un livrable fonctionnel ou technique cohérent. Cette organisation structure naturellement le présent rapport.
+
+Le \textbf{premier chapitre} présente le cadre général du projet~: l'organisme d'accueil CLEDISS et son produit phare Nomadis ERP, la problématique à l'origine du projet, une critique de l'existant, ainsi que la méthodologie de travail retenue.
+
+Le \textbf{deuxième chapitre} correspond au Sprint~0, consacré à l'analyse et à la spécification des besoins~: identification des acteurs, recueil des besoins fonctionnels et non fonctionnels, backlog du produit, architecture globale de la solution et choix technologiques.
+
+Les \textbf{chapitres trois et quatre} détaillent les Sprints~1 et~2, dédiés à la construction de l'application de monitoring proprement dite~: collecte de métriques par un agent Python, tableau de bord temps réel, authentification JWT, système d'alertes par email, actions à distance sécurisées via SSH, sauvegardes automatisées et application mobile React Native.
+
+Enfin, les \textbf{chapitres cinq et six} présentent les Sprints~3 et~4, consacrés au volet DevSecOps du projet~: conteneurisation avec Docker, chaîne d'intégration continue avec Jenkins (7 stages), analyse de qualité de code avec SonarQube et de vulnérabilités avec Trivy, puis déploiement et exploitation sur un cluster Kubernetes k3s avec GitOps (Argo CD), gestion des secrets (HashiCorp Vault), contrôle d'accès (RBAC) et supervision d'infrastructure (Prometheus + Grafana).
+
+Le rapport se conclut par un bilan général du travail réalisé et les perspectives d'évolution envisageables pour la plateforme.

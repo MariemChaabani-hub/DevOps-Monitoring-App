@@ -1,36 +1,20 @@
 // Configuration de l'application
 export const APP_CONFIG = {
   // Configuration API
-  API_BASE_URL: 'http://192.168.1.202:3000/api',
+  //API_BASE_URL: 'http://141.227.129.194:30300/api',
+  API_BASE_URL: 'http://localhost:3000/api',
   API_TIMEOUT: 10000,
-  
+
   // Configuration Headers
   API_HEADERS: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  
-  // Configuration Authentification
-  ADMIN_EMAIL: 'mariemchaabani39@gmail.com',
-  
+
   // Configuration Application
-  APP_NAME: 'Monitoring App',
+  APP_NAME: 'CLEDISS Monitoring',
   APP_VERSION: '1.0.0',
-  
-  // Configuration UI
-  COLORS: {
-    PRIMARY: '#3498db',
-    SUCCESS: '#27ae60',
-    WARNING: '#f39c12',
-    DANGER: '#e74c3c',
-    INFO: '#95a5a6',
-    BACKGROUND: '#f5f5f5',
-    WHITE: '#ffffff',
-    BLACK: '#2c3e50',
-    GRAY: '#7f8c8d',
-    LIGHT_GRAY: '#ecf0f1',
-  },
-  
+
   // Configuration Serveurs
   SERVER_STATUSES: {
     OK: 'OK',
@@ -38,33 +22,11 @@ export const APP_CONFIG = {
     WARNING: 'WARNING',
     OFFLINE: 'OFFLINE',
   },
-  
-  // Configuration Services
-  SERVICES: [
-    { name: 'Apache', icon: '🌐' },
-    { name: 'MySQL', icon: '🗄️' },
-    { name: 'Nginx', icon: '⚙️' },
-    { name: 'Docker', icon: '🐳' },
-    { name: 'Redis', icon: '🔴' },
-    { name: 'PostgreSQL', icon: '🐘' },
-    { name: 'MongoDB', icon: '🍃' },
-  ],
-  
+
   // Configuration Temps
-  REFRESH_INTERVAL: 30000, // 30 secondes
-  CHART_DATA_POINTS: 24, // 24 heures
+  REFRESH_INTERVAL: 5000, // 5 secondes, comme l'app web
+  CHART_DATA_POINTS: 24,
   ANIMATION_DURATION: 300,
-  
-  // Configuration Navigation
-  NAVIGATION_OPTIONS: {
-    headerStyle: {
-      backgroundColor: '#3498db',
-    },
-    headerTintColor: '#fff',
-    headerTitleStyle: {
-      fontWeight: 'bold',
-    },
-  },
   
   // Configuration Messages
   MESSAGES: {
@@ -90,30 +52,7 @@ export const APP_CONFIG = {
   DEBUG_API: false,
 };
 
-// Export des utilitaires
-export const getServerStatusColor = (status) => {
-  const colors = {
-    [APP_CONFIG.SERVER_STATUSES.OK]: APP_CONFIG.COLORS.SUCCESS,
-    [APP_CONFIG.SERVER_STATUSES.CRITICAL]: APP_CONFIG.COLORS.DANGER,
-    [APP_CONFIG.SERVER_STATUSES.WARNING]: APP_CONFIG.COLORS.WARNING,
-    [APP_CONFIG.SERVER_STATUSES.OFFLINE]: APP_CONFIG.COLORS.INFO,
-  };
-  return colors[status] || APP_CONFIG.COLORS.GRAY;
-};
-
-export const getServerStatusEmoji = (status) => {
-  const emojis = {
-    [APP_CONFIG.SERVER_STATUSES.OK]: '🟢',
-    [APP_CONFIG.SERVER_STATUSES.CRITICAL]: '🔴',
-    [APP_CONFIG.SERVER_STATUSES.WARNING]: '🟡',
-    [APP_CONFIG.SERVER_STATUSES.OFFLINE]: '⚫',
-  };
-  return emojis[status] || '⚫';
-};
-
-export const getServiceIcon = (serviceName) => {
-  const service = APP_CONFIG.SERVICES.find(s => s.name === serviceName);
-  return service ? service.icon : '⚙️';
-};
+// Statut et libellés : voir constants/theme.ts (getStatusColor, getStatusLabel)
+// — plus d'émojis, cohérent avec le design épuré de l'app web.
 
 export default APP_CONFIG;

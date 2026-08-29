@@ -1,0 +1,150 @@
+% ============================================================
+%  Architecture logique de la plateforme -- diagramme 3-tiers
+%  PAQUETS REQUIS :
+%     \usepackage{tikz}
+%     \usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+%     \usepackage{float}
+% ============================================================
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  tierbox/.style  = {draw, rounded corners=5pt, very thick, inner sep=0pt},
+  tiertitle/.style= {font=\scriptsize\bfseries, align=center},
+  box/.style      = {draw, rounded corners=3pt, fill=white, align=center,
+                     font=\tiny, minimum height=0.85cm, inner sep=3pt},
+  modbox/.style   = {box, minimum width=2.3cm, minimum height=1.05cm},
+  dbbox/.style    = {box, minimum width=4.0cm, minimum height=1.1cm},
+  badge/.style    = {font=\tiny\bfseries, text=white, rounded corners=2pt,
+                     inner sep=2.5pt},
+  arr/.style      = {-{Latex[length=2.2mm]}, thick},
+  lbl/.style      = {font=\tiny, fill=white, inner sep=1.5pt},
+]
+
+% ============================================================
+% TIER 1 -- COUCHE PRÉSENTATION      (x : 0 .. 6.4)
+% ============================================================
+\node[tierbox, draw=green!55!black, fill=green!4,
+      minimum width=6.4cm, minimum height=10cm] (T1) at (3.2,-4.6) {};
+\node[tiertitle, text=green!45!black] at (3.2,-0.1)
+     {TIER 1 \textbullet\ COUCHE PRÉSENTATION};
+
+\node[box, minimum width=5.4cm, fill=green!10] (web) at (3.2,-1.6)
+     {\textbf{React.js} -- Application web};
+\node[badge, fill=green!55!black, anchor=south east, yshift=2pt]
+     at (web.north east) {PORT 30080};
+
+\node[box, minimum width=5.0cm] (webc) at (3.2,-2.9) {Composants \& React Router};
+\node[box, minimum width=5.0cm] (webh) at (3.2,-4.1) {Client HTTP (fetch) + client WebSocket};
+
+\node[box, minimum width=5.4cm, fill=green!10] (mob) at (3.2,-5.6)
+     {\textbf{React Native} -- Application mobile};
+\node[badge, fill=green!55!black, anchor=south east, yshift=2pt]
+     at (mob.north east) {EXPO};
+
+\node[box, minimum width=5.0cm] (mobs) at (3.2,-6.9) {Écrans (Expo Router)};
+\node[box, minimum width=5.0cm] (moba) at (3.2,-8.1) {Client HTTP (Axios) + AsyncStorage (JWT)};
+\node[box, minimum width=5.0cm, minimum height=0.7cm, fill=green!6] (mobn) at (3.2,-9.1)
+     {Rafraîchissement 5 s};
+
+% ============================================================
+% TIER 2 -- COUCHE MÉTIER            (x : 8.4 .. 17.4)
+% ============================================================
+\node[tierbox, draw=blue!60, fill=blue!4,
+      minimum width=9cm, minimum height=10cm] (T2) at (12.9,-4.6) {};
+\node[tiertitle, text=blue!60!black] at (12.9,-0.1)
+     {TIER 2 \textbullet\ COUCHE MÉTIER};
+
+\node[box, minimum width=8.2cm, fill=blue!10] (node) at (12.9,-1.6)
+     {\textbf{Node.js / Express} -- API REST};
+\node[badge, fill=blue!60, anchor=south east, yshift=2pt]
+     at (node.north east) {PORT 3000};
+
+\node[box, minimum width=6.2cm, fill=blue!6] (mw) at (12.9,-2.9)
+     {\textbf{Middleware de sécurité} \\ \texttt{verifyToken} (JWT) + \texttt{requireAdmin}};
+
+\node[box, minimum width=6.2cm] (routes) at (12.9,-4.1)
+     {\textbf{Routes \& Contrôleurs} -- points d'entrée de l'API};
+
+\node[modbox] (m1) at (10.2,-5.5) {\textbf{Serveurs} \\ \& Métriques};
+\node[modbox] (m2) at (12.9,-5.5) {\textbf{Alertes} \\ \& Seuils};
+\node[modbox] (m3) at (15.6,-5.5) {\textbf{Actions} \\ à distance};
+\node[modbox] (m4) at (11.5,-6.8) {\textbf{Sauvegardes} \\ (cron)};
+\node[modbox] (m5) at (14.3,-6.8) {\textbf{Audit} \\ \& Journaux};
+
+\node[box, minimum width=6.2cm, fill=blue!6] (socket) at (12.9,-8.0)
+     {\textbf{Socket.io / WebSocket} -- temps réel};
+
+\node[box, minimum width=6.2cm, fill=blue!6] (email) at (12.9,-9.1)
+     {\textbf{Service e-mail} (Nodemailer)};
+
+% ============================================================
+% TIER 3 -- COUCHE DONNÉES           (x : 19.4 .. 24.4)
+% ============================================================
+\node[tierbox, draw=violet!60, fill=violet!4,
+      minimum width=5cm, minimum height=10cm] (T3) at (21.9,-4.6) {};
+\node[tiertitle, text=violet!60!black] at (21.9,-0.1)
+     {TIER 3 \textbullet\ COUCHE DONNÉES};
+
+\node[dbbox, fill=violet!10] (mongo) at (21.9,-1.8)
+     {\textbf{MongoDB Atlas} \\ base NoSQL managée};
+\node[badge, fill=violet!60, anchor=south east, yshift=2pt]
+     at (mongo.north east) {PORT 27017};
+
+\node[dbbox, minimum height=1.8cm] (colls) at (21.9,-4.2)
+     {\textit{Collections} \\ servers \textbullet\ metrics \\ alerts \textbullet\ backups \\ auditlogs \textbullet\ users};
+
+\node[dbbox, fill=violet!10] (smtp) at (21.9,-6.4)
+     {\textbf{SMTP Gmail} \\ notifications e-mail};
+
+\node[dbbox, fill=violet!10, minimum height=1.3cm] (files) at (21.9,-8.6)
+     {\textbf{Stockage fichiers} \\ archives de sauvegarde};
+
+% ============================================================
+% SERVEURS SUPERVISÉS                (x : 0 .. 18)
+% ============================================================
+\node[tierbox, draw=orange!70!black, fill=orange!5,
+      minimum width=18cm, minimum height=1.9cm] (T0) at (9,-11.8) {};
+\node[tiertitle, text=orange!60!black] at (9,-11.15)
+     {SERVEURS SUPERVISÉS \textbullet\ COLLECTE \& ADMINISTRATION};
+
+\node[box, minimum width=4cm, fill=orange!8] (agent) at (3.5,-12.0)
+     {\textbf{Agent Python} (psutil) -- collecte 5 s};
+\node[box, minimum width=4cm, fill=orange!8] (systemd) at (8.7,-12.0)
+     {\textbf{Services systemd} -- nginx, mongod, pm2\ldots};
+\node[box, minimum width=4cm, fill=orange!8] (vps) at (13.9,-12.0)
+     {\textbf{VPS OVH} + \textbf{VM VirtualBox}};
+
+% ============================================================
+% FLUX ENTRE LES COUCHES
+% ============================================================
+% --- Tier 1 -> Tier 2 (requêtes) ---
+\draw[arr] (webh.east) -- (8.4,-4.1);
+\node[lbl] at (7.05,-3.85) {HTTPS / REST};
+\draw[arr] (moba.east) -- (8.4,-8.1);
+\node[lbl] at (7.05,-7.85) {HTTPS / REST};
+
+% --- Tier 2 -> Tier 1 (temps réel) ---
+\draw[arr, dashed] (socket.west) -- ++(-0.7,0) |- (mobn.east);
+\node[lbl] at (7.05,-8.95) {WebSocket};
+
+% --- Tier 2 -> Tier 3 ---
+\draw[arr] (node.east) -- (18.4,-1.6) |- (mongo.west);
+\node[lbl] at (18.4,-1.15) {Mongoose / TCP-IP};
+\draw[arr] (email.east) -- (18.4,-9.1) -- (18.4,-6.4) -- (smtp.west);
+\node[lbl] at (18.4,-7.9) {SMTP};
+
+% --- Agent -> Tier 2 (collecte) ---
+\draw[arr] (agent.north) -- (3.5,-10.2) -- (10.5,-10.2) -- (10.5,-9.6);
+\node[lbl] at (7.0,-10.05) {HTTP \texttt{POST /metrics}};
+
+% --- Tier 2 -> serveurs (administration) ---
+\draw[arr] (15.0,-9.6) -- (15.0,-10.2) -- (13.9,-10.2) -- (13.9,-11.575);
+\node[lbl, anchor=west] at (15.15,-9.95) {SSH (port 22)};
+
+\end{tikzpicture}%
+}
+\caption{Architecture logique de la plateforme}
+\label{fig:archi-logique}
+\end{figure}

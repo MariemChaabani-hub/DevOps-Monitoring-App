@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const Metric = require('../models/Metric');
+const Server = require('../models/Server');
 
 // GET /api/metrics/latest
 // Returns latest metric from each server
@@ -36,6 +37,13 @@ router.get('/latest', async (req, res) => {
       }
     ]);
 
+    // Fetch the list of detected services per server (stored on Server, not Metric)
+    const servers = await Server.find({}, 'server_id services').lean();
+    const servicesByServerId = {};
+    servers.forEach(s => {
+      servicesByServerId[s.server_id] = s.services || [];
+    });
+
     // Transform response to include serverId at top level
     const formattedMetrics = latestMetrics.map(metric => ({
       serverId: metric.serverId,
@@ -47,7 +55,8 @@ router.get('/latest', async (req, res) => {
       timestamp: metric.timestamp,
       network_io: metric.network_io,
       uptime: metric.uptime,
-      location: metric.location
+      location: metric.location,
+      services: servicesByServerId[metric.serverId] || []
     }));
 
     res.json({

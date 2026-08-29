@@ -1,0 +1,127 @@
+% ============================================================
+% Préambule — Rapport PFE
+% ============================================================
+
+% --- Langue et encodage ---
+\usepackage[french]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{csquotes}
+
+% --- Mise en page ---
+\usepackage[a4paper,left=3cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{emptypage}
+
+% --- Couleurs (identité CLEDISS : marine + violet) ---
+\usepackage{xcolor}
+\definecolor{clednavy}{HTML}{14142B}
+\definecolor{cledaccent}{HTML}{A855F7}
+\definecolor{cledgray}{HTML}{555566}
+
+% --- Graphiques et figures ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds,calc,shadows}
+\tikzset{every path/.append style={shorten >=1mm, shorten <=1mm}}
+\usepackage{pgfgantt}
+
+% --- Tableaux ---
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
+
+% --- Listes ---
+\usepackage{enumitem}
+\setlist{itemsep=2pt, topsep=4pt}
+
+% --- Code source ---
+\usepackage{listings}
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=false,
+  frame=single,
+  rulecolor=\color{cledgray},
+  backgroundcolor=\color{black!3},
+  numbers=left,
+  numberstyle=\tiny\color{cledgray},
+  keywordstyle=\color{cledaccent}\bfseries,
+  commentstyle=\color{green!40!black}\itshape,
+  stringstyle=\color{orange!70!black},
+  showstringspaces=false,
+  tabsize=2,
+  captionpos=b,
+}
+\lstset{style=code}
+
+% --- Mathématiques (doit précéder cleveref) ---
+\usepackage{amsmath,amssymb}
+
+% --- Liens et références (cleveref doit être chargé en dernier) ---
+\usepackage[hidelinks,colorlinks=true,linkcolor=clednavy,citecolor=clednavy,urlcolor=cledaccent]{hyperref}
+\usepackage[french]{cleveref}
+
+% --- Titres de chapitres/sections ---
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{clednavy}}
+  {\hfill\Large\textcolor{cledaccent}{\chaptertitlename}~\thechapter}
+  {6pt}
+  {\hfill}
+\titlespacing*{\chapter}{0pt}{-10pt}{30pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{clednavy}}{\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{clednavy}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{cledgray}}{\thesubsubsection}{1em}{}
+
+% --- En-têtes / pieds de page ---
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[C]{\small\textit{\leftmark}}
+\fancyfoot[C]{\thepage}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% --- Divers ---
+\usepackage{pdfpages}
+
+% Petites commandes utilitaires
+\newcommand{\todoimg}[2]{%
+  \begin{figure}[H]
+    \centering
+    \fbox{\parbox[c][4cm][c]{0.85\linewidth}{\centering\itshape #1}}
+    \caption{#2}
+  \end{figure}%
+}
+
+% Petit logo centré, sans légende ni numérotation (pour ne pas polluer la
+% liste des figures avec des dizaines de logos). Affiche le fichier s'il
+% existe, sinon un encadré de substitution indiquant le nom de fichier
+% attendu -- le document compile donc toujours, avant comme après l'ajout
+% des vrais fichiers dans images/.
+\newcommand{\logofig}[1]{%
+  \begin{center}
+    \IfFileExists{#1}{%
+      \includegraphics[height=1.8cm]{#1}%
+    }{%
+      \fbox{\parbox[c][1.8cm][c]{4cm}{\centering\itshape Logo manquant\\\texttt{\detokenize{#1}}}}%
+    }
+  \end{center}%
+}

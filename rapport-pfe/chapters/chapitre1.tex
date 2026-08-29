@@ -1,0 +1,209 @@
+\chapter{Cadre Général du Projet}
+\label{chap-cadre-general}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Ce premier chapitre a pour objectif de situer le projet dans son contexte. Nous présentons dans un premier temps l'organisme d'accueil, CLEDISS, ainsi que son produit phare Nomadis ERP. Nous exposons ensuite la problématique à l'origine du projet, une critique de l'existant, ainsi que la solution proposée. Enfin, nous détaillons la méthodologie de travail Scrum retenue pour la conduite du projet.
+
+\section{Présentation de l'organisme d'accueil}
+
+\subsection{CLEDISS}
+
+CLEDISS est une entreprise tunisienne éditrice de logiciels, fondée en 2018 et spécialisée dans la conception de solutions SaaS pour la digitalisation des processus métier (force de vente, logistique, RH, facturation, inventaire). Positionnée sur le marché des progiciels de gestion intégrés, CLEDISS accompagne ses clients dans la transformation numérique de leurs activités en proposant une plateforme hébergée dans le cloud, accessible à distance et maintenue en continu par les équipes internes de l'entreprise.
+
+\begin{table}[H]
+\centering
+\caption{Fiche d'identité de l'organisme d'accueil}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+\textbf{Raison sociale} & CLEDISS \\
+\textbf{Secteur d'activité} & Édition de logiciels SaaS \\
+\textbf{Année de création} & 2018 \\
+\textbf{Produit phare} & Nomadis ERP \\
+\textbf{Localisation} & Tunis, Tunisie \\
+\textbf{Site web} & \url{www.clediss.com} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Produit phare : Nomadis ERP}
+
+Nomadis ERP constitue le produit central de l'offre de CLEDISS. Il s'agit d'un progiciel de gestion intégré (\emph{Enterprise Resource Planning}) délivré en mode SaaS, permettant aux entreprises clientes de centraliser la gestion de leurs processus opérationnels — gestion commerciale, suivi de stock, comptabilité, ressources humaines — au sein d'une plateforme unique accessible via le web.
+
+Le mode de distribution SaaS implique que CLEDISS héberge et exploite elle-même l'infrastructure serveur sur laquelle s'exécute Nomadis ERP pour l'ensemble de ses clients. Cette responsabilité d'hébergement place naturellement la supervision de l'infrastructure — disponibilité des serveurs, performance, sauvegarde des données — au cœur des préoccupations opérationnelles de l'entreprise, et constitue le point de départ du présent projet.
+
+\subsection{Services proposés}
+
+En complément de l'édition logicielle, CLEDISS propose à ses clients un ensemble de services associés à l'exploitation de la plateforme Nomadis ERP~:
+
+\begin{itemize}
+  \item hébergement et exploitation de l'infrastructure serveur~;
+  \item paramétrage et accompagnement au déploiement de la solution~;
+  \item support technique et maintenance applicative~;
+  \item évolutions fonctionnelles à la demande des clients.
+\end{itemize}
+
+\section{Cadre général du projet}
+
+\subsection{Contexte et problématique}
+
+L'hébergement d'une plateforme SaaS destinée à plusieurs entreprises clientes implique pour CLEDISS la gestion d'un parc de serveurs — physiques ou hébergés chez un fournisseur cloud — sur lesquels s'exécutent les différents composants applicatifs de Nomadis ERP. Or, à l'origine du projet, cette supervision reposait essentiellement sur des vérifications manuelles~: connexion périodique aux serveurs pour contrôler leur charge, absence d'historisation des métriques, absence de mécanisme d'alerte automatique, et absence d'outil centralisé permettant d'intervenir à distance sur un service défaillant sans ouvrir une session SSH manuelle.
+
+Cette approche pose plusieurs problèmes opérationnels~:
+
+\begin{itemize}
+  \item \textbf{détection tardive des incidents} — une saturation de ressources (CPU, mémoire, disque) n'est identifiée qu'a posteriori~;
+  \item \textbf{absence de traçabilité} — aucune historisation des métriques ni des interventions effectuées sur les serveurs~;
+  \item \textbf{réactivité limitée} — toute action corrective nécessite une connexion manuelle, ce qui allonge le délai de résolution~;
+  \item \textbf{absence de vision consolidée} — aucun tableau de bord unique ne permet de visualiser l'état de l'ensemble du parc de serveurs.
+\end{itemize}
+
+La problématique centrale du projet est donc la suivante~:
+
+\begin{quote}
+\itshape
+\guillemotleft~Comment surveiller en temps réel l'état des serveurs, détecter les anomalies et intervenir à distance de manière sécurisée~? Et comment automatiser et sécuriser le déploiement de cette solution, du code jusqu'à la mise en production~?~\guillemotright
+\end{quote}
+
+\subsection{Étude de l'existant}
+
+Plusieurs outils de supervision existent sur le marché. Le \cref{tab-etude-existant} synthétise l'analyse des solutions les plus utilisées.
+
+\begin{table}[H]
+\centering
+\caption{Étude comparative des solutions de supervision existantes}
+\label{tab-etude-existant}
+\small
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Outil} & \textbf{Points forts} & \textbf{Limites} \\
+\midrule
+Zabbix & Solution open source, monitoring complet. & Interface complexe, difficile à configurer pour des équipes non spécialisées. \\
+Nagios & Outil très stable, système d'alertes par email. & Interface vieillissante, aucune application mobile. \\
+Grafana + Prometheus & Combinaison moderne, dashboards visuels avancés. & Aucun module d'actions à distance, aucune application mobile, aucune gestion de backup. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Critique de l'existant}
+
+Aucune de ces solutions ne répond à l'ensemble des besoins de CLEDISS~:
+
+\begin{itemize}
+  \item aucune n'intègre d'actions à distance (redémarrage de services / serveurs)~;
+  \item aucune ne propose une application mobile native~;
+  \item aucune ne gère les sauvegardes automatiques avec suivi et historique~;
+  \item aucune n'est intégrée dans une chaîne DevSecOps complète.
+\end{itemize}
+
+Ces constats mettent en évidence la nécessité de disposer d'un outil de supervision centralisé, temps réel et accessible depuis n'importe quel appareil.
+
+\subsection{Solution proposée}
+
+Pour répondre à ces constats, le projet propose la conception et le développement d'une plateforme de monitoring et de gestion à distance, structurée autour des principes suivants~:
+
+\begin{itemize}
+  \item un \textbf{agent de collecte léger} développé en Python (\texttt{psutil}), installé sur chaque serveur à superviser, collectant les métriques toutes les 5~secondes (CPU, RAM, disque, réseau, uptime) ainsi que la liste des services actifs, transmises à un backend centralisé~;
+  \item un \textbf{backend centralisé} Node.js/Express exposant une API REST unique, avec communication temps réel via WebSocket (Socket.io), consommée indifféremment par un client web et un client mobile~;
+  \item un \textbf{système d'alertes} basé sur des seuils configurables (\texttt{WARNING} à 80\,\%, \texttt{CRITICAL} à 90\,\%), avec notification automatique par courrier électronique~;
+  \item un module d'\textbf{actions à distance} sécurisé, permettant à un administrateur authentifié de redémarrer un service ou un serveur directement depuis l'interface, sans ouverture manuelle d'une session SSH~;
+  \item un module de \textbf{sauvegarde automatisée}, planifiée quotidiennement à minuit, avec suivi et notification par email~;
+  \item une industrialisation du déploiement selon une démarche \textbf{DevSecOps}~: conteneurisation Docker, pipeline CI/CD Jenkins (7 stages), déploiement Kubernetes k3s, GitOps avec Argo CD, gestion des secrets avec HashiCorp Vault, contrôle d'accès RBAC, et supervision avec Prometheus et Grafana.
+\end{itemize}
+
+\section{Méthodologie de travail}
+
+\subsection{Choix du cadre méthodologique (Scrum)}
+
+Le projet a été conduit selon le cadre agile \textbf{Scrum}. Ce choix se justifie par la nature du projet, qui combine développement fonctionnel évolutif et mise en place progressive d'une chaîne d'exploitation technique~: le découpage en sprints permet de livrer, à intervalles réguliers, des incréments fonctionnels testables et de réajuster les priorités du backlog en fonction des retours obtenus.
+
+Le projet a été structuré en cinq phases~: un Sprint~0 d'analyse et quatre sprints de développement~:
+
+\begin{itemize}
+  \item \textbf{Sprint 0} — analyse et spécification des besoins~;
+  \item \textbf{Sprint 1} — application de monitoring, première partie (backend Node.js, agent Python de collecte, tableau de bord temps réel, authentification JWT)~;
+  \item \textbf{Sprint 2} — application de monitoring, seconde partie (alertes email, actions à distance SSH, sauvegardes automatisées, application mobile React Native)~;
+  \item \textbf{Sprint 3} — architecture DevSecOps, première partie (conteneurisation Docker, pipeline CI/CD Jenkins 7 stages, analyse qualité SonarQube, scan vulnérabilités Trivy)~;
+  \item \textbf{Sprint 4} — architecture DevSecOps, seconde partie (orchestration Kubernetes k3s, GitOps Argo CD, gestion des secrets HashiCorp Vault, RBAC, supervision Prometheus + Grafana).
+\end{itemize}
+
+\subsection{Les rôles dans Scrum}
+
+Le cadre Scrum définit trois rôles principaux, adaptés dans le contexte de ce projet de fin d'études~:
+
+\begin{table}[H]
+\centering
+\caption{Rôles Scrum appliqués au projet}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+\textbf{Rôle} & \textbf{Responsabilité dans le cadre du projet} \\
+\midrule
+Product Owner & Encadrant professionnel CLEDISS — définit et priorise les besoins métier, valide les incréments livrés à l'issue de chaque sprint. \\
+Scrum Master / Développeuse & Mariem Chaabani, étudiante en charge du projet — anime le déroulement des sprints, développe les incréments, assure le suivi de l'avancement. \\
+Équipe de développement & Mariem Chaabani, avec le support technique de l'encadrant académique et de l'encadrant professionnel. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Planning du projet (Diagramme de Gantt)}
+
+Le planning prévisionnel du projet, structuré autour des cinq phases définies précédemment et s'étendant de mars à août 2026, est présenté à la \cref{fig-gantt}.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{ganttchart}[
+    vgrid, hgrid,
+    x unit=0.42cm,
+    y unit chart=0.65cm,
+    bar height=0.55,
+    bar label font=\scriptsize,
+    group label font=\scriptsize\bfseries,
+    title height=1,
+    title label font=\bfseries\small,
+  ]{1}{24}
+  \gantttitle{Planning du projet -- PFE CLEDISS (Mars -- Août 2026)}{24} \\
+  \gantttitle{Mars}{4}
+  \gantttitle{Avril}{4}
+  \gantttitle{Mai}{4}
+  \gantttitle{Juin}{4}
+  \gantttitle{Juillet}{4}
+  \gantttitle{Août}{4} \\
+
+  \ganttgroup[group/.append style={fill=violet!60}]{Phase 1 -- Analyse \& Conception}{1}{5} \\
+  \ganttbar[bar/.append style={fill=violet!40}]{Analyse des besoins \& étude existant}{1}{3} \\
+  \ganttbar[bar/.append style={fill=violet!40}]{Conception architecture technique}{3}{5} \\
+
+  \ganttgroup[group/.append style={fill=green!55!black}]{Phase 2 -- Développement App}{5}{13} \\
+  \ganttbar[bar/.append style={fill=green!45!black!70}]{Développement backend (Node.js + API)}{5}{10} \\
+  \ganttbar[bar/.append style={fill=green!45!black!70}]{Développement frontend (React)}{6}{11} \\
+  \ganttbar[bar/.append style={fill=green!45!black!70}]{Agent de monitoring (Python)}{5}{9} \\
+  \ganttbar[bar/.append style={fill=green!45!black!70}]{Application mobile (React Native)}{9}{13} \\
+
+  \ganttgroup[group/.append style={fill=orange!80!black}]{Phase 3 -- Déploiement Docker}{5}{13} \\
+  \ganttbar[bar/.append style={fill=orange!70}]{Conteneurisation Docker}{5}{10} \\
+  \ganttbar[bar/.append style={fill=orange!70}]{Déploiement VPS OVH}{10}{13} \\
+
+  \ganttgroup[group/.append style={fill=blue!60}]{Phase 4 -- Architecture DevSecOps}{13}{21} \\
+  \ganttbar[bar/.append style={fill=blue!45}]{Pipeline CI/CD (Jenkins + SonarQube)}{13}{17} \\
+  \ganttbar[bar/.append style={fill=blue!45}]{Scan vulnérabilités (Trivy)}{13}{17} \\
+  \ganttbar[bar/.append style={fill=blue!45}]{Orchestration Kubernetes + Argo CD}{17}{21} \\
+  \ganttbar[bar/.append style={fill=blue!45}]{Gestion secrets (Vault) + RBAC}{17}{21} \\
+  \ganttbar[bar/.append style={fill=blue!45}]{Monitoring infra (Prometheus + Grafana)}{17}{21} \\
+
+  \ganttgroup[group/.append style={fill=yellow!70!orange}]{Phase 5 -- Finalisation}{13}{24} \\
+  \ganttbar[bar/.append style={fill=yellow!60!orange!70}]{Tests \& validation}{13}{17} \\
+  \ganttbar[bar/.append style={fill=yellow!60!orange!70}]{Documentation technique}{17}{21} \\
+  \ganttbar[bar/.append style={fill=yellow!60!orange!70}]{Rapport \& préparation finale}{19}{24}
+
+\end{ganttchart}%
+}
+\caption{Diagramme de Gantt prévisionnel du projet}
+\label{fig-gantt}
+\end{figure}
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Ce chapitre a permis de situer le projet dans son contexte organisationnel et de poser la problématique à laquelle il répond, ainsi que la démarche méthodologique retenue pour y répondre. Le chapitre suivant détaille le Sprint~0, consacré à l'analyse et à la spécification des besoins, posant ainsi les fondations de la solution développée.

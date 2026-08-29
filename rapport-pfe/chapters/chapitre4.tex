@@ -1,0 +1,156 @@
+\chapter{Sprint 2 -- Application de Monitoring (Partie 2)}
+\label{chap-sprint2}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Ce chapitre présente la réalisation du Sprint~2, qui complète l'application de monitoring construite au sprint précédent par les fonctionnalités d'administration~: système d'alertes, actions à distance sécurisées, gestion des sauvegardes automatisées, ainsi que l'application mobile.
+
+\section{Objectif du sprint}
+
+L'objectif de ce sprint est de transformer la plateforme d'un outil de \emph{visualisation} en un véritable outil d'\emph{administration}~: détecter automatiquement les situations anormales, permettre à l'administrateur d'intervenir directement depuis l'interface, garantir la disponibilité des données par des sauvegardes planifiées, et rendre l'ensemble de ces fonctionnalités accessibles depuis une application mobile.
+
+\section{Analyse du sprint 2}
+
+\subsection{Sprint Backlog}
+
+\begin{table}[H]
+\centering
+\caption{Sprint Backlog -- Sprint 2}
+\small
+\begin{tabularx}{\linewidth}{@{}p{1.3cm}Xl@{}}
+\toprule
+\textbf{ID} & \textbf{Tâche} & \textbf{Statut} \\
+\midrule
+T2.1 & Calcul du statut serveur à partir de seuils configurables (\texttt{StatusService}) & Terminé \\
+T2.2 & Génération automatique d'alertes et notification par email (\texttt{AlertService}) & Terminé \\
+T2.3 & Détection automatique des services actifs par l'agent (\texttt{systemctl}) & Terminé \\
+T2.4 & Endpoints d'actions à distance sécurisées (redémarrage / arrêt de service, redémarrage serveur) via SSH & Terminé \\
+T2.5 & Journal d'audit des actions à distance & Terminé \\
+T2.6 & Planification et exécution automatisée des sauvegardes (\texttt{node-cron}) & Terminé \\
+T2.7 & Notification email du résultat des sauvegardes & Terminé \\
+T2.8 & Refonte complète de l'application mobile (React Native / Expo) & Terminé \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Diagramme de cas d'utilisation}
+
+Le \cref{fig-uc-sprint2} présente les cas d'utilisation couverts par ce sprint.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  actor/.style={align=center, font=\small},
+  usecase/.style={draw, ellipse, minimum width=3.6cm, minimum height=0.9cm, align=center, font=\small, fill=cledaccent!8},
+  system/.style={draw, rounded corners, thick, color=clednavy},
+]
+  \node[actor] (admin) at (0,-2.4) {\Huge $\bullet$ \\ Administrateur};
+  \node[actor] (cron) at (0,-6.4) {\Huge $\bullet$ \\ Planificateur\\(cron)};
+
+  \node[system, minimum width=8.5cm, minimum height=9cm,
+        label={[font=\bfseries\small\color{clednavy}]above:Application de Monitoring}]
+        (sys) at (5.5,-3.4) {};
+
+  \node[usecase] (uc1) at (3.2,0.6)  {Consulter les\\alertes actives};
+  \node[usecase] (uc2) at (7.8,0.6)  {Acquitter\\une alerte};
+  \node[usecase] (uc3) at (3.2,-1.2) {Redémarrer /\\arrêter un service};
+  \node[usecase] (uc4) at (7.8,-1.2) {Redémarrer\\un serveur};
+  \node[usecase] (uc5) at (5.5,-3)   {Consulter le journal\\d'audit};
+  \node[usecase] (uc6) at (3.2,-4.8) {Consulter les\\sauvegardes};
+  \node[usecase] (uc7) at (7.8,-4.8) {Recevoir une\\notification email};
+  \node[usecase] (uc8) at (5.5,-6.4) {Exécuter la\\sauvegarde quotidienne};
+
+  \draw (admin) -- (uc1);
+  \draw (admin) -- (uc2);
+  \draw (admin) -- (uc3);
+  \draw (admin) -- (uc4);
+  \draw (admin) -- (uc5);
+  \draw (admin) -- (uc6);
+  \draw[dashed,-{Latex}] (uc3) -- node[above,font=\tiny]{\guillemotleft include\guillemotright} (uc7);
+  \draw[dashed,-{Latex}] (uc8) -- node[above,font=\tiny]{\guillemotleft include\guillemotright} (uc7);
+  \draw (cron) -- (uc8);
+\end{tikzpicture}%
+}
+\caption{Diagramme de cas d'utilisation -- Sprint 2}
+\label{fig-uc-sprint2}
+\end{figure}
+
+\subsection{Diagramme de séquence}
+
+Le \cref{fig-seq-ssh} détaille le déroulement d'une action de redémarrage de service à distance, depuis le clic de l'administrateur jusqu'à la confirmation du résultat.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  ->,>=Latex,
+  lifeline/.style={draw, dashed},
+  actorbox/.style={draw, rounded corners, fill=cledaccent!10, minimum width=2.5cm, minimum height=0.7cm, align=center, font=\scriptsize},
+]
+  \foreach \x/\lbl [count=\i] in {0/Client (Web/Mobile), 3.6/Backend\\(remoteActions), 7.2/Serveur cible\\(SSH), 10.8/Base de données}{
+    \node[actorbox] (a\i) at (\x,0) {\lbl};
+    \draw[lifeline] (a\i.south) -- ++(0,-8.4);
+  }
+  \draw (a1.south) ++(0,-0.8) -- node[above,font=\tiny]{POST /restart-service}
+    node[below,font=\tiny]{Bearer JWT + x-admin-email} ++(3.6,0);
+  \draw (3.6,-1.9) -- node[above,font=\tiny]{vérifie rôle admin} ++(7.2,0);
+  \draw (10.8,-2.5) -- node[above,font=\tiny]{OK} ++(-7.2,0);
+  \draw (3.6,-3.3) -- node[above,font=\tiny]{connexion SSH} ++(3.6,0);
+  \draw (3.6,-4.1) -- node[above,font=\tiny]{sudo systemctl restart <service>} ++(3.6,0);
+  \draw (7.2,-4.9) -- node[above,font=\tiny]{stdout / code retour} ++(-3.6,0);
+  \draw (3.6,-5.7) -- node[above,font=\tiny]{systemctl is-active} ++(3.6,0);
+  \draw (7.2,-6.3) -- node[above,font=\tiny]{Actif / Inactif} ++(-3.6,0);
+  \draw (3.6,-7.0) -- node[above,font=\tiny]{enregistre AuditLog + envoie email} ++(7.2,0);
+  \draw (3.6,-7.7) -- node[above,font=\tiny]{200 OK -- statut vérifié} ++(-3.6,0);
+\end{tikzpicture}%
+}
+\caption{Diagramme de séquence -- Redémarrage d'un service à distance}
+\label{fig-seq-ssh}
+\end{figure}
+
+\section{Réalisation}
+
+\subsection{Système d'alertes (CPU, RAM, Disque)}
+
+Le statut d'un serveur (\texttt{OK}, \texttt{WARNING}, \texttt{CRITICAL}) est calculé à chaque réception de métrique par le service \texttt{StatusService}, à partir de seuils configurables persistés en base de données (avec des valeurs par défaut de \textbf{80\,\%} pour le seuil d'alerte et \textbf{90\,\%} pour le seuil critique, appliqués uniformément au CPU, à la RAM et au disque). Lorsqu'un seuil est franchi, le service \texttt{AlertService} génère un document \texttt{Alert} et déclenche l'envoi d'un courrier électronique de notification à l'administrateur, aussi bien pour le niveau \texttt{WARNING} que pour le niveau \texttt{CRITICAL}, afin de garantir une réactivité maximale.
+
+Une alerte peut ensuite être consultée puis \emph{acquittée} par l'administrateur depuis l'interface, ce qui trace formellement sa prise en charge sans pour autant la supprimer de l'historique.
+
+\subsection{Actions à distance via SSH}
+
+Le module d'actions à distance permet à un administrateur d'intervenir directement sur un serveur supervisé, sans ouverture manuelle d'une session SSH. Trois opérations sont proposées~: redémarrage d'un service, arrêt d'un service, redémarrage complet du serveur.
+
+\paragraph{Sécurité d'accès.} Ces actions sont protégées par une \textbf{double vérification}~: la présence d'un jeton JWT valide (middleware \texttt{verifyToken}, appliqué à l'ensemble des routes d'actions à distance) et l'appartenance de l'utilisateur au rôle administrateur, vérifiée en base de données à chaque requête (middleware \texttt{requireAdmin}).
+
+\paragraph{Exécution.} Une fois la requête autorisée, le backend établit une connexion SSH vers le serveur cible, à l'aide des identifiants (adresse IP, utilisateur, mot de passe, port) stockés sur le document \texttt{Server} correspondant, et exécute la commande \texttt{systemctl} adéquate (\texttt{restart}, \texttt{stop}). Le cas particulier du gestionnaire de processus \textbf{PM2} — qui n'est pas un service \texttt{systemd} — est traité séparément par l'exécution de la commande \texttt{pm2 restart all} / \texttt{pm2 stop all}.
+
+\paragraph{Détection dynamique des services.} Plutôt que de limiter les actions à une liste de services codée en dur, l'agent Python détecte, sur chaque serveur, l'ensemble des services \texttt{systemd} réellement actifs (commande \texttt{systemctl list-units --type=service --state=active}) et transmet cette liste au backend à chaque cycle de collecte. Cette liste, persistée sur le document \texttt{Server}, est ensuite affichée côté client~: seuls les services réellement présents sur un serveur donné y sont proposés à l'administrateur, quel que soit le serveur consulté.
+
+\paragraph{Vérification post-action.} Après exécution, le backend interroge à nouveau le serveur (\texttt{systemctl is-active}) afin de confirmer l'état réel du service et de retourner un statut vérifié (\emph{Actif}, \emph{Inactif}, \emph{Échec} ou \emph{Inconnu}) au client, plutôt que de se contenter de supposer le succès de la commande exécutée.
+
+\paragraph{Traçabilité.} Chaque action est journalisée dans la collection \texttt{AuditLog} (auteur, cible, horodatage, adresse IP, résultat) et donne lieu à l'envoi d'un courrier électronique de confirmation.
+
+\subsection{Gestion des sauvegardes}
+
+Les sauvegardes sont déclenchées automatiquement chaque nuit à minuit par une tâche planifiée (\texttt{node-cron}). Une vérification complémentaire, exécutée toutes les heures, permet de détecter et de signaler une sauvegarde qui n'aurait pas pu s'exécuter à l'horaire prévu. Le résultat de chaque sauvegarde (succès ou échec) est communiqué à l'administrateur par courrier électronique, et son historique est consultable depuis l'interface.
+
+\subsection{Application mobile (React Native)}
+
+L'application mobile, développée avec \textbf{React Native} et le framework \textbf{Expo} (Expo Router), donne accès depuis un smartphone à l'essentiel des fonctionnalités de la plateforme, en consommant la \emph{même} API REST que le client web. Elle s'articule autour de cinq écrans~:
+
+\begin{enumerate}
+  \item \textbf{Connexion} — authentification par email et mot de passe, jeton JWT persisté localement (\texttt{AsyncStorage}) et validé au démarrage de l'application~;
+  \item \textbf{Tableau de bord} — liste des serveurs et de leur statut, résumé des alertes actives~;
+  \item \textbf{Détail d'un serveur} — métriques en temps réel et graphique d'historique~;
+  \item \textbf{Alertes} — liste des alertes actives et acquittement~;
+  \item \textbf{Actions à distance} — sélection d'un serveur, liste de ses services réellement détectés, avec actions Arrêter / Redémarrer, et redémarrage du serveur.
+\end{enumerate}
+
+L'accès aux écrans protégés est conditionné à la présence d'une session valide, au moyen d'un mécanisme de garde de navigation~: tant que l'authentification n'est pas confirmée, seul l'écran de connexion est accessible. L'ensemble des écrans se rafraîchit automatiquement toutes les cinq secondes pour les données nécessitant un suivi en temps réel (tableau de bord, détail d'un serveur), reproduisant ainsi le comportement temps réel du client web.
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+À l'issue de ce sprint, l'application de monitoring est fonctionnellement complète~: supervision, alerting, administration à distance, sauvegardes et accessibilité mobile. Les deux sprints suivants portent sur l'industrialisation du déploiement de cette plateforme selon une démarche DevSecOps.

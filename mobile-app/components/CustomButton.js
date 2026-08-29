@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   View,
 } from 'react-native';
+import { Theme } from '../constants/theme';
 
 const CustomButton = ({
   title,
@@ -14,8 +15,8 @@ const CustomButton = ({
   disabled = false,
   style,
   small = false,
-  color = '#ffffff',
-  backgroundColor = '#3498db',
+  color = Theme.colors.textPrimary,
+  backgroundColor = Theme.colors.accent,
 }) => {
   return (
     <TouchableOpacity
@@ -56,7 +57,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   disabledButton: {
-    backgroundColor: '#bdc3c7',
+    backgroundColor: Theme.colors.textMuted,
     opacity: 0.6,
   },
   buttonText: {

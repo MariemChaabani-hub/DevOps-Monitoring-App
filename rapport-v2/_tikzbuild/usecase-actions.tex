@@ -1,0 +1,97 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+
+\begin{tikzpicture}[
+  uc/.style   = {draw, ellipse, minimum width=3.6cm, minimum height=0.9cm,
+                 align=center, font=\scriptsize, inner sep=2pt},
+  ucg/.style  = {uc, fill=black!12},
+  sys/.style  = {draw, dashed, rounded corners, thick},
+  rel/.style  = {draw, -},
+  inc/.style  = {draw, dashed, -{Latex[length=2mm]}, font=\tiny},
+  gen/.style  = {draw, -{Triangle[open, length=2.5mm, width=2.5mm]}},
+]
+
+% ---------- Frontière du système ----------
+\node[sys, minimum width=14cm, minimum height=18.6cm] (S) at (8.5,-7.6) {};
+\node[font=\scriptsize\bfseries] at (8.5,2.0) {Plateforme de supervision};
+
+% ---------- Acteur : Administrateur ----------
+\begin{scope}[shift={(-2.4,-6)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries] at (0,-1.5) {Administrateur};
+\end{scope}
+
+% ---------- Acteur : Agent de supervision ----------
+\begin{scope}[shift={(-2.4,-14.6)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries, align=center] at (0,-1.5) {Agent de\\supervision};
+\end{scope}
+
+% ---------- Actions à distance : services ----------
+\node[uc]  (gserv)  at (5.4, 0.8)    {Gérer les services\\d'un serveur};
+\node[ucg] (ssh)    at (12.4, 0.2)   {Établir une\\connexion SSH};
+\node[uc]  (rserv)  at (3.6, -1.0)   {Redémarrer\\un service};
+\node[uc]  (aserv)  at (8.6, -1.0)   {Arrêter un service};
+\node[ucg] (vstat)  at (12.4, -2.2)  {Vérifier le statut\\du service};
+\draw[gen] (rserv) -- (gserv);
+\draw[gen] (aserv) -- (gserv);
+\draw[inc] (gserv) -- node[above]{\guillemotleft include\guillemotright} (ssh);
+\draw[inc] (aserv) -- node[below, pos=0.55]{\guillemotleft include\guillemotright} (vstat);
+
+% ---------- Actions à distance : serveur ----------
+\node[uc]  (gsrv)   at (5.4, -3.6)   {Gérer un serveur};
+\node[ucg] (audit2) at (12.4, -4.4)  {Journaliser l'action\\(audit)};
+\node[uc]  (reboot) at (3.6, -5.4)   {Redémarrer\\le serveur};
+\node[uc]  (detect) at (8.6, -5.4)   {Consulter les services\\détectés};
+\draw[gen] (reboot) -- (gsrv);
+\draw[gen] (detect) -- (gsrv);
+\draw[inc] (gsrv) -- node[above]{\guillemotleft include\guillemotright} (audit2);
+
+% ---------- Audit ----------
+\node[uc] (jaudit) at (5.4, -7.2) {Consulter le journal\\d'audit};
+
+% ---------- DevSecOps ----------
+\node[uc]  (cicd)   at (5.4, -9.0)    {Superviser la chaîne\\CI/CD};
+\node[uc]  (qual)   at (3.6, -10.8)   {Consulter les rapports\\de qualité (SonarQube)};
+\node[uc]  (secu)   at (8.6, -10.8)   {Consulter les rapports\\de sécurité (Trivy)};
+\node[uc]  (k8s)    at (5.4, -12.6)   {Superviser le cluster\\Kubernetes};
+\node[ucg] (graf)   at (12.4, -12.6)  {Visualiser les tableaux\\de bord (Grafana)};
+\draw[gen] (qual) -- (cicd);
+\draw[gen] (secu) -- (cicd);
+\draw[inc] (k8s) -- node[above]{\guillemotleft include\guillemotright} (graf);
+
+% ---------- Agent ----------
+\node[uc]  (collect) at (5.4, -14.4)  {Collecter les métriques\\système};
+\node[ucg] (dserv)   at (12.4, -14.4) {Détecter les services\\actifs};
+\node[uc]  (send)    at (5.4, -15.9)  {Transmettre les données\\au backend};
+\draw[inc] (collect) -- node[above]{\guillemotleft include\guillemotright} (dserv);
+\draw[inc] (collect) -- node[right, font=\tiny]{\guillemotleft include\guillemotright} (send);
+
+% ---------- Liens acteurs : bus verticaux + branches horizontales ----------
+\draw[rel] (-2.0,-6) -- (0.6,-6);
+\draw[rel] (0.6,0.8) -- (0.6,-12.6);
+\foreach \n in {gserv, gsrv, jaudit, cicd, k8s}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\draw[rel] (-2.0,-14.6) -- (0.6,-14.6);
+\draw[rel] (0.6,-14.4) -- (0.6,-15.9);
+\foreach \n in {collect, send}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\end{tikzpicture}
+
+\end{document}

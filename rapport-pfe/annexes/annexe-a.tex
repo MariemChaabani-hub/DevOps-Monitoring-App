@@ -1,0 +1,77 @@
+\chapter*{Annexe A -- Jenkinsfile}
+\addcontentsline{toc}{chapter}{Annexe A -- Jenkinsfile}
+\label{annexe-jenkinsfile}
+
+Le script ci-dessous présente la structure du pipeline déclaratif Jenkins, correspondant aux sept étapes décrites en \cref{chap-sprint3}. \emph{Ce fichier est un modèle représentatif de la structure du pipeline~; il doit être remplacé par le contenu exact du \texttt{Jenkinsfile} du projet avant soutenance.}
+
+\begin{lstlisting}[language=bash,caption={Structure du pipeline Jenkins (modèle)}]
+pipeline {
+  agent any
+
+  environment {
+    DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+    SONAR_TOKEN            = credentials('sonarqube-token')
+  }
+
+  stages {
+
+    stage('1. Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('2. Installation des dependances') {
+      steps {
+        sh 'cd backend && npm install'
+        sh 'cd frontend && npm install'
+        sh 'cd agent && pip install -r requirements.txt'
+      }
+    }
+
+    stage('3. Build') {
+      steps {
+        sh 'cd frontend && npm run build'
+      }
+    }
+
+    stage('4. Analyse qualite (SonarQube)') {
+      steps {
+        withSonarQubeEnv('sonarqube-server') {
+          sh 'sonar-scanner'
+        }
+      }
+    }
+
+    stage('5. Scan securite (Trivy)') {
+      steps {
+        sh 'docker build -t mariemchaabani/monitoring-backend:${BUILD_NUMBER} ./backend'
+        sh 'trivy image --severity CRITICAL,HIGH --exit-code 1 mariemchaabani/monitoring-backend:${BUILD_NUMBER}'
+      }
+    }
+
+    stage('6. Build et push des images Docker') {
+      steps {
+        sh 'docker build -t mariemchaabani/monitoring-frontend:${BUILD_NUMBER} ./frontend'
+        sh 'docker login -u $DOCKERHUB_CREDENTIALS_USR -p $DOCKERHUB_CREDENTIALS_PSW'
+        sh 'docker push mariemchaabani/monitoring-backend:${BUILD_NUMBER}'
+        sh 'docker push mariemchaabani/monitoring-frontend:${BUILD_NUMBER}'
+      }
+    }
+
+    stage('7. Deploiement (GitOps)') {
+      steps {
+        sh 'git commit -am "chore: bump image tag to ${BUILD_NUMBER}" && git push'
+        // La synchronisation effective du cluster est ensuite prise en
+        // charge par Argo CD (voir Chapitre 6).
+      }
+    }
+  }
+
+  post {
+    failure {
+      echo 'Pipeline en echec -- deploiement annule.'
+    }
+  }
+}
+\end{lstlisting}

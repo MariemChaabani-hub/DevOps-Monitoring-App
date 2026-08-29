@@ -1,0 +1,143 @@
+\chapter{Sprint 1 -- Application de Monitoring (Partie 1)}
+\label{chap-sprint1}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Ce chapitre présente la réalisation du Sprint~1, consacré à la mise en place du socle de l'application de monitoring~: architecture backend, agent Python de collecte des métriques, tableau de bord temps réel et authentification.
+
+\section{Objectif du sprint}
+
+L'objectif du Sprint~1 est de disposer, à son issue, d'une chaîne complète et fonctionnelle allant de la collecte d'une métrique système sur un serveur jusqu'à son affichage en temps réel dans un tableau de bord, l'ensemble étant protégé par une authentification.
+
+\section{Analyse du sprint 1}
+
+\subsection{Sprint Backlog}
+
+\begin{table}[H]
+\centering
+\caption{Sprint Backlog -- Sprint 1}
+\small
+\begin{tabularx}{\linewidth}{@{}p{1.3cm}Xl@{}}
+\toprule
+\textbf{ID} & \textbf{Tâche} & \textbf{Statut} \\
+\midrule
+T1.1 & Modélisation des entités \texttt{Server} et \texttt{Metric} (Mongoose) & Terminé \\
+T1.2 & Mise en place de l'API REST (Express) et connexion à MongoDB Atlas & Terminé \\
+T1.3 & Développement de l'agent Python de collecte (\texttt{psutil}) & Terminé \\
+T1.4 & Endpoint \texttt{POST /metrics} de réception des métriques & Terminé \\
+T1.5 & Diffusion temps réel des mises à jour (WebSocket) & Terminé \\
+T1.6 & Développement du tableau de bord React (liste des serveurs, statut) & Terminé \\
+T1.7 & Mise en place de l'authentification JWT & Terminé \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Diagramme de cas d'utilisation}
+
+Le \cref{fig-uc-sprint1} détaille les cas d'utilisation couverts par ce sprint.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  actor/.style={align=center, font=\small},
+  usecase/.style={draw, ellipse, minimum width=3.4cm, minimum height=0.9cm, align=center, font=\small, fill=cledaccent!8},
+  system/.style={draw, rounded corners, thick, color=clednavy},
+]
+  \node[actor] (admin) at (0,-1.5) {\Huge $\bullet$ \\ Administrateur};
+  \node[actor] (agent) at (0,-4) {\Huge $\bullet$ \\ Agent de\\supervision};
+
+  \node[system, minimum width=7.5cm, minimum height=5.4cm,
+        label={[font=\bfseries\small\color{clednavy}]above:Application de Monitoring}]
+        (sys) at (5.5,-2.7) {};
+
+  \node[usecase] (uc1) at (3.5,-0.6) {Se connecter};
+  \node[usecase] (uc2) at (7.5,-0.6) {Consulter le\\tableau de bord};
+  \node[usecase] (uc3) at (5.5,-2.2) {Consulter le statut\\d'un serveur};
+  \node[usecase] (uc4) at (5.5,-3.8) {Envoyer les\\métriques};
+
+  \draw (admin) -- (uc1);
+  \draw (admin) -- (uc2);
+  \draw (admin) -- (uc3);
+  \draw (agent) -- (uc4);
+\end{tikzpicture}%
+}
+\caption{Diagramme de cas d'utilisation -- Sprint 1}
+\label{fig-uc-sprint1}
+\end{figure}
+
+\subsection{Diagramme de séquence}
+
+Le \cref{fig-seq-collecte} illustre le déroulement d'un cycle de collecte et de diffusion d'une métrique, du serveur supervisé jusqu'au tableau de bord.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  ->,>=Latex,
+  lifeline/.style={draw, dashed},
+  actorbox/.style={draw, rounded corners, fill=cledaccent!10, minimum width=2.4cm, minimum height=0.7cm, align=center, font=\scriptsize},
+]
+  \foreach \x/\lbl [count=\i] in {0/Agent Python, 3.4/Backend Node.js, 6.8/MongoDB, 10.2/Client (Web/Mobile)} {
+    \node[actorbox] (a\i) at (\x,0) {\lbl};
+    \draw[lifeline] (a\i.south) -- ++(0,-7);
+  }
+  \draw (a1.south) ++(0,-0.8) -- node[above,font=\tiny]{POST /metrics} ++(3.4,0) coordinate (m1);
+  \draw (3.4,-1.6) -- node[above,font=\tiny]{save()} ++(3.4,0);
+  \draw (7.8,-2.2) -- node[above,font=\tiny]{ack} ++(-3.4,0);
+  \draw (3.4,-2.8) -- node[above,font=\tiny]{broadcastUpdate() -- WebSocket} ++(6.8,0);
+  \draw (3.4,-3.6) -- node[above,font=\tiny]{200 OK} ++(-3.4,0);
+  \draw (10.2,-4.6) -- node[above,font=\tiny]{GET /api/servers (5s)} ++(-6.8,0);
+  \draw (3.4,-5.2) -- node[above,font=\tiny]{find()} ++(3.4,0);
+  \draw (7.8,-5.8) -- node[above,font=\tiny]{résultats} ++(-3.4,0);
+  \draw (3.4,-6.4) -- node[above,font=\tiny]{200 OK -- liste serveurs} ++(6.8,0);
+\end{tikzpicture}%
+}
+\caption{Diagramme de séquence -- Collecte et diffusion d'une métrique}
+\label{fig-seq-collecte}
+\end{figure}
+
+\section{Réalisation}
+
+\subsection{Architecture backend (Node.js + Express)}
+
+Le backend est développé avec \textbf{Node.js} et le framework \textbf{Express}. Il est structuré de façon modulaire, selon une organisation en trois couches~:
+
+\begin{itemize}
+  \item \texttt{models/} — schémas Mongoose définissant la structure des documents MongoDB (\texttt{Server}, \texttt{Metric}, \texttt{Alert}, \texttt{User}, \ldots)~;
+  \item \texttt{routes/} — définition des points d'accès de l'API REST, regroupés par domaine fonctionnel (\texttt{servers.js}, \texttt{metrics.js}, \texttt{alerts.js}, \texttt{remoteActions.js}, \ldots)~;
+  \item \texttt{services/} — logique métier réutilisable (calcul de statut, gestion des alertes, envoi d'emails, \ldots), découplée des routes.
+\end{itemize}
+
+La persistance des données repose sur \textbf{MongoDB Atlas}, une offre managée dans le cloud, ce qui dispense l'équipe de l'administration d'une instance MongoDB auto-hébergée.
+
+Le point d'entrée central de la collecte de métriques est l'endpoint \texttt{POST /metrics}~: à chaque réception, le backend recherche (ou crée s'il n'existe pas encore) le document \texttt{Server} correspondant, calcule le statut du serveur à partir des seuils configurés (\texttt{StatusService}), persiste la métrique, puis diffuse la mise à jour aux clients connectés.
+
+\subsection{Agent Python de collecte des métriques}
+
+L'agent de supervision est un script \textbf{Python} exécuté en continu sur chaque serveur à superviser. Il s'appuie sur la bibliothèque \texttt{psutil} pour collecter, à intervalle régulier, les métriques système~: taux d'utilisation du CPU, de la RAM, du disque, ainsi que des statistiques réseau et le temps de fonctionnement (\emph{uptime}) du système.
+
+À chaque cycle de collecte, l'agent transmet ces métriques au backend par une requête HTTP \texttt{POST} vers l'endpoint \texttt{/metrics}, accompagnées de l'identifiant et du nom du serveur (définis dans un fichier de configuration local). L'envoi s'appuie sur une session HTTP persistante, avec une logique de nouvelle tentative (\emph{retry}) en cas d'échec temporaire de connexion au backend, afin de garantir la résilience de la collecte face aux interruptions réseau ponctuelles.
+
+\subsection{Dashboard temps réel}
+
+Le tableau de bord, développé en \textbf{React.js}, présente une vue consolidée de l'ensemble des serveurs supervisés~: nom, statut (identifié par un code couleur), et métriques courantes. La mise à jour du tableau de bord s'appuie sur un canal \textbf{WebSocket} maintenu ouvert entre le client et le backend~: dès qu'une nouvelle métrique est reçue et traitée côté serveur, une notification est diffusée à l'ensemble des clients connectés, qui mettent alors à jour leur affichage sans nécessiter de rechargement de page.
+
+\subsection{Authentification JWT}
+
+L'accès à la plateforme est protégé par une authentification basée sur les \textbf{JSON Web Tokens (JWT)}. Le processus se déroule comme suit~:
+
+\begin{enumerate}
+  \item l'utilisateur soumet son email et son mot de passe à l'endpoint \texttt{POST /api/auth/login}~;
+  \item le backend vérifie les identifiants (le mot de passe étant stocké sous forme hachée) et, en cas de succès, génère un jeton JWT signé, contenant l'identifiant, l'email et le rôle de l'utilisateur, avec une durée de validité de 24~heures~;
+  \item ce jeton est ensuite transmis par le client dans l'en-tête \texttt{Authorization: Bearer <token>} de chaque requête adressée aux routes protégées~;
+  \item un middleware \texttt{verifyToken} intercepte ces requêtes, vérifie la validité et la signature du jeton, et rejette la requête (code HTTP 401) en cas de jeton absent, invalide ou expiré.
+\end{enumerate}
+
+Ce mécanisme est commun aux clients web et mobile, garantissant un comportement d'authentification homogène quel que soit le point d'accès à la plateforme.
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+À l'issue de ce sprint, la chaîne complète de collecte et de visualisation des métriques est opérationnelle~: un serveur supervisé transmet ses métriques via l'agent Python, celles-ci sont persistées et diffusées en temps réel par le backend, et affichées dans un tableau de bord web protégé par authentification. Le sprint suivant enrichit cette base avec le système d'alertes, les actions à distance, les sauvegardes et l'application mobile.

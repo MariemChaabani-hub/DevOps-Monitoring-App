@@ -1,0 +1,176 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+
+\begin{tikzpicture}[
+  zone/.style     = {draw, rounded corners=5pt, very thick, inner sep=0pt},
+  ztitle/.style   = {font=\scriptsize\bfseries, align=center},
+  box/.style      = {draw, rounded corners=3pt, fill=white, align=center,
+                     font=\tiny, minimum height=0.9cm, inner sep=4pt},
+  pod/.style      = {box, minimum width=4.6cm, minimum height=1.15cm},
+  ext/.style      = {box, minimum width=4.0cm, minimum height=1.1cm},
+  card/.style     = {draw, rounded corners=3pt, fill=white, align=left,
+                     font=\tiny, text width=4.2cm, inner sep=5pt,
+                     execute at begin node=\raggedright},
+  arr/.style      = {-{Latex[length=2.2mm]}, thick},
+  arrd/.style     = {-{Latex[length=2.2mm]}, thick, dashed},
+  lbl/.style      = {font=\tiny, fill=white, inner sep=1.5pt},
+]
+
+% ============================================================
+% ZONE CLIENTS
+% ============================================================
+\node[zone, draw=black!55, fill=black!3,
+      minimum width=11cm, minimum height=2.2cm] (CL) at (7.5,0.9) {};
+\node[ztitle] at (7.5,1.65) {CLIENTS};
+
+\node[box, minimum width=4.4cm] (nav) at (4.4,0.5)
+     {\textbf{Navigateur Web} \\ (React.js)};
+\node[box, minimum width=4.4cm] (mobile) at (10.6,0.5)
+     {\textbf{Application Mobile} \\ (React Native / Expo)};
+
+% ============================================================
+% SERVEUR VPS OVH   (x : 0.9 .. 14.1   |   y : -1.1 .. -10.7)
+% ============================================================
+\node[zone, draw=blue!60, fill=blue!3,
+      minimum width=13.2cm, minimum height=9.6cm] (SRV) at (7.5,-5.9) {};
+\node[ztitle, text=blue!60!black, align=center] at (7.5,-1.7)
+     {SERVEUR VPS OVH -- Debian Linux \\[1pt]
+      \normalfont\tiny IP 141.227.129.194};
+
+% --- Cluster k3s  (x : 1.4 .. 13.6  |  y : -2.4 .. -8.4) ---
+\node[zone, draw=blue!45, dashed, fill=blue!5,
+      minimum width=12.2cm, minimum height=6cm] (K8S) at (7.5,-5.4) {};
+\node[ztitle, text=blue!55!black] at (7.5,-2.85) {Cluster Kubernetes k3s};
+
+% --- Pods applicatifs ---
+\node[pod, fill=green!8] (front) at (4.4,-4.2)
+     {\textbf{Pod Frontend} \\ React.js servi par Nginx \\ \textbf{NodePort 30080}};
+\node[pod, fill=blue!8] (back) at (10.6,-4.2)
+     {\textbf{Pod Backend} \\ Node.js / Express + WebSocket \\ \textbf{NodePort 30300}};
+
+% --- Pods DevSecOps ---
+\node[pod, fill=violet!8, minimum width=3.5cm] (vault) at (3.5,-6.5)
+     {\textbf{Pod Vault} \\ gestion des secrets};
+\node[pod, fill=orange!8, minimum width=3.5cm] (argo) at (7.5,-6.5)
+     {\textbf{Pod Argo CD} \\ déploiement GitOps};
+\node[pod, fill=red!8, minimum width=3.5cm] (prom) at (11.5,-6.5)
+     {\textbf{Pods Prometheus} \\ \textbf{+ Grafana}};
+
+% --- Services système du VPS (hors cluster) ---
+\node[box, minimum width=5.2cm, fill=orange!6] (agentv) at (5.2,-9.6)
+     {\textbf{Agent Python} (service \texttt{systemd}) \\ collecte locale toutes les 5 s};
+\node[box, minimum width=5.2cm, fill=black!4] (svc) at (10.4,-9.6)
+     {\textbf{Services systemd supervisés} \\ nginx \textbullet\ mongod \textbullet\ pm2\ldots};
+
+% ============================================================
+% VM VIRTUALBOX
+% ============================================================
+\node[zone, draw=orange!70!black, fill=orange!4,
+      minimum width=4.4cm, minimum height=2.1cm] (VM) at (2.8,-12.4) {};
+\node[ztitle, text=orange!60!black] at (2.8,-11.7) {VM VIRTUALBOX};
+\node[box, minimum width=3.8cm, fill=orange!8] (agentvm) at (2.8,-12.7)
+     {\textbf{Agent Python} \\ réseau local};
+
+% ============================================================
+% SERVICES CLOUD   (x : 14.4 .. 19.2)
+% ============================================================
+\node[zone, draw=violet!60, fill=violet!3,
+      minimum width=4.8cm, minimum height=5.6cm] (EXT) at (16.8,-4.4) {};
+\node[ztitle, text=violet!60!black] at (16.8,-1.95) {SERVICES CLOUD};
+
+\node[ext, fill=violet!8] (mongo) at (16.8,-3.2)
+     {\textbf{MongoDB Atlas} \\ \textbf{Port 27017}};
+\node[ext, fill=violet!8] (smtp) at (16.8,-4.8)
+     {\textbf{SMTP Gmail} \\ notifications e-mail};
+\node[ext, fill=violet!8] (github) at (16.8,-6.4)
+     {\textbf{GitHub} \\ dépôt des manifests};
+
+% ============================================================
+% CARTES EXPLICATIVES
+% ============================================================
+\node[card, draw=green!55!black] (c1) at (16.8,-8.6)
+     {\textcolor{green!45!black}{\bfseries PRÉSENTATION} \\[2pt]
+      Frontend React.js conteneurisé, servi par Nginx sur le port 30080.
+      Application mobile React Native.};
+
+\node[card, draw=blue!60] (c2) at (16.8,-10.5)
+     {\textcolor{blue!60!black}{\bfseries MÉTIER} \\[2pt]
+      Backend Node.js/Express dans un pod k3s. API REST et WebSocket
+      exposés sur le port 30300.};
+
+\node[card, draw=violet!60] (c3) at (16.8,-12.4)
+     {\textcolor{violet!60!black}{\bfseries DONNÉES} \\[2pt]
+      MongoDB Atlas managé dans le cloud, port 27017. Secrets injectés
+      par HashiCorp Vault.};
+
+\node[card, draw=orange!70!black] (c4) at (16.8,-14.4)
+     {\textcolor{orange!60!black}{\bfseries COLLECTE \& DEVSECOPS} \\[2pt]
+      Agents Python (systemd) toutes les 5 s. Argo CD pour le GitOps,
+      Prometheus / Grafana pour la supervision.};
+
+% ============================================================
+% RÉSUMÉ DU DÉPLOIEMENT
+% ============================================================
+\node[draw, rounded corners=3pt, fill=blue!4, align=left, font=\tiny,
+      text width=13cm, inner sep=6pt,
+      execute at begin node=\raggedright] (resume) at (7.5,-15.2)
+     {\textbf{Résumé du déploiement.} La plateforme est déployée sur un VPS OVH sous
+      Debian Linux, hébergeant un cluster Kubernetes k3s. Le frontend
+      (\texttt{NodePort} 30080) et le backend (\texttt{NodePort} 30300) s'exécutent
+      chacun dans un pod dédié. Les données sont stockées dans MongoDB Atlas (cloud,
+      port 27017) et les secrets gérés par HashiCorp Vault. Argo CD synchronise le
+      cluster avec le dépôt GitHub, tandis que Prometheus et Grafana supervisent
+      l'infrastructure. Les agents Python, déployés en service \texttt{systemd} sur le
+      VPS et sur une VM VirtualBox, transmettent leurs métriques toutes les 5 secondes.};
+
+% ============================================================
+% LÉGENDE
+% ============================================================
+\node[zone, draw=black!45, fill=white,
+      minimum width=6.4cm, minimum height=1.7cm] (LEG) at (3.5,-17.4) {};
+\node[ztitle, anchor=west] at (0.6,-16.9) {LÉGENDE};
+\draw[arr] (0.7,-17.45) -- (1.5,-17.45);
+\node[font=\tiny, anchor=west] at (1.6,-17.45) {Flux principal (HTTP / HTTPS)};
+\draw[arrd] (0.7,-17.9) -- (1.5,-17.9);
+\node[font=\tiny, anchor=west] at (1.6,-17.9) {Flux SSH / GitOps / secrets};
+
+% ============================================================
+% FLUX
+% ============================================================
+% --- Clients -> pods ---
+\draw[arr] (nav.south) -- node[lbl, pos=0.6]{HTTPS} (front.north);
+\draw[arr] (mobile.south) -- node[lbl, pos=0.6]{HTTPS} (back.north);
+
+% --- Frontend -> Backend ---
+\draw[arr] (front.east) -- node[lbl]{API REST} (back.west);
+
+% --- Backend -> MongoDB / SMTP ---
+\draw[arr] (back.east) -- (13.9,-4.2) -- (13.9,-3.2) -- node[lbl, pos=0.6]{TCP/IP} (mongo.west);
+\draw[arr] (13.9,-4.2) -- (13.9,-4.8) -- node[lbl, pos=0.6]{SMTP} (smtp.west);
+
+% --- GitHub -> Argo CD (contourne les pods par le bas) ---
+\draw[arrd] (github.west) -- (13.9,-6.4) -- (13.9,-7.8)
+            -- node[lbl, pos=0.55]{GitOps} (7.5,-7.8) -- (argo.south);
+
+% --- Vault -> Backend (diagonale au-dessus de Argo CD) ---
+\draw[arrd] (vault.north east) -- node[lbl, pos=0.55]{secrets} (back.south west);
+
+% --- Agent VPS -> cluster ---
+\draw[arr] (agentv.north) -- node[lbl, pos=0.6]{\texttt{POST /metrics}} (5.2,-8.4);
+
+% --- Agent VM -> cluster (sort par la droite, puis couloir x = 2.0) ---
+\draw[arr] (agentvm.east) -- (5.6,-12.7) -- (5.6,-11.0) -- (2.0,-11.0) -- (2.0,-8.4);
+\node[lbl] at (2.0,-9.6) {HTTP};
+
+% --- Backend -> services systemd (SSH, couloir x = 13.45) ---
+\draw[arrd] (back.south east) -- (13.45,-4.775) -- (13.45,-9.6) -- node[lbl]{SSH} (svc.east);
+
+\end{tikzpicture}
+
+\end{document}

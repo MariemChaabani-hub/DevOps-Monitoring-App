@@ -1,0 +1,78 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  uc/.style   = {draw, ellipse, minimum width=3.8cm, minimum height=0.95cm,
+                 align=center, font=\scriptsize, inner sep=2pt},
+  ucg/.style  = {uc, fill=black!12},
+  sys/.style  = {draw, dashed, rounded corners, thick},
+  rel/.style  = {draw, -},
+  inc/.style  = {draw, dashed, -{Latex[length=2mm]}, font=\tiny},
+  gen/.style  = {draw, -{Triangle[open, length=2.5mm, width=2.5mm]}},
+]
+
+\node[sys, minimum width=14.5cm, minimum height=12.4cm] (S) at (8.5,-5.4) {};
+\node[font=\scriptsize\bfseries] at (8.5,1.4) {Chaîne d'intégration continue -- Sprint 3};
+
+% --- Acteur Développeur ---
+\begin{scope}[shift={(-2.4,-2.2)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries] at (0,-1.5) {Développeur};
+\end{scope}
+
+% --- Acteur Serveur Jenkins ---
+\begin{scope}[shift={(-2.4,-9.0)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries, align=center] at (0,-1.5) {Serveur\\Jenkins};
+\end{scope}
+
+% --- Cas d'utilisation ---
+\node[uc]  (push)   at (5.4, 0.4)   {Pousser le code\\sur le dépôt};
+\node[ucg] (hook)   at (12.6, 0.4)  {Déclencher le\\\textit{pipeline}};
+\draw[inc] (push) -- node[above]{\guillemotleft include\guillemotright} (hook);
+
+\node[uc]  (suivi)  at (5.4, -1.2)  {Suivre l'exécution\\du \textit{pipeline}};
+\node[uc]  (rapp)   at (5.4, -2.8)  {Consulter les rapports\\d'analyse};
+\node[uc]  (consQ)  at (12.6, -2.2) {Consulter la qualité\\du code};
+\node[uc]  (consV)  at (12.6, -3.6) {Consulter les\\vulnérabilités};
+\draw[gen] (consQ) -- (rapp);
+\draw[gen] (consV) -- (rapp);
+
+\node[uc]  (build)  at (5.4, -5.0)  {Construire\\l'application};
+\node[uc]  (test)   at (5.4, -6.3)  {Exécuter les tests};
+\node[uc]  (sonar)  at (5.4, -7.6)  {Analyser la qualité\\(SonarQube)};
+\node[ucg] (qgate)  at (12.6, -7.6) {Vérifier la\\\textit{Quality Gate}};
+\draw[inc] (sonar) -- node[above]{\guillemotleft include\guillemotright} (qgate);
+
+\node[uc]  (image)  at (5.4, -8.9)  {Construire les images\\Docker};
+\node[uc]  (scan)   at (5.4, -10.2) {Analyser les images\\(Trivy)};
+\node[uc]  (push2)  at (5.4, -11.5) {Publier les images\\sur le registre};
+\node[ucg] (notif)  at (12.6, -10.9){Notifier le résultat\\du \textit{pipeline}};
+\draw[inc] (scan) -- node[above, pos=0.6]{\guillemotleft include\guillemotright} (notif);
+
+% --- Liens acteurs : bus vertical ---
+\draw[rel] (-2.0,-2.2) -- (0.6,-2.2);
+\draw[rel] (0.6,0.4) -- (0.6,-2.8);
+\foreach \n in {push, suivi, rapp}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\draw[rel] (-2.0,-9.0) -- (0.6,-9.0);
+\draw[rel] (0.6,-5.0) -- (0.6,-11.5);
+\foreach \n in {build, test, sonar, image, scan, push2}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\end{tikzpicture}
+\end{document}

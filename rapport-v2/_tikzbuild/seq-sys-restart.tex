@@ -1,0 +1,32 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=3cm,
+                     minimum height=0.8cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+]
+  \node[actorbox] (a1) at (0,0)   {Administrateur};
+  \node[actorbox] (a2) at (6.5,0) {Plateforme};
+  \foreach \i in {1,2} \draw[life] (a\i.south) -- ++(0,-8.6);
+
+  \draw[msg] (0,-1.0)   -- node[above]{Sélectionner un serveur} (6.5,-1.0);
+  \draw[ret] (6.5,-1.8) -- node[above]{Liste des services détectés} (0,-1.8);
+  \draw[msg] (0,-2.7)   -- node[above]{Demander le redémarrage d'un service} (6.5,-2.7);
+  \draw[msg] (6.5,-3.6) -- node[above]{Vérifier les autorisations} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[msg] (6.5,-4.9) -- node[above]{Exécuter la commande via SSH} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[msg] (6.5,-6.2) -- node[above]{Vérifier le statut réel} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[ret] (6.5,-7.5) -- node[above]{Résultat et statut vérifié} (0,-7.5);
+\end{tikzpicture}
+\end{document}

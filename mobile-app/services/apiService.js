@@ -1,180 +1,90 @@
+/**
+ * Backend API client. Base URL is fixed (see config/constants.js) — no
+ * runtime server-URL override. Auth is dual-header for remote-actions
+ * endpoints: `Authorization: Bearer <jwt>` (checked by the backend's
+ * app-level verifyToken middleware) plus `x-admin-email` (checked by the
+ * route-level requireAdmin middleware, which looks up the user's role in
+ * MongoDB). Both are attached unconditionally by the request interceptor;
+ * they're harmless no-ops on the read-only endpoints that ignore them.
+ */
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { APP_CONFIG } from '../config/constants';
 
-// Instance axios qui sera initialisée dynamiquement
-let api = null;
+// Current session, written by AuthContext whenever token/email change.
+// apiService is a plain module (not a component) so it can't call
+// useAuth() itself — this is the bridge between the two.
+let session = { token: null, email: null };
 
-// Fonction pour initialiser/réinitialiser l'API avec la bonne URL
-export const initializeApi = async () => {
-  try {
-    const savedUrl = await AsyncStorage.getItem('SERVER_URL');
-    const baseUrl = savedUrl || APP_CONFIG.API_BASE_URL.replace('/api', '');
-    const apiUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
-    
-    api = axios.create({
-      baseURL: apiUrl,
-      timeout: APP_CONFIG.API_TIMEOUT,
-      headers: APP_CONFIG.API_HEADERS,
-    });
-
-    // Intercepteur pour les requêtes
-    api.interceptors.request.use(
-      (config) => {
-        config.headers['x-admin-email'] = APP_CONFIG.ADMIN_EMAIL;
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-  } catch (error) {
-    console.error('Erreur lors de l\'initialisation de l\'API:', error);
-    // Fallback à la config par défaut
-    api = axios.create({
-      baseURL: APP_CONFIG.API_BASE_URL,
-      timeout: APP_CONFIG.API_TIMEOUT,
-      headers: APP_CONFIG.API_HEADERS,
-    });
-  }
+export const setSession = (next) => {
+  session = next || { token: null, email: null };
 };
 
-// Intercepteur pour les réponses
-if (api) {
-  api.interceptors.response.use(
-    (response) => {
-      return response.data;
-    },
-    (error) => {
-      // Gérer les erreurs réseau
-      if (error.code === 'NETWORK_ERROR') {
-        throw new Error(APP_CONFIG.MESSAGES.ERROR_NETWORK);
-      }
-      
-      // Gérer les erreurs HTTP
-      if (error.response) {
-        const { status, data } = error.response;
-        
-        switch (status) {
-          case 401:
-            throw new Error(APP_CONFIG.MESSAGES.ERROR_UNAUTHORIZED);
-          case 403:
-            throw new Error(APP_CONFIG.MESSAGES.ERROR_FORBIDDEN);
-          case 404:
-            throw new Error(APP_CONFIG.MESSAGES.ERROR_NOT_FOUND);
-          case 500:
-            throw new Error(APP_CONFIG.MESSAGES.ERROR_SERVER);
-          default:
-            throw new Error(data?.message || 'Erreur inconnue');
-        }
-      }
-      
-      throw error;
-    }
-  );
-}
+const api = axios.create({
+  baseURL: APP_CONFIG.API_BASE_URL,
+  timeout: APP_CONFIG.API_TIMEOUT,
+  headers: APP_CONFIG.API_HEADERS,
+});
 
-// Service API
+api.interceptors.request.use((config) => {
+  if (session.token) {
+    config.headers['Authorization'] = `Bearer ${session.token}`;
+  }
+  if (session.email) {
+    config.headers['x-admin-email'] = session.email;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    if (error.response) {
+      const { status, data } = error.response;
+      switch (status) {
+        case 401:
+          throw new Error(data?.message || APP_CONFIG.MESSAGES.ERROR_UNAUTHORIZED);
+        case 403:
+          throw new Error(data?.message || APP_CONFIG.MESSAGES.ERROR_FORBIDDEN);
+        case 404:
+          throw new Error(data?.message || APP_CONFIG.MESSAGES.ERROR_NOT_FOUND);
+        case 500:
+          throw new Error(data?.message || APP_CONFIG.MESSAGES.ERROR_SERVER);
+        default:
+          throw new Error(data?.message || data?.error || 'Erreur inconnue');
+      }
+    }
+    throw new Error(APP_CONFIG.MESSAGES.ERROR_NETWORK);
+  }
+);
+
 export const apiService = {
-  // Assurer que l'API est initialisée
-  ensureInitialized: async () => {
-    if (!api) {
-      await initializeApi();
-    }
-  },
-  // Récupérer tous les serveurs
-  getServers: async () => {
-    try {
-      await apiService.ensureInitialized();
-      const response = await api.get('/servers');
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
+  // Auth
+  login: (email, password) => api.post('/auth/login', { email, password }),
+  getMe: () => api.get('/auth/me'),
 
-  // Récupérer les métriques
-  getMetrics: async (serverId = null) => {
-    try {
-      await apiService.ensureInitialized();
-      const endpoint = serverId 
-        ? `/metrics/${serverId}`
-        : '/metrics/latest';
-      const response = await api.get(endpoint);
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
+  // Servers
+  getServers: () => api.get('/servers'),
+  getServer: (serverId) => api.get(`/servers/${serverId}`),
+  getServerMetrics: (serverId, { limit = 100, minutes = 60 } = {}) =>
+    api.get(`/servers/${serverId}/metrics`, { params: { limit, minutes } }),
 
-  // Redémarrer un service
-  async restartService(serverId, service) {
-    try {
-      await apiService.ensureInitialized();
-      const response = await api.post(`/remote-actions/restart/${serverId}`, { service });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  },
+  // Dashboard
+  getDashboardSummary: () => api.get('/dashboard/summary'),
 
-  // Redémarrer un serveur
-  rebootServer: async (serverId) => {
-    try {
-      await apiService.ensureInitialized();
-      const response = await api.post(`/remote-actions/${serverId}/restart`, {
-        delay: 30,
-        force: false,
-      });
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
+  // Alerts
+  getAlerts: ({ status = 'ACTIVE', severity, server_id, limit = 100 } = {}) =>
+    api.get('/alerts', { params: { status, severity, server_id, limit } }),
+  acknowledgeAlert: (alertId, acknowledgedBy) =>
+    api.put(`/alerts/${alertId}/acknowledge`, { acknowledged_by: acknowledgedBy }),
 
-  // Méthodes additionnelles optionnelles
-  getServer: async (serverId) => {
-    try {
-      await apiService.ensureInitialized();
-      const response = await api.get(`/servers/${serverId}`);
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  getServerMetrics: async (serverId, limit = 24) => {
-    try {
-      await apiService.ensureInitialized();
-      const response = await api.get(`/metrics/${serverId}?limit=${limit}`);
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  getAuditLogs: async (serverId, limit = 50) => {
-    try {
-      await apiService.ensureInitialized();
-      const endpoint = serverId 
-        ? `/audit/server/${serverId}?limit=${limit}`
-        : `/audit?limit=${limit}`;
-      const response = await api.get(endpoint);
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  getDashboardSummary: async () => {
-    try {
-      await apiService.ensureInitialized();
-      const response = await api.get('/dashboard/summary');
-      return response.data || response;
-    } catch (error) {
-      throw error;
-    }
-  },
+  // Remote actions / services (dual-auth)
+  getServicesStatus: (serverId) => api.get(`/remote-actions/${serverId}/services-status`),
+  restartService: (serverId, serviceName) =>
+    api.post(`/remote-actions/${serverId}/restart-service`, { service_name: serviceName }),
+  stopService: (serverId, serviceName) =>
+    api.post(`/remote-actions/${serverId}/stop-service`, { service_name: serviceName }),
+  restartServer: (serverId, delay = 30) =>
+    api.post(`/remote-actions/${serverId}/restart`, { delay }),
 };
 
 export default apiService;

@@ -1,0 +1,141 @@
+\thispagestyle{fancy}
+\fancyhead[R]{A.U 2025-2026}
+\fancyhead[L]{Conclusion générale et perspectives}
+
+\chapter*{Conclusion générale et perspectives}
+\addcontentsline{toc}{chapter}{Conclusion générale et perspectives}
+
+Le travail présenté dans ce rapport s'inscrit dans le cadre du projet de fin d'études
+réalisé au sein de la société \textbf{CLEDISS}, éditeur tunisien de solutions logicielles.
+Il répond à une problématique concrète et quotidienne de l'équipe technique :
+l'absence d'un outil unifié permettant de superviser l'état des serveurs hébergeant les
+applications de production et d'y intervenir rapidement en cas d'incident.
+
+Avant ce projet, la détection d'une anomalie reposait essentiellement sur le signalement
+des utilisateurs finaux, et chaque intervention imposait une connexion manuelle au
+serveur concerné. Cette approche réactive engendrait des délais de résolution importants
+et ne laissait aucune trace exploitable des actions réalisées.
+
+\section*{Bilan du travail réalisé}
+\addcontentsline{toc}{section}{Bilan du travail réalisé}
+
+La solution développée est une \textbf{plateforme de supervision et d'administration
+d'infrastructure} constituée de quatre composants complémentaires : un agent de collecte
+Python déployé sur chaque serveur supervisé, une interface d'administration web
+développée en React.js, une application mobile React Native, et un backend Node.js
+exposant une API REST commune aux deux clients.
+
+Conformément à la méthodologie Scrum retenue, le développement s'est déroulé en un sprint
+préparatoire suivi de quatre sprints de réalisation :
+
+\begin{itemize}[label=\ding{43}]
+  \item le \textbf{Sprint 0} a permis de cadrer le projet : étude de l'existant, analyse
+        des besoins, choix de l'architecture N-Tiers et conception des modèles de
+        données ;
+  \item le \textbf{Sprint 1} a établi le socle de la plateforme : authentification
+        sécurisée par jeton JWT, agent de collecte des métriques système, enregistrement
+        automatique des serveurs et tableau de bord temps réel alimenté par WebSocket ;
+  \item le \textbf{Sprint 2} a transformé l'outil de visualisation en outil
+        d'administration : alertes automatiques par seuils avec notification par courrier
+        électronique, détection dynamique des services, actions à distance sécurisées via
+        SSH, journal d'audit, sauvegardes automatisées et application mobile ;
+  \item le \textbf{Sprint 3} a industrialisé la chaîne de livraison : conteneurisation
+        des trois composants avec Docker, \textit{pipeline} d'intégration continue en
+        sept étapes sous Jenkins, analyse de la qualité du code avec SonarQube et analyse
+        des vulnérabilités des images avec Trivy ;
+  \item le \textbf{Sprint 4} a automatisé le déploiement : orchestration sur un cluster
+        Kubernetes k3s, déploiement continu selon l'approche GitOps avec Argo CD,
+        externalisation des secrets dans HashiCorp Vault, cloisonnement des droits par
+        RBAC et supervision de l'infrastructure avec Prometheus et Grafana.
+\end{itemize}
+
+À l'issue de ces cinq sprints, l'ensemble des objectifs fixés au démarrage du projet a
+été atteint. La plateforme est déployée en production sur le serveur VPS de l'entreprise
+et supervise effectivement plusieurs serveurs, tandis que la chaîne DevSecOps assure de
+bout en bout la construction, la validation et le déploiement de chaque nouvelle version
+sans intervention manuelle.
+
+\section*{Apports du projet}
+\addcontentsline{toc}{section}{Apports du projet}
+
+\subsection*{Pour l'entreprise}
+La plateforme apporte à CLEDISS un gain opérationnel mesurable. La détection des
+anomalies est devenue \textbf{proactive} : l'équipe technique est alertée dès le
+dépassement d'un seuil, avant que le service ne se dégrade pour les utilisateurs. Les
+interventions courantes — redémarrage d'un service, consultation de l'état d'un serveur —
+s'effectuent désormais depuis une interface unique, en quelques secondes, et depuis un
+téléphone si nécessaire. Enfin, chaque action est tracée dans un journal d'audit, ce qui
+répond aux exigences de traçabilité auxquelles est soumise l'entreprise.
+
+\subsection*{Sur le plan personnel}
+Ce projet a été l'occasion de mettre en pratique, sur un cas réel et complet, les
+compétences acquises durant le cursus d'ingénieur. Il m'a permis de maîtriser
+l'intégralité d'une chaîne applicative moderne, du développement à l'exploitation :
+conception d'une architecture N-Tiers, développement d'une API REST sécurisée,
+réalisation d'interfaces web et mobiles, et surtout appropriation concrète de la culture
+\textbf{DevSecOps}, où la sécurité et la qualité sont intégrées au processus de
+construction plutôt que contrôlées après coup.
+
+L'immersion en entreprise a également apporté une dimension humaine essentielle :
+échanges réguliers avec l'encadrant technique, présentation des livrables à la fin de
+chaque sprint, prise en compte des retours et arbitrages entre l'idéal technique et les
+contraintes de délai.
+
+\section*{Difficultés rencontrées}
+\addcontentsline{toc}{section}{Difficultés rencontrées}
+
+Plusieurs difficultés techniques ont jalonné le projet et ont donné lieu à des solutions
+qui ont notablement enrichi la conception :
+
+\begin{itemize}[label=\ding{43}]
+  \item \textbf{L'hétérogénéité du parc supervisé.} Imposer une liste figée de services
+        aurait restreint la plateforme à un ensemble prédéfini. La solution retenue —
+        une détection dynamique des unités actives par l'agent — s'est révélée à la fois
+        plus souple et plus sûre, la liste détectée servant également de liste blanche
+        avant toute exécution de commande.
+  \item \textbf{La sécurisation des actions à distance.} Exécuter une commande
+        privilégiée sur un serveur depuis une interface web constitue une opération
+        sensible. Un dispositif à plusieurs niveaux a été mis en place : double
+        vérification d'autorisation, validation du nom de service par expression
+        régulière, journalisation systématique et notification par courrier électronique.
+  \item \textbf{La contrainte de ressources du serveur.} Le VPS de l'entreprise ne
+        pouvait accueillir une distribution Kubernetes complète. Le choix de k3s a permis
+        de conserver l'intégralité de l'interface de programmation de Kubernetes tout en
+        respectant cette contrainte matérielle.
+  \item \textbf{La gestion des secrets.} Le versionnement des manifestes de déploiement
+        exposait initialement les identifiants applicatifs dans le dépôt Git. Leur
+        externalisation dans HashiCorp Vault a corrigé cette faiblesse et constitue l'un
+        des apports majeurs du dernier sprint.
+\end{itemize}
+
+\section*{Perspectives d'évolution}
+\addcontentsline{toc}{section}{Perspectives d'évolution}
+
+La plateforme est fonctionnelle et déployée, mais plusieurs axes d'amélioration ont été
+identifiés et pourraient faire l'objet de développements ultérieurs :
+
+\begin{itemize}[label=\ding{220}]
+  \item \textbf{Notifications multicanal.} Compléter les notifications par courrier
+        électronique par des canaux à latence réduite tels que Slack, Microsoft Teams ou
+        les notifications \textit{push} de l'application mobile.
+  \item \textbf{Seuils dynamiques et détection d'anomalies.} Remplacer les seuils fixes
+        par des seuils calculés à partir du comportement historique de chaque serveur,
+        afin de détecter les dérives progressives que des seuils absolus ne révèlent pas.
+  \item \textbf{Authentification par clé SSH.} Substituer aux mots de passe SSH une
+        authentification par clés, gérées dans Vault, ce qui renforcerait encore la
+        sécurité des actions à distance.
+  \item \textbf{Gestion multi-utilisateurs.} Introduire une gestion fine des rôles au
+        niveau applicatif afin de distinguer les profils consultation, exploitation et
+        administration, et de restreindre les actions sensibles à certains opérateurs.
+  \item \textbf{Haute disponibilité.} Étendre le cluster à plusieurs n\oe uds et
+        augmenter le nombre de réplicas des pods applicatifs afin de supprimer le point
+        de défaillance unique que constitue aujourd'hui le serveur unique.
+  \item \textbf{Supervision applicative approfondie.} Étendre la collecte au-delà des
+        métriques système en y intégrant les journaux applicatifs et les temps de réponse
+        des services métiers, pour une vision complète de la santé des applications.
+\end{itemize}
+
+En définitive, ce projet de fin d'études a permis de livrer à CLEDISS une solution
+opérationnelle répondant à un besoin réel, tout en constituant une expérience formatrice
+particulièrement complète, à la croisée du développement logiciel, de l'administration
+système et de l'ingénierie DevSecOps.

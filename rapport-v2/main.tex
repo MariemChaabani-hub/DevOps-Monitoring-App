@@ -1,0 +1,85 @@
+\documentclass[a4paper,12pt]{report}
+
+% ============================================================
+% PAQUETS REQUIS PAR LE DESIGN
+% ============================================================
+\usepackage[french]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,left=3cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+
+\usepackage{graphicx}      % images
+\usepackage{float}         % [H] pour figures/tableaux
+\usepackage{fancyhdr}      % en-têtes personnalisés
+\usepackage{pifont}        % symboles \ding{} (✓ ✗ ➤ ☞)
+\usepackage{enumitem}      % listes avec label=\ding{}
+\usepackage{array}         % colonnes p{} améliorées, >{\raggedright}
+\usepackage{multirow}      % \multicolumn / \multirow
+\usepackage{longtable}     % tableaux sur plusieurs pages
+\usepackage{caption}       % \captionof
+
+% --- TikZ : diagrammes (cas d'utilisation, séquence, architecture) ---
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+
+\usepackage{hyperref}      % liens et références (toujours en dernier)
+\hypersetup{hidelinks}
+
+% ============================================================
+% CONFIGURATION DES EN-TÊTES
+% ============================================================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{A.U 2025-2026}
+\fancyfoot[C]{\thepage}
+\setlength{\headheight}{15pt}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+% ============================================================
+% PAGES LIMINAIRES (numérotation romaine)
+% ============================================================
+\pagenumbering{roman}
+
+% \input{chapters/page-garde.tex}
+% \input{chapters/dedicaces.tex}
+% \input{chapters/remerciements.tex}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+% \input{chapters/introduction.tex}
+
+% ============================================================
+% CHAPITRES (numérotation arabe)
+% ============================================================
+\clearpage
+\pagenumbering{arabic}
+
+\input{chapters/chapitre1.tex}   % Cadre général du projet
+\input{chapters/chapitre2.tex}   % Sprint 0 : analyse et conception
+\input{chapters/chapitre3.tex}   % Sprint 1 : socle de la plateforme
+\input{chapters/chapitre4.tex}   % Sprint 2 : administration et mobilité
+\input{chapters/chapitre5.tex}   % Sprint 3 : conteneurisation et CI
+\input{chapters/chapitre6.tex}   % Sprint 4 : orchestration et CD
+
+% ============================================================
+% CONCLUSION
+% ============================================================
+\input{chapters/conclusion.tex}
+
+% ============================================================
+% BIBLIOGRAPHIE
+% ============================================================
+\input{chapters/bibliographie.tex}
+
+% ============================================================
+% ANNEXES
+% ============================================================
+\appendix
+\addcontentsline{toc}{chapter}{Annexes}
+\input{chapters/annexes.tex}
+
+\end{document}

@@ -1,0 +1,88 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  uc/.style   = {draw, ellipse, minimum width=3.8cm, minimum height=0.95cm,
+                 align=center, font=\scriptsize, inner sep=2pt},
+  ucg/.style  = {uc, fill=black!12},
+  sys/.style  = {draw, dashed, rounded corners, thick},
+  rel/.style  = {draw, -},
+  inc/.style  = {draw, dashed, -{Latex[length=2mm]}, font=\tiny},
+  gen/.style  = {draw, -{Triangle[open, length=2.5mm, width=2.5mm]}},
+]
+
+\node[sys, minimum width=14.5cm, minimum height=15.4cm] (S) at (8.5,-6.4) {};
+\node[font=\scriptsize\bfseries] at (8.5,1.6) {Plateforme de supervision -- Sprint 2};
+
+% --- Acteur Administrateur ---
+\begin{scope}[shift={(-2.4,-4.6)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries] at (0,-1.5) {Administrateur};
+\end{scope}
+
+% --- Acteur Planificateur ---
+\begin{scope}[shift={(-2.4,-12.4)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries, align=center] at (0,-1.5) {Planificateur\\(cron)};
+\end{scope}
+
+% --- Bloc Alertes ---
+\node[uc]  (alertes) at (5.4, 0.6)   {Gérer les alertes};
+\node[ucg] (mail)    at (12.6, 0.6)  {Recevoir une\\notification e-mail};
+\node[uc]  (consA)   at (3.6, -1.1)  {Consulter les\\alertes actives};
+\node[uc]  (ackA)    at (8.6, -1.1)  {Acquitter une alerte};
+\node[ucg] (logAck)  at (13.4, -1.1) {Enregistrer\\l'acquittement};
+\draw[gen] (consA) -- (alertes);
+\draw[gen] (ackA)  -- (alertes);
+\draw[inc] (alertes) -- node[above]{\guillemotleft extend\guillemotright} (mail);
+\draw[inc] (ackA) -- node[above]{\guillemotleft include\guillemotright} (logAck);
+
+% --- Bloc Actions sur services ---
+\node[uc]  (gserv)  at (5.4, -3.0)   {Gérer les services\\d'un serveur};
+\node[ucg] (ssh)    at (12.6, -3.0)  {Établir une\\connexion SSH};
+\node[uc]  (rserv)  at (3.6, -4.7)   {Redémarrer\\un service};
+\node[uc]  (aserv)  at (8.6, -4.7)   {Arrêter un service};
+\node[ucg] (vstat)  at (12.6, -5.4)  {Vérifier le statut\\du service};
+\draw[gen] (rserv) -- (gserv);
+\draw[gen] (aserv) -- (gserv);
+\draw[inc] (gserv) -- node[above]{\guillemotleft include\guillemotright} (ssh);
+\draw[inc] (aserv) -- node[below, pos=0.6]{\guillemotleft include\guillemotright} (vstat);
+
+% --- Bloc Actions sur serveur ---
+\node[uc]  (gsrv)   at (5.4, -7.0)   {Redémarrer un serveur};
+\node[ucg] (audit)  at (12.6, -7.6)  {Journaliser l'action\\(audit)};
+\node[uc]  (detect) at (5.4, -8.6)   {Consulter les services\\détectés};
+\draw[inc] (gsrv) -- node[above]{\guillemotleft include\guillemotright} (audit);
+
+% --- Bloc Audit et sauvegardes ---
+\node[uc]  (jaudit) at (5.4, -10.2)  {Consulter le journal\\d'audit};
+\node[uc]  (hbck)   at (5.4, -11.6)  {Consulter l'historique\\des sauvegardes};
+\node[uc]  (bck)    at (5.4, -13.2)  {Exécuter la sauvegarde\\quotidienne};
+\draw[inc] (bck) -- node[above]{\guillemotleft include\guillemotright} (12.6,-13.2);
+\node[ucg] (mailb)  at (12.6, -13.2) {Notifier le résultat\\par e-mail};
+
+% --- Liens acteurs : bus vertical ---
+\draw[rel] (-2.0,-4.6) -- (0.6,-4.6);
+\draw[rel] (0.6,0.6) -- (0.6,-11.6);
+\foreach \n in {alertes, gserv, gsrv, detect, jaudit, hbck}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\draw[rel] (-2.0,-12.4) -- (0.6,-12.4);
+\draw[rel] (0.6,-12.4) -- (0.6,-13.2);
+\draw[rel] (0.6,0 |- bck.west) -- (bck.west);
+
+\end{tikzpicture}
+\end{document}

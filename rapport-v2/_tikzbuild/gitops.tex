@@ -1,0 +1,66 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  st/.style   = {draw, rounded corners=4pt, very thick, align=center,
+                 font=\scriptsize, minimum width=3.4cm, minimum height=1.6cm,
+                 inner sep=4pt},
+  zone/.style = {draw, dashed, rounded corners=5pt, thick, inner sep=0pt},
+  arr/.style  = {-{Latex[length=2.5mm]}, very thick},
+  arrd/.style = {-{Latex[length=2.5mm]}, very thick, dashed},
+  lbl/.style  = {font=\tiny, fill=white, inner sep=1.5pt},
+  num/.style  = {font=\tiny\bfseries, text=white, fill=black!65,
+                 circle, inner sep=1.6pt},
+]
+
+% --- Zone Développement / CI ---
+\node[zone, draw=blue!50, minimum width=12.2cm, minimum height=3.0cm] (Z1) at (5.9,0) {};
+\node[font=\scriptsize\bfseries, text=blue!60!black] at (5.9,1.75)
+     {INTÉGRATION CONTINUE (Sprint 3)};
+
+\node[st, draw=black!55, fill=black!5] (dev) at (1.6,0)
+     {\textbf{Développeur}\\\texttt{git push}\\du code source};
+\node[st, draw=blue!60, fill=blue!6] (jk) at (5.9,0)
+     {\textbf{Jenkins}\\Build, tests,\\SonarQube, Trivy};
+\node[st, draw=violet!60, fill=violet!7] (reg) at (10.2,0)
+     {\textbf{Registre d'images}\\Publication de\\\texttt{backend:39}};
+
+% --- Dépôt de manifestes ---
+\node[st, draw=orange!70!black, fill=orange!7, minimum width=3.8cm] (git2) at (5.9,-3.6)
+     {\textbf{Dépôt Git des manifestes}\\Mise à jour de l'étiquette\\d'image (\textit{commit} automatique)};
+
+% --- Zone Cluster ---
+\node[zone, draw=green!50!black, minimum width=12.2cm, minimum height=3.2cm] (Z2) at (5.9,-7.4) {};
+\node[font=\scriptsize\bfseries, text=green!40!black] at (5.9,-5.55)
+     {CLUSTER KUBERNETES k3s (Sprint 4)};
+
+\node[st, draw=green!50!black, fill=green!7] (argo) at (1.6,-7.5)
+     {\textbf{Argo CD}\\Comparaison de\\l'état souhaité\\et de l'état réel};
+\node[st, draw=green!50!black, fill=green!7] (pods) at (5.9,-7.5)
+     {\textbf{Pods applicatifs}\\Frontend et backend\\en exécution};
+\node[st, draw=red!55!black, fill=red!5] (obs) at (10.2,-7.5)
+     {\textbf{Prometheus}\\\textbf{+ Grafana}\\Supervision du cluster};
+
+% --- Numéros ---
+\node[num] at (3.75,0.62)  {1};
+\node[num] at (8.05,0.62)  {2};
+\node[num] at (11.0,-1.9)  {3};
+\node[num] at (4.55,-5.1)  {4};
+\node[num] at (3.75,-6.95) {5};
+
+% --- Flux ---
+\draw[arr] (dev) -- (jk);
+\draw[arr] (jk) -- (reg);
+\draw[arr] (reg.east) -- (12.6,0) -- (12.6,-3.6) -- node[lbl, pos=0.6]{nouvelle étiquette} (git2.east);
+\draw[arr] (git2.west) -- (-0.8,-3.6) -- node[lbl, pos=0.55]{\textit{polling} du dépôt} (-0.8,-7.5) -- (argo.west);
+\draw[arr] (argo) -- node[lbl]{\texttt{apply}} (pods);
+\draw[arr] (pods) -- node[lbl]{métriques} (obs);
+\draw[arrd] (pods.north) -- ++(0,0.6) -| node[lbl, pos=0.28]{auto-réparation si dérive} (1.6,-5.9) -- (argo.north);
+
+\end{tikzpicture}
+\end{document}

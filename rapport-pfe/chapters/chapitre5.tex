@@ -1,0 +1,134 @@
+\chapter{Sprint 3 -- Architecture DevSecOps (Partie 1)}
+\label{chap-sprint3}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Les deux sprints précédents ont porté sur la réalisation fonctionnelle de la plateforme de monitoring. Les deux sprints suivants portent sur son \textbf{industrialisation}~: la mise en place d'une chaîne d'intégration et de déploiement continus (CI/CD) intégrant des contrôles de qualité et de sécurité, préalable à tout déploiement en production. Ce chapitre couvre la première moitié de ce volet~: conteneurisation des composants, chaîne d'intégration continue Jenkins, analyse de qualité de code et scan de vulnérabilités.
+
+\section{Objectif du sprint}
+
+L'objectif de ce sprint est de garantir que chaque évolution du code source est automatiquement construite, analysée et validée avant de pouvoir être déployée, réduisant ainsi le risque de mise en production d'un code de qualité insuffisante ou porteur de vulnérabilités connues.
+
+\section{Analyse du sprint 3}
+
+\subsection{Sprint Backlog}
+
+\begin{table}[H]
+\centering
+\caption{Sprint Backlog -- Sprint 3}
+\small
+\begin{tabularx}{\linewidth}{@{}p{1.3cm}Xl@{}}
+\toprule
+\textbf{ID} & \textbf{Tâche} & \textbf{Statut} \\
+\midrule
+T3.1 & Rédaction des \texttt{Dockerfile} (backend, frontend, agent) & Terminé \\
+T3.2 & Configuration de l'analyse de qualité SonarQube (\texttt{sonar-project.properties}) & Terminé \\
+T3.3 & Mise en place du pipeline Jenkins (7 étapes) & Terminé \\
+T3.4 & Intégration du scan de vulnérabilités Trivy sur les images construites & Terminé \\
+T3.5 & Publication des images sur un registre Docker Hub & Terminé \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Diagramme de cas d'utilisation}
+
+Le \cref{fig-uc-sprint3} présente les cas d'utilisation de ce sprint, du point de vue de l'équipe technique.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  actor/.style={align=center, font=\small},
+  usecase/.style={draw, ellipse, minimum width=3.8cm, minimum height=0.9cm, align=center, font=\small, fill=cledaccent!8},
+  system/.style={draw, rounded corners, thick, color=clednavy},
+]
+  \node[actor] (dev) at (0,-1) {\Huge $\bullet$ \\ Développeur};
+  \node[actor] (jenkins) at (0,-4) {\Huge $\bullet$ \\ Jenkins\\(CI/CD)};
+
+  \node[system, minimum width=8cm, minimum height=6cm,
+        label={[font=\bfseries\small\color{clednavy}]above:Chaîne CI/CD}]
+        (sys) at (5.5,-2.5) {};
+
+  \node[usecase] (uc1) at (3.5,0.1)  {Pousser du code\\(git push)};
+  \node[usecase] (uc2) at (7.5,0.1)  {Construire les\\images Docker};
+  \node[usecase] (uc3) at (3.5,-1.6) {Analyser la qualité\\(SonarQube)};
+  \node[usecase] (uc4) at (7.5,-1.6) {Scanner les\\vulnérabilités (Trivy)};
+  \node[usecase] (uc5) at (5.5,-3.4) {Publier l'image\\(Docker Hub)};
+
+  \draw (dev) -- (uc1);
+  \draw (jenkins) -- (uc2);
+  \draw (jenkins) -- (uc3);
+  \draw (jenkins) -- (uc4);
+  \draw (jenkins) -- (uc5);
+\end{tikzpicture}%
+}
+\caption{Diagramme de cas d'utilisation -- Sprint 3}
+\label{fig-uc-sprint3}
+\end{figure}
+
+\section{Réalisation}
+
+\subsection{Conteneurisation avec Docker}
+
+Chaque composant applicatif de la plateforme est packagé sous la forme d'une image \textbf{Docker} indépendante, construite à partir d'un \texttt{Dockerfile} dédié.
+
+\paragraph{Backend.} L'image backend repose sur \texttt{node:20-slim} et exécute l'application via \texttt{pm2-runtime}, ce qui permet de bénéficier de la supervision de processus offerte par PM2 tout en restant compatible avec le modèle d'exécution au premier plan attendu par Docker (\cref{lst-dockerfile-backend}).
+
+\begin{figure}[H]
+\begin{lstlisting}[language=bash,caption={Dockerfile du backend},label={lst-dockerfile-backend}]
+FROM node:20-slim
+RUN apt-get update && apt-get install -y docker.io
+RUN npm install -g pm2
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --production
+COPY . .
+EXPOSE 5000
+CMD ["pm2-runtime", "server.js"]
+\end{lstlisting}
+\end{figure}
+
+\paragraph{Frontend.} L'image frontend s'appuie sur une construction \textbf{multi-étapes}~: une première étape (\texttt{node:20-alpine}) compile l'application React en fichiers statiques, une seconde étape (\texttt{nginx:alpine}) ne conserve que ces fichiers statiques et le serveur Nginx chargé de les servir, ce qui permet d'obtenir une image finale nettement plus légère qu'une image contenant l'ensemble de la chaîne de build Node.js.
+
+\paragraph{Agent.} L'agent Python est packagé à partir de l'image \texttt{python:3.11-slim}, avec installation de ses dépendances (\texttt{psutil}, \texttt{requests}) via \texttt{pip}.
+
+\subsection{Pipeline CI/CD Jenkins (7 stages)}
+
+L'intégration continue est assurée par \textbf{Jenkins}, à travers un pipeline déclaratif structuré en sept étapes (\emph{stages}), déclenché automatiquement à chaque poussée de code sur le dépôt Git~:
+
+\begin{enumerate}
+  \item \textbf{Checkout} — récupération de la dernière version du code source depuis le dépôt Git~;
+  \item \textbf{Installation des dépendances} — installation des paquets Node.js (backend, frontend) et Python (agent)~;
+  \item \textbf{Build} — construction des applications (compilation du frontend React, vérification syntaxique du backend et de l'agent)~;
+  \item \textbf{Analyse de qualité (SonarQube)} — analyse statique du code source, à la recherche de \emph{code smells}, de duplication et de complexité excessive~;
+  \item \textbf{Scan de sécurité (Trivy)} — analyse des images Docker construites à la recherche de vulnérabilités connues~;
+  \item \textbf{Construction et publication des images Docker} — construction des images finales et publication sur le registre Docker Hub~;
+  \item \textbf{Déploiement} — déclenchement du déploiement de la nouvelle version (pris en charge, à ce stade, par le mécanisme GitOps détaillé au chapitre suivant).
+\end{enumerate}
+
+Le pipeline est configuré pour interrompre son exécution dès qu'une étape échoue (analyse qualité en dessous du seuil de qualité configuré, vulnérabilité critique détectée), empêchant ainsi la propagation d'une version non conforme vers les étapes suivantes. Le fichier de définition du pipeline (\texttt{Jenkinsfile}) est fourni en \cref{annexe-jenkinsfile}.
+
+\subsection{Analyse qualité SonarQube}
+
+L'analyse de qualité du code source est assurée par \textbf{SonarQube}, dont la configuration du projet est définie dans le fichier \texttt{sonar-project.properties} à la racine du dépôt (\cref{lst-sonar}). Le périmètre d'analyse couvre l'ensemble du code source du projet, à l'exclusion des dépendances installées (\texttt{node\_modules}) et de l'application mobile, analysée séparément.
+
+\begin{figure}[H]
+\begin{lstlisting}[language=bash,caption={Configuration SonarQube},label={lst-sonar}]
+sonar.projectKey=monitoring-app
+sonar.projectName=DevOps Monitoring App
+sonar.sources=.
+sonar.exclusions=**/node_modules/**,**/mobile-app/**,**/.git/**
+\end{lstlisting}
+\end{figure}
+
+À l'issue de chaque analyse, SonarQube établit un \emph{Quality Gate}~: un ensemble de critères (couverture de test, dette technique, absence de vulnérabilités de sévérité élevée) que le code doit satisfaire pour être considéré comme conforme. Le pipeline Jenkins interroge ce résultat et interrompt la suite du déploiement en cas de non-conformité.
+
+\subsection{Scan de vulnérabilités Trivy}
+
+Une fois les images Docker construites, celles-ci sont analysées par \textbf{Trivy}, un scanner de vulnérabilités \emph{open source} spécialisé dans l'analyse des images de conteneurs. Trivy examine le système de fichiers de l'image (dépendances système et applicatives) et le compare à des bases de données de vulnérabilités connues (CVE), afin de détecter la présence de composants obsolètes ou vulnérables avant que l'image ne soit publiée sur le registre. Le pipeline est configuré pour faire échouer la construction en cas de détection d'une vulnérabilité de sévérité \texttt{CRITICAL} ou \texttt{HIGH}, garantissant qu'aucune image manifestement vulnérable n'atteint le registre Docker Hub.
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Ce sprint a permis de mettre en place les fondations de l'intégration continue de la plateforme~: conteneurisation des composants, automatisation de la construction, et intégration de contrôles de qualité et de sécurité systématiques avant toute publication d'image. Le sprint suivant s'appuie sur ces images pour automatiser le déploiement et l'exploitation de la plateforme sur un cluster Kubernetes.

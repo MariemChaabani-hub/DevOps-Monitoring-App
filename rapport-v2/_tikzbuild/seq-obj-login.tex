@@ -1,0 +1,34 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=2.8cm,
+                     minimum height=0.8cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+]
+  \node[actorbox] (a1) at (0,0)    {Interface\\de connexion};
+  \node[actorbox] (a2) at (4.6,0)  {\texttt{authRoutes}};
+  \node[actorbox] (a3) at (9.2,0)  {Modèle\\\texttt{User}};
+  \node[actorbox] (a4) at (13.8,0) {MongoDB\\Atlas};
+  \foreach \i in {1,...,4} \draw[life] (a\i.south) -- ++(0,-8.6);
+
+  \draw[msg] (0,-1.0)   -- node[above]{\texttt{POST /api/auth/login}} (4.6,-1.0);
+  \draw[msg] (4.6,-1.9) -- node[above]{\texttt{findOne(email)}} (9.2,-1.9);
+  \draw[msg] (9.2,-2.6) -- node[above]{requête} (13.8,-2.6);
+  \draw[ret] (13.8,-3.3)-- node[above]{document utilisateur} (9.2,-3.3);
+  \draw[ret] (9.2,-4.0) -- node[above]{utilisateur} (4.6,-4.0);
+  \draw[msg] (4.6,-4.9) -- node[above]{\texttt{comparePassword()}} (9.2,-4.9);
+  \draw[ret] (9.2,-5.6) -- node[above]{résultat de la comparaison} (4.6,-5.6);
+  \draw[msg] (4.6,-6.5) -- node[above]{\texttt{jwt.sign()}} ++(1.5,0)
+             -- ++(0,-0.5) -- ++(-1.5,0);
+  \draw[ret] (4.6,-7.8) -- node[above]{\texttt{\{ token, email, role \}}} (0,-7.8);
+\end{tikzpicture}
+\end{document}

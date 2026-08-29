@@ -1,0 +1,720 @@
+\thispagestyle{fancy}
+\fancyhead[R]{A.U 2025-2026}
+\fancyhead[L]{Chapitre 2 : Analyse et spécification des besoins}
+
+\chapter{Analyse et spécification des besoins}
+
+\section*{Introduction}
+Dans le premier chapitre, nous avons choisi d'adopter la méthodologie Scrum pour
+concevoir notre futur système. Dans ce chapitre, nous procédons à une analyse détaillée
+des besoins liés au développement de notre plateforme. Nous commençons par identifier
+les acteurs ainsi que les besoins fonctionnels et non fonctionnels. Par la suite, nous
+présentons le backlog produit et la planification des sprints. Enfin, nous exposons
+l'environnement technique retenu pour le développement, ainsi que l'architecture
+générale de l'application.
+
+\section{Modélisation du contexte}
+Dans le cycle de vie du développement logiciel, la spécification des besoins fonctionnels
+et non fonctionnels représente la première étape de ce cycle. Elle permet de spécifier
+les attentes de la plateforme à concevoir, tout en tenant compte d'une compréhension
+claire des besoins de l'organisation.
+
+\subsection{Identification des acteurs}
+La plateforme de supervision met en interaction plusieurs acteurs qui participent à la
+surveillance et à l'administration de l'infrastructure serveur. Chaque acteur dispose
+d'un rôle spécifique afin d'assurer le bon fonctionnement du système.
+
+\begin{itemize}[label=\ding{109}]
+\item \textbf{Administrateur :} utilisateur authentifié de la plateforme, via
+l'application web ou mobile. Il supervise l'état des serveurs, consulte les métriques en
+temps réel, gère les alertes, exécute les actions de maintenance à distance (redémarrage
+ou arrêt de services et de serveurs), et supervise la chaîne d'intégration continue et
+l'état du cluster Kubernetes.
+
+\item \textbf{Agent de supervision :} acteur automatisé, matérialisé par un programme
+Python exécuté de manière autonome sur chaque serveur supervisé. Il collecte
+périodiquement les métriques système (CPU, RAM, disque, réseau, uptime) ainsi que la
+liste des services actifs toutes les 5 secondes, puis les transmet au backend via l'API
+REST, sans intervention humaine.
+\end{itemize}
+
+\subsection{Spécification des besoins}
+Notre projet a pour but l'analyse, la conception et la réalisation d'une plateforme de
+supervision et de gestion à distance d'infrastructure serveur. La solution développée
+doit répondre aux exigences et aux besoins déterminés tout au long de la phase d'étude.
+
+\subsubsection*{Besoins fonctionnels}
+Les exigences fonctionnelles représentent l'ensemble des tâches et des fonctionnalités
+que le système doit assurer afin de répondre aux besoins des utilisateurs. Elles sont
+présentées, dans le tableau~\ref{tab:besoins-fonctionnels}, en fonction de chaque acteur
+de la plateforme.
+
+\renewcommand{\arraystretch}{1.5}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{3.8cm}
+                  |>{\raggedright\arraybackslash}p{10.4cm}|}
+\hline
+\textbf{Acteurs} & \textbf{Fonctionnalités} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Acteurs} & \textbf{Fonctionnalités} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{2}{r}{\textit{Suite du tableau à la page suivante}} \\
+\endfoot
+
+\hline
+\caption{Besoins fonctionnels par acteur}
+\label{tab:besoins-fonctionnels}
+\endlastfoot
+
+Administrateur &
+\textit{Supervision et administration :}
+\begin{itemize}[label=--, leftmargin=*, nosep, topsep=2pt]
+  \item S'authentifier à la plateforme (web et mobile)
+  \item Consulter le tableau de bord global des serveurs
+  \item Visualiser les métriques en temps réel (CPU, RAM, disque, réseau)
+  \item Consulter l'historique des métriques sous forme de graphiques
+  \item Consulter la liste des alertes actives
+  \item Acquitter une alerte prise en charge
+  \item Recevoir des notifications par courrier électronique
+  \item Redémarrer ou arrêter un service applicatif à distance
+  \item Redémarrer complètement un serveur à distance
+  \item Consulter la liste des services détectés sur un serveur
+  \item Consulter l'historique des sauvegardes
+  \item Consulter le journal d'audit des actions effectuées
+\end{itemize}
+\vspace{4pt}
+\textit{Industrialisation et déploiement :}
+\begin{itemize}[label=--, leftmargin=*, nosep, topsep=2pt]
+  \item Déclencher et suivre l'exécution du pipeline CI/CD
+  \item Consulter les rapports d'analyse de qualité du code
+  \item Consulter les rapports de scan de vulnérabilités
+  \item Superviser l'état du cluster Kubernetes (pods, ressources)
+  \item Gérer les secrets de l'infrastructure
+  \item Consulter les tableaux de bord de supervision d'infrastructure
+\end{itemize} \\
+\hline
+
+Agent de supervision &
+\begin{itemize}[label=--, leftmargin=*, nosep, topsep=2pt]
+  \item Collecter les métriques système toutes les 5 secondes
+  \item Détecter automatiquement les services actifs du serveur
+  \item Transmettre les données collectées au backend via l'API REST
+  \item Poursuivre la collecte en cas d'indisponibilité du backend
+  \item Reprendre l'envoi dès le rétablissement de la connexion
+\end{itemize} \\
+\hline
+
+\end{longtable}
+
+\subsubsection*{Besoins non fonctionnels}
+Les besoins non fonctionnels décrivent les contraintes techniques, les critères de
+qualité ainsi que les exigences de performance auxquelles la plateforme doit répondre
+afin de garantir son bon fonctionnement.
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Sécurité :}
+\begin{itemize}[label=\ding{43}]
+    \item Authentifier les utilisateurs à l'aide d'un identifiant et d'un mot de passe
+          stocké sous forme hachée ;
+    \item Sécuriser les échanges entre le frontend et le backend grâce à des jetons JWT
+          d'une durée de validité limitée ;
+    \item Protéger les actions sensibles par une double vérification : validité du jeton
+          et appartenance au rôle administrateur, contrôlée en base de données ;
+    \item Journaliser l'ensemble des actions d'administration à distance dans un journal
+          d'audit.
+\end{itemize}
+
+\item \textbf{Performance :}
+\begin{itemize}[label=\ding{43}]
+    \item Assurer une communication en temps réel entre le serveur et les clients grâce
+          au protocole WebSocket ;
+    \item Garantir un délai de rafraîchissement de l'interface inférieur à une seconde ;
+    \item Optimiser les requêtes de consultation des métriques par l'indexation de la
+          base de données.
+\end{itemize}
+
+\item \textbf{Disponibilité et maintenabilité :}
+\begin{itemize}[label=\ding{43}]
+    \item Garantir le redémarrage automatique des conteneurs en cas de défaillance grâce
+          à l'orchestrateur Kubernetes ;
+    \item Structurer le code source du backend selon une architecture modulaire (routes,
+          modèles, services, middlewares) ;
+    \item Conteneuriser l'ensemble des composants avec Docker afin de faciliter le
+          déploiement et la maintenance.
+\end{itemize}
+
+\item \textbf{Ergonomie :}
+\begin{itemize}[label=\ding{43}]
+    \item Proposer une interface web responsive et intuitive ;
+    \item Assurer une cohérence visuelle entre l'application web et l'application mobile ;
+    \item Présenter l'ensemble de l'interface en langue française.
+\end{itemize}
+
+\item \textbf{Interopérabilité :}
+\begin{itemize}[label=\ding{43}]
+    \item Permettre la communication entre les clients web et mobile et le backend à
+          travers une API REST unique ;
+    \item Assurer l'échange de données entre l'agent Python et le backend via le
+          protocole HTTP ;
+    \item Établir des connexions SSH vers les serveurs supervisés pour l'exécution des
+          actions à distance.
+\end{itemize}
+
+\item \textbf{Scalabilité :}
+\begin{itemize}[label=\ding{43}]
+    \item Supporter l'ajout de nouveaux serveurs supervisés sans modification du backend,
+          par simple installation de l'agent ;
+    \item Séparer les couches présentation, métier et données afin de permettre leur
+          évolution indépendante ;
+    \item Assurer une gestion flexible et évolutive des données grâce à MongoDB, adapté
+          au stockage de volumes importants de métriques.
+\end{itemize}
+\end{itemize}
+
+\subsection{Diagramme de cas d'utilisation général}
+Dans cette section, nous décrivons les exigences du système de manière formelle en
+utilisant le diagramme de cas d'utilisation global. La figure~\ref{fig:usecase-global}
+présente l'ensemble des fonctions fournies par l'application. Tous les cas d'utilisation
+nécessitent une authentification comme condition préalable.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{Image/UseCaseGlobal.png}
+    \caption{Diagramme de cas d'utilisation global}
+    \label{fig:usecase-global}
+\end{figure}
+
+\section{Analyse globale}
+Nous présentons, dans ce qui suit, une analyse globale comportant le diagramme de
+classes ainsi que l'architecture de la solution.
+
+\subsection{Diagramme de classes d'analyse}
+Bien que l'application repose sur une base de données NoSQL~\cite{mongodb}, dont le
+modèle de stockage est fondé sur des \textbf{collections} et des \textbf{documents}
+plutôt que sur des tables relationnelles, il demeure pertinent d'élaborer un diagramme
+de classes d'analyse afin de représenter les principales entités du système. Cette
+modélisation conceptuelle ne vise pas à reproduire fidèlement la structure physique de
+la base de données, mais à offrir une vision abstraite des différents objets métier
+manipulés par l'application.
+
+Elle permet ainsi d'identifier les principales collections, leurs attributs essentiels
+ainsi que les relations fonctionnelles qui les unissent, facilitant la compréhension de
+l'architecture des données et des interactions entre les différents composants du
+système. La figure~\ref{fig:diagramme-classes} présente ce diagramme.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{Image/DiagrammeClasses.png}
+    \caption{Diagramme de classes d'analyse global}
+    \label{fig:diagramme-classes}
+\end{figure}
+
+\subsection{Architecture globale}
+La définition de l'architecture logicielle constitue une étape essentielle dans la
+conception de notre plateforme. En effet, le choix de l'architecture influence
+directement les performances, la maintenabilité, l'évolutivité ainsi que la capacité du
+système à satisfaire les exigences fonctionnelles et non fonctionnelles identifiées lors
+de l'analyse des besoins.
+
+Dans cette perspective, une étude comparative a été menée entre trois architectures
+largement adoptées dans le développement des applications modernes : l'architecture
+monolithique, l'architecture client--serveur à trois niveaux (N-Tiers) et l'architecture
+orientée microservices. Cette comparaison, présentée dans le
+tableau~\ref{tab:comparaison-archi}, vise à mettre en évidence les caractéristiques, les
+avantages et les limites de chacune de ces approches.
+
+\begin{longtable}{|p{3.3cm}|>{\raggedright\arraybackslash}p{10.9cm}|}
+\hline
+\textbf{Architecture} & \textbf{Caractéristiques} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Architecture} & \textbf{Caractéristiques} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{2}{r}{\textit{Suite du tableau à la page suivante}} \\
+\endfoot
+
+\hline
+\caption{Comparaison des architectures Monolithique, N-Tiers et Microservices}
+\label{tab:comparaison-archi}
+\endlastfoot
+
+\textbf{Monolithique} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item L'application est développée et déployée sous la forme d'un unique bloc logiciel.
+  \item Les différents modules sont fortement couplés.
+  \item Le déploiement est relativement simple.
+  \item Toute évolution nécessite le redéploiement complet de l'application.
+  \item La maintenance et l'évolutivité deviennent complexes lorsque l'application
+        grandit.
+\end{itemize} \\
+\hline
+
+\textbf{N-Tiers} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item Séparation claire des responsabilités entre les couches de présentation, métier
+        et données.
+  \item Déploiement indépendant du frontend et du backend.
+  \item Base de données centralisée partagée par les différentes couches.
+  \item Facilite les opérations de maintenance, de test et d'évolution.
+  \item Offre un bon compromis entre modularité, simplicité de développement et
+        performances.
+\end{itemize} \\
+\hline
+
+\textbf{Microservices} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item Décomposition de l'application en services indépendants et faiblement couplés.
+  \item Chaque service dispose généralement de sa propre base de données.
+  \item Permet un déploiement et une mise à l'échelle indépendants de chaque service.
+  \item Les échanges entre services s'effectuent via des API REST.
+  \item Offre une grande flexibilité mais implique une orchestration plus complexe.
+\end{itemize} \\
+\hline
+
+\end{longtable}
+
+Au terme de cette étude comparative, l'architecture client--serveur à trois niveaux
+(\textbf{N-Tiers}) a été retenue pour la conception de notre plateforme. Ce choix
+s'explique par sa capacité à assurer une séparation claire des responsabilités entre les
+différentes couches de l'application, tout en garantissant une bonne maintenabilité, une
+évolutivité satisfaisante et une mise en œuvre relativement simple. Contrairement à
+l'architecture monolithique, elle favorise une meilleure modularité, tandis qu'elle
+évite la complexité de déploiement et d'orchestration inhérente à une architecture
+basée sur les microservices. Elle constitue ainsi une solution adaptée aux besoins
+techniques et fonctionnels du projet.
+
+\subsubsection{Architecture logique de la plateforme}
+L'architecture logicielle joue un rôle essentiel dans le développement d'un système
+fiable, efficace et capable d'évoluer en fonction des besoins. Dans le cadre de ce
+projet, nous avons opté pour une architecture logique organisée en plusieurs couches
+afin de garantir une répartition claire des responsabilités entre les différents
+composants de l'application.
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{La couche présentation (Front-End) :} cette couche gère l'ensemble des
+interactions avec les utilisateurs. Elle se décline en deux interfaces complémentaires :
+\begin{itemize}[label=\ding{43}]
+    \item \textbf{React.js (application web)} : interface principale destinée aux
+    administrateurs. Elle est structurée autour d'un routeur, de composants réutilisables
+    et d'un service assurant la communication avec l'API via des requêtes HTTP ;
+    \item \textbf{React Native / Expo (application mobile)} : interface mobile permettant
+    la consultation du tableau de bord, la gestion des alertes et l'exécution des actions
+    à distance en situation de mobilité.
+\end{itemize}
+
+\item \textbf{La couche métier (Back-End) :} implémentée en Node.js/Express, cette
+couche assure le traitement des données, la logique métier et l'exposition des services
+via une API REST. Elle est structurée en :
+\begin{itemize}[label=\ding{43}]
+    \item \textbf{Routes} : points d'entrée des requêtes HTTP, organisés par domaine
+    fonctionnel (serveurs, métriques, alertes, actions à distance, sauvegardes) ;
+    \item \textbf{Services} : implémentation de la logique fonctionnelle (calcul de
+    statut, génération d'alertes, envoi d'emails, planification des sauvegardes) ;
+    \item \textbf{Modèles} : schémas Mongoose assurant l'interaction avec la base de
+    données.
+\end{itemize}
+
+\item \textbf{La couche sécurité :} assurée par un système d'authentification basé sur
+les jetons JWT pour la gestion des sessions, complété par un middleware de vérification
+du rôle administrateur protégeant l'ensemble des routes sensibles de l'API.
+
+\item \textbf{La couche données :} repose sur MongoDB Atlas pour le stockage et la
+persistance de l'ensemble des données de l'application (serveurs, métriques, alertes,
+sauvegardes, journaux d'audit et utilisateurs).
+
+\item \textbf{La couche collecte :} constituée des agents Python déployés sur chaque
+serveur supervisé, transmettant périodiquement leurs métriques à la couche métier par
+requêtes HTTP.
+
+\item \textbf{La couche administration :} matérialisée par les connexions SSH établies à
+la demande par le backend vers les serveurs supervisés, pour l'exécution des actions à
+distance.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/ArchitectureLogique.png}
+    \caption{Architecture logique de la plateforme}
+    \label{fig:archi-logique}
+\end{figure}
+
+\subsubsection{Architecture physique de la plateforme}
+L'architecture physique décrit la manière dont les différents composants logiciels sont
+déployés et communiquent entre eux. La plateforme est déployée sur un serveur VPS OVH
+sous Debian Linux, hébergeant un cluster Kubernetes allégé (k3s) qui centralise les
+différents composants de l'application.
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Frontend React.js :} l'application web est conteneurisée et servie par
+Nginx au sein d'un pod Kubernetes. Elle est accessible depuis l'extérieur du cluster via
+un service de type \texttt{NodePort} sur le port 30080.
+
+\item \textbf{Backend Node.js/Express :} le serveur applicatif est exécuté dans un pod
+Kubernetes dédié. Il expose l'API REST ainsi que le canal WebSocket via un service
+\texttt{NodePort} sur le port 30300, et assure le traitement de la logique métier.
+
+\item \textbf{MongoDB Atlas :} la base de données est hébergée dans le cloud sous forme
+de service managé. Le backend y accède via une connexion sécurisée, les identifiants
+étant injectés dans le pod au moyen d'un objet \texttt{Secret} Kubernetes.
+
+\item \textbf{Agents Python :} déployés directement sur chaque serveur supervisé (VPS
+OVH et machine virtuelle), ils transmettent leurs métriques au backend par requêtes HTTP
+périodiques.
+
+\item \textbf{Application mobile :} exécutée sur le terminal de l'utilisateur, elle
+communique avec le backend via la même API REST que le client web.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/ArchitecturePhysique.png}
+    \caption{Architecture physique de la plateforme}
+    \label{fig:archi-physique}
+\end{figure}
+
+\section{Pilotage du projet avec Scrum}
+Notre projet est piloté par Scrum, étant la méthode la plus sollicitée parmi les
+méthodes agiles existantes.
+
+\subsection{Backlog du produit}
+Le tableau~\ref{tab:backlog-produit} présente le backlog du produit. Les fonctionnalités
+sont organisées par module et décrites sous forme de \textit{User Stories}.
+
+\renewcommand{\arraystretch}{1.5}
+\begin{longtable}{|c|>{\raggedright\arraybackslash}p{2.6cm}|c|>{\raggedright\arraybackslash}p{6.2cm}|c|}
+\hline
+\textbf{ID} & \textbf{Module} & \textbf{ID US} & \centering\arraybackslash\textbf{User Story} & \textbf{Complexité} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Module} & \textbf{ID US} & \centering\arraybackslash\textbf{User Story} & \textbf{Complexité} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{5}{r}{\textit{Suite du tableau à la page suivante}} \\
+\endfoot
+
+\hline
+\caption{Backlog du produit}
+\label{tab:backlog-produit}
+\endlastfoot
+
+M1 & Authentification
+& M1.1 & En tant qu'administrateur, je souhaite me connecter à la plateforme avec mon email et mon mot de passe. & Moyenne \\
+& & M1.2 & En tant qu'administrateur, je souhaite rester connecté grâce à un jeton persistant. & Moyenne \\
+& & M1.3 & En tant qu'administrateur, je souhaite me déconnecter du système. & Faible \\
+\hline
+
+M2 & Gestion des serveurs
+& M2.1 & En tant qu'administrateur, je souhaite consulter la liste des serveurs supervisés. & Moyenne \\
+& & M2.2 & En tant qu'administrateur, je souhaite visualiser le statut de chaque serveur (OK, WARNING, CRITICAL, OFFLINE). & Élevée \\
+& & M2.3 & En tant qu'administrateur, je souhaite consulter le détail d'un serveur. & Moyenne \\
+& & M2.4 & En tant qu'administrateur, je souhaite qu'un nouveau serveur soit enregistré automatiquement dès sa première remontée de métriques. & Élevée \\
+\hline
+
+M3 & Supervision des métriques
+& M3.1 & En tant qu'agent, je souhaite collecter les métriques système toutes les 5 secondes. & Élevée \\
+& & M3.2 & En tant qu'administrateur, je souhaite visualiser les métriques en temps réel. & Élevée \\
+& & M3.3 & En tant qu'administrateur, je souhaite consulter l'historique des métriques sous forme de graphique. & Élevée \\
+& & M3.4 & En tant qu'administrateur, je souhaite consulter un résumé global de la santé du parc. & Moyenne \\
+\hline
+
+M4 & Gestion des alertes
+& M4.1 & En tant que système, je souhaite générer une alerte lors du dépassement d'un seuil configuré. & Élevée \\
+& & M4.2 & En tant qu'administrateur, je souhaite recevoir un email automatique lors d'une alerte. & Élevée \\
+& & M4.3 & En tant qu'administrateur, je souhaite consulter la liste des alertes actives. & Moyenne \\
+& & M4.4 & En tant qu'administrateur, je souhaite acquitter une alerte prise en charge. & Moyenne \\
+\hline
+
+M5 & Actions à distance
+& M5.1 & En tant qu'agent, je souhaite détecter automatiquement les services actifs du serveur. & Élevée \\
+& & M5.2 & En tant qu'administrateur, je souhaite consulter les services réellement actifs d'un serveur. & Moyenne \\
+& & M5.3 & En tant qu'administrateur, je souhaite redémarrer un service à distance via SSH. & Élevée \\
+& & M5.4 & En tant qu'administrateur, je souhaite arrêter un service à distance via SSH. & Élevée \\
+& & M5.5 & En tant qu'administrateur, je souhaite redémarrer complètement un serveur à distance. & Élevée \\
+& & M5.6 & En tant qu'administrateur, je souhaite consulter le journal d'audit des actions effectuées. & Moyenne \\
+\hline
+
+M6 & Gestion des sauvegardes
+& M6.1 & En tant que système, je souhaite exécuter une sauvegarde automatique quotidienne. & Élevée \\
+& & M6.2 & En tant qu'administrateur, je souhaite recevoir un email de confirmation après chaque sauvegarde. & Moyenne \\
+& & M6.3 & En tant qu'administrateur, je souhaite consulter l'historique des sauvegardes. & Moyenne \\
+\hline
+
+M7 & Application mobile
+& M7.1 & En tant qu'administrateur, je souhaite me connecter depuis l'application mobile. & Moyenne \\
+& & M7.2 & En tant qu'administrateur, je souhaite consulter le tableau de bord depuis mon téléphone. & Élevée \\
+& & M7.3 & En tant qu'administrateur, je souhaite exécuter des actions à distance depuis mon téléphone. & Élevée \\
+\hline
+
+M8 & Chaîne DevSecOps
+& M8.1 & En tant que responsable DevOps, je souhaite conteneuriser chaque composant avec Docker. & Élevée \\
+& & M8.2 & En tant que responsable DevOps, je souhaite automatiser le build via un pipeline Jenkins. & Élevée \\
+& & M8.3 & En tant que responsable DevOps, je souhaite analyser la qualité du code avec SonarQube. & Moyenne \\
+& & M8.4 & En tant que responsable DevOps, je souhaite scanner les vulnérabilités des images avec Trivy. & Moyenne \\
+& & M8.5 & En tant que responsable DevOps, je souhaite déployer la plateforme sur un cluster Kubernetes. & Élevée \\
+& & M8.6 & En tant que responsable DevOps, je souhaite automatiser le déploiement via GitOps (Argo CD). & Élevée \\
+& & M8.7 & En tant que responsable DevOps, je souhaite sécuriser les secrets avec HashiCorp Vault. & Élevée \\
+& & M8.8 & En tant que responsable DevOps, je souhaite superviser l'infrastructure avec Prometheus et Grafana. & Moyenne \\
+\hline
+
+\end{longtable}
+
+\subsection{Planification des sprints}
+Après l'élaboration du backlog produit et l'estimation de la charge de travail, le
+projet a été réparti en quatre sprints. Chaque sprint regroupe un ensemble cohérent de
+fonctionnalités permettant de livrer progressivement les différents modules de la
+plateforme.
+
+\begin{longtable}{|p{2.4cm}|>{\raggedright\arraybackslash}p{11.8cm}|}
+\hline
+\textbf{Sprint} & \textbf{Modules développés} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Sprint} & \textbf{Modules développés} \\
+\hline
+\endhead
+
+\hline
+\caption{Planification des sprints}
+\label{tab:planification-sprints}
+\endlastfoot
+
+\textbf{Sprint 1} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item Authentification (M1)
+  \item Gestion des serveurs (M2)
+  \item Supervision des métriques (M3)
+\end{itemize} \\
+\hline
+
+\textbf{Sprint 2} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item Gestion des alertes (M4)
+  \item Actions à distance (M5)
+  \item Gestion des sauvegardes (M6)
+  \item Application mobile (M7)
+\end{itemize} \\
+\hline
+
+\textbf{Sprint 3} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item Conteneurisation Docker (M8.1)
+  \item Pipeline CI/CD Jenkins (M8.2)
+  \item Analyse qualité SonarQube (M8.3)
+  \item Scan de vulnérabilités Trivy (M8.4)
+\end{itemize} \\
+\hline
+
+\textbf{Sprint 4} &
+\begin{itemize}[leftmargin=*, nosep]
+  \item Déploiement Kubernetes k3s (M8.5)
+  \item GitOps avec Argo CD (M8.6)
+  \item Gestion des secrets Vault et RBAC (M8.7)
+  \item Supervision Prometheus et Grafana (M8.8)
+\end{itemize} \\
+\hline
+
+\end{longtable}
+
+\section{Environnement de travail}
+
+\subsection{Environnement matériel de développement}
+Le développement de l'application a été réalisé dans un environnement matériel adapté
+pour répondre aux exigences du projet. Le poste de travail utilisé dispose des
+caractéristiques suivantes :
+
+\begin{itemize}[label=\ding{43}]
+    \item \textbf{Modèle :} Ordinateur portable Lenovo
+    \item \textbf{Système d'exploitation :} Windows 11 Pro (64 bits)
+    \item \textbf{Processeur :} Intel(R) Core(TM) i7
+    \item \textbf{Mémoire RAM :} 16 Go
+    \item \textbf{Stockage :} 512 Go SSD
+\end{itemize}
+
+Le déploiement en production s'appuie quant à lui sur l'infrastructure suivante :
+
+\begin{itemize}[label=\ding{43}]
+    \item \textbf{Serveur VPS OVH :} Debian Linux, hébergeant le cluster Kubernetes k3s ;
+    \item \textbf{Machine virtuelle VirtualBox :} second serveur supervisé permettant de
+          valider le fonctionnement multi-serveurs ;
+    \item \textbf{Smartphone Android :} utilisé pour les tests de l'application mobile.
+\end{itemize}
+
+\subsection{Outils de modélisation, de développement et de gestion de données}
+Pour mener à bien la conception et le développement de la plateforme, plusieurs outils
+ont été utilisés, allant de la modélisation UML à la documentation des API, en passant
+par le développement intégré et la gestion des bases de données.
+
+\vspace{0.5em}
+\renewcommand{\arraystretch}{1.3}
+\begin{center}
+\begin{tabular}{|l|p{8.5cm}|c|}
+\hline
+\textbf{Outil} & \textbf{Description} & \textbf{Logo} \\
+\hline
+Draw.io & Logiciel en ligne utilisé pour la création des diagrammes UML (cas
+d'utilisation, classes, séquences) et des schémas d'architecture de la plateforme.
+& \includegraphics[height=25pt]{Image/drawio.png} \\
+\hline
+Visual Studio Code & Éditeur de code principal utilisé pour le développement du frontend
+React.js, du backend Node.js/Express, de l'agent Python et de l'application mobile.
+& \includegraphics[height=25pt]{Image/vscode.png} \\
+\hline
+Postman & Outil utilisé pour tester, documenter et valider les endpoints de l'API REST
+de la plateforme (serveurs, métriques, alertes, actions à distance).
+& \includegraphics[height=25pt]{Image/postman.png} \\
+\hline
+MongoDB Compass & Interface graphique officielle de MongoDB permettant de visualiser,
+explorer et manipuler les données stockées dans la base de données.
+& \includegraphics[height=25pt]{Image/compass.png} \\
+\hline
+GitHub & Plateforme de gestion de versions utilisée pour le suivi du code source et
+constituant la source de vérité du déploiement GitOps.
+& \includegraphics[height=25pt]{Image/github.png} \\
+\hline
+\end{tabular}
+\captionof{table}{Outils utilisés pour la modélisation, le développement et la gestion de données}
+\label{tab:outils}
+\end{center}
+
+\vspace{1em}
+
+\subsection{Langages de programmation}
+Le choix des langages de programmation est basé sur les exigences techniques de la
+plateforme, notamment la performance du backend, la réactivité du frontend web et la
+portabilité de l'application mobile.
+
+\vspace{0.5em}
+\renewcommand{\arraystretch}{1.3}
+\begin{center}
+\begin{tabular}{|l|p{8.5cm}|c|}
+\hline
+\textbf{Langage} & \textbf{Description} & \textbf{Logo} \\
+\hline
+JavaScript & Langage principal utilisé pour le développement du frontend (React.js) et
+du backend (Node.js/Express). Il permet une cohérence technologique entre les deux
+couches grâce à l'écosystème npm.
+& \includegraphics[height=25pt]{Image/javascript.png} \\
+\hline
+TypeScript & Sur-ensemble de JavaScript intégrant des types statiques, utilisé pour le
+développement de l'application mobile afin de sécuriser le code et faciliter sa
+maintenance.
+& \includegraphics[height=25pt]{Image/typescript.png} \\
+\hline
+Python & Utilisé pour développer l'agent de supervision installé sur chaque serveur. Sa
+richesse en bibliothèques système, notamment \texttt{psutil}, en fait un choix idéal pour
+la collecte de métriques.
+& \includegraphics[height=25pt]{Image/python.png} \\
+\hline
+\end{tabular}
+\captionof{table}{Langages de programmation utilisés dans la plateforme}
+\label{tab:langages}
+\end{center}
+
+\vspace{1em}
+
+\subsection{Frameworks et bibliothèques}
+Les frameworks et bibliothèques retenus ont été sélectionnés pour leur maturité, leur
+performance et leur adéquation aux besoins fonctionnels de la plateforme.
+
+\vspace{0.5em}
+\renewcommand{\arraystretch}{1.3}
+\begin{center}
+\begin{tabular}{|l|p{8.5cm}|c|}
+\hline
+\textbf{Framework} & \textbf{Description} & \textbf{Logo} \\
+\hline
+React.js & Bibliothèque JavaScript développée par Meta, utilisée pour construire
+l'interface web. Son architecture basée sur les composants réutilisables garantit une
+interface moderne et réactive.
+& \includegraphics[height=25pt]{Image/react.png} \\
+\hline
+Node.js / Express & Framework backend JavaScript permettant de construire une API REST
+performante et asynchrone. Il gère l'ensemble de la logique métier de la plateforme.
+& \includegraphics[height=25pt]{Image/nodejs.png} \\
+\hline
+React Native / Expo & Framework permettant de créer l'application mobile à partir d'une
+seule base de code, déployable sur Android et iOS.
+& \includegraphics[height=25pt]{Image/reactnative.png} \\
+\hline
+Socket.io & Bibliothèque assurant la communication bidirectionnelle en temps réel entre
+le serveur et les clients via le protocole WebSocket.
+& \includegraphics[height=25pt]{Image/socketio.png} \\
+\hline
+\end{tabular}
+\captionof{table}{Frameworks et bibliothèques utilisés dans la plateforme}
+\label{tab:frameworks}
+\end{center}
+
+\vspace{1em}
+
+\subsection{Outils DevOps et de déploiement}
+La mise en production de la plateforme repose sur une chaîne DevSecOps automatisée
+garantissant la fiabilité, la sécurité et la répétabilité des déploiements.
+
+\vspace{0.5em}
+\renewcommand{\arraystretch}{1.3}
+\begin{center}
+\begin{tabular}{|l|p{8.5cm}|c|}
+\hline
+\textbf{Outil} & \textbf{Description} & \textbf{Logo} \\
+\hline
+Docker & Outil de conteneurisation utilisé pour empaqueter l'application et ses
+dépendances dans des conteneurs isolés, garantissant un environnement identique entre le
+développement et la production.
+& \includegraphics[height=25pt]{Image/docker.png} \\
+\hline
+Jenkins & Serveur d'intégration et de déploiement continu (CI/CD) utilisé pour
+automatiser les pipelines de build, de test et de déploiement de la plateforme.
+& \includegraphics[height=25pt]{Image/jenkins.png} \\
+\hline
+SonarQube & Plateforme d'analyse statique du code source, permettant de détecter les
+\textit{code smells}, la duplication et les vulnérabilités avant tout déploiement.
+& \includegraphics[height=25pt]{Image/sonarqube.png} \\
+\hline
+Trivy & Scanner de vulnérabilités open source spécialisé dans l'analyse des images de
+conteneurs, comparant leurs composants aux bases de données de CVE connues.
+& \includegraphics[height=25pt]{Image/trivy.png} \\
+\hline
+Kubernetes (k3s) & Orchestrateur de conteneurs allégé assurant le déploiement, la
+mise à l'échelle et le redémarrage automatique des composants de la plateforme.
+& \includegraphics[height=25pt]{Image/k3s.png} \\
+\hline
+Argo CD & Outil de déploiement continu selon l'approche GitOps, synchronisant
+automatiquement l'état du cluster avec les manifestes versionnés dans Git.
+& \includegraphics[height=25pt]{Image/argocd.png} \\
+\hline
+HashiCorp Vault & Solution de gestion centralisée des secrets, assurant le stockage
+sécurisé et la distribution contrôlée des informations sensibles.
+& \includegraphics[height=25pt]{Image/vault.png} \\
+\hline
+Prometheus / Grafana & Couple d'outils assurant la collecte des métriques
+d'infrastructure et leur visualisation sous forme de tableaux de bord.
+& \includegraphics[height=25pt]{Image/prometheus.png} \\
+\hline
+\end{tabular}
+\captionof{table}{Outils DevOps et de déploiement de la plateforme}
+\label{tab:devops}
+\end{center}
+
+\section*{Conclusion}
+Nous nous sommes concentrés dans ce chapitre sur l'étude globale du projet afin de bien
+le planifier. Nous avons identifié les acteurs, spécifié les besoins fonctionnels et non
+fonctionnels, élaboré le backlog produit et planifié les sprints. Nous avons également
+justifié le choix de l'architecture N-Tiers et présenté l'environnement de travail
+retenu. Le chapitre suivant sera consacré à la réalisation du premier sprint.

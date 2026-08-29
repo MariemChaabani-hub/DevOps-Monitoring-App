@@ -1,0 +1,36 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=2.7cm,
+                     minimum height=0.85cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+]
+  \node[actorbox] (a1) at (0,0)    {Interface\\Actions};
+  \node[actorbox] (a2) at (4.3,0)  {\texttt{verifyToken} \\ \texttt{requireAdmin}};
+  \node[actorbox] (a3) at (8.6,0)  {\texttt{remoteActions}};
+  \node[actorbox] (a4) at (12.9,0) {Serveur cible\\(SSH)};
+  \node[actorbox] (a5) at (17.2,0) {\texttt{AuditLog} \\ + e-mail};
+  \foreach \i in {1,...,5} \draw[life] (a\i.south) -- ++(0,-9.8);
+
+  \draw[msg] (0,-1.1)    -- node[above]{\texttt{POST .../restart-service}} (4.3,-1.1);
+  \draw[msg] (4.3,-2.0)  -- node[above]{jeton + rôle validés} (8.6,-2.0);
+  \draw[msg] (8.6,-2.9)  -- node[above]{valider le nom du service} ++(1.6,0)
+             -- ++(0,-0.5) -- ++(-1.6,0);
+  \draw[msg] (8.6,-4.2)  -- node[above]{\texttt{ssh.connect()}} (12.9,-4.2);
+  \draw[msg] (8.6,-5.1)  -- node[above]{\texttt{sudo systemctl restart}} (12.9,-5.1);
+  \draw[ret] (12.9,-5.9) -- node[above]{code de retour} (8.6,-5.9);
+  \draw[msg] (8.6,-6.7)  -- node[above]{\texttt{systemctl is-active}} (12.9,-6.7);
+  \draw[ret] (12.9,-7.5) -- node[above]{statut du service} (8.6,-7.5);
+  \draw[msg] (8.6,-8.3)  -- node[above]{journaliser + notifier} (17.2,-8.3);
+  \draw[ret] (8.6,-9.2)  -- node[above]{\texttt{200 OK} -- statut vérifié} (0,-9.2);
+\end{tikzpicture}
+\end{document}

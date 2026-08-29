@@ -1,0 +1,384 @@
+\chapter{Sprint 0 -- Analyse et Spécification des Besoins}
+\label{chap-sprint0}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Ce chapitre présente les travaux du Sprint~0, consacré à l'analyse et à la spécification des besoins du projet. Nous y identifions les acteurs du système, recensons les besoins fonctionnels et non fonctionnels, présentons le backlog du produit ainsi que les diagrammes de conception préliminaires (cas d'utilisation global, classes), avant de détailler l'environnement de travail et l'architecture globale retenue.
+
+\section{Identification des acteurs}
+
+Le système met en jeu deux acteurs principaux, l'un humain, l'autre automatisé~:
+
+\begin{itemize}
+  \item \textbf{Administrateur} — utilisateur authentifié de la plateforme (via l'application web ou mobile), responsable de la supervision des serveurs, de la gestion des alertes, et de l'exécution des actions de maintenance à distance~;
+  \item \textbf{Agent de supervision} — programme Python exécuté de manière autonome sur chaque serveur supervisé, qui collecte périodiquement les métriques système toutes les 5~secondes et les transmet au backend via API REST, en continuant de fonctionner même si le backend est temporairement indisponible.
+\end{itemize}
+
+\section{Étude des besoins}
+
+\subsection{Besoins fonctionnels}
+
+L'étude des besoins a permis d'identifier les fonctionnalités suivantes, accessibles depuis l'application web et mobile~:
+
+\paragraph{BF1 --- Authentification.} Connexion sécurisée de l'administrateur par email et mot de passe, avec émission d'un jeton d'accès JWT stocké côté client et validé à chaque requête sensible.
+
+\paragraph{BF2 --- Tableau de bord global.} Visualisation consolidée de l'ensemble des serveurs supervisés, avec leur statut en temps réel (\texttt{OK}, \texttt{WARNING}, \texttt{CRITICAL}, \texttt{OFFLINE}), un résumé des métriques globales et le nombre d'alertes actives.
+
+\paragraph{BF3 --- Détail d'un serveur.} Consultation des métriques en temps réel (CPU, RAM, disque, réseau, uptime) et de leur historique sous forme de courbes graphiques pour un serveur donné. Rafraîchissement automatique toutes les 5~secondes.
+
+\paragraph{BF4 --- Gestion des alertes.} Génération automatique d'alertes lors du dépassement de seuils configurables (\texttt{WARNING} à 80\,\%, \texttt{CRITICAL} à 90\,\% pour CPU, RAM et disque), notification par courrier électronique, consultation et acquittement des alertes actives depuis l'interface.
+
+\paragraph{BF5 --- Détection automatique des services.} Identification, par l'agent Python, des services \texttt{systemd} actifs sur chaque serveur supervisé (\texttt{nginx}, \texttt{apache2}, \texttt{mongod}, \texttt{pm2}, \ldots), sans configuration manuelle préalable, et transmission de la liste au backend à chaque envoi de métriques.
+
+\paragraph{BF6 --- Actions à distance.} Redémarrage ou arrêt d'un service applicatif, redémarrage complet d'un serveur, exécutés via une connexion SSH sécurisée initiée par le backend avec les identifiants stockés en base de données.
+
+\paragraph{BF7 --- Journalisation et audit.} Traçabilité complète de toute action d'administration exécutée à distance~: auteur, cible, commande exécutée, horodatage et résultat. Accessible via un journal d'audit dans l'interface.
+
+\paragraph{BF8 --- Sauvegardes automatisées.} Exécution planifiée quotidienne de sauvegardes à minuit, avec historique consultable et notification du résultat (succès ou échec) par courrier électronique.
+
+\paragraph{BF9 --- Notifications temps réel.} Réception de notifications en temps réel sur l'application en cas d'alerte critique, via WebSocket (Socket.io).
+
+\paragraph{BF10 --- Application mobile.} Accès à l'ensemble des fonctionnalités (tableau de bord, alertes, actions à distance) depuis une application mobile React Native, consommant le même backend que l'application web.
+
+\subsection{Besoins non fonctionnels}
+
+\paragraph{BNF1 --- Performance.} Les métriques sont collectées toutes les 5~secondes par l'agent Python et affichées en temps réel dans le tableau de bord via WebSocket. Le délai de rafraîchissement de l'interface est inférieur à 1~seconde.
+
+\paragraph{BNF2 --- Sécurité.} Les actions sensibles (actions à distance, acquittement d'alertes) sont protégées par une double vérification~: validité du jeton JWT et appartenance de l'utilisateur au rôle administrateur, vérifiée en base de données. Toutes les actions sont journalisées dans un journal d'audit.
+
+\paragraph{BNF3 --- Disponibilité.} L'ensemble des composants (frontend, backend, base de données) est déployé sur un cluster Kubernetes k3s avec redémarrage automatique des conteneurs en cas de défaillance, garantissant une disponibilité continue.
+
+\paragraph{BNF4 --- Scalabilité.} L'architecture multi-serveurs permet l'ajout de nouveaux serveurs supervisés sans modification du backend~: il suffit d'installer et de configurer l'agent Python sur le nouveau serveur pour qu'il apparaisse automatiquement dans le tableau de bord.
+
+\paragraph{BNF5 --- Portabilité.} L'ensemble des fonctionnalités est accessible de façon équivalente depuis un client web (React.js) et un client mobile (React Native), consommant la même API REST centralisée.
+
+\paragraph{BNF6 --- Maintenabilité.} Le backend est structuré de façon modulaire (routes, modèles, services, middlewares), afin de faciliter l'évolution et la maintenance du code. La qualité du code est contrôlée automatiquement par SonarQube à chaque déploiement.
+
+\paragraph{BNF7 --- Ergonomie.} L'interface est entièrement en français, cohérente visuellement entre le web et le mobile, avec un thème sombre professionnel aux couleurs de CLEDISS.
+
+\paragraph{BNF8 --- Industrialisation du déploiement.} La mise en production est reproductible et automatisée via un pipeline CI/CD Jenkins (7 stages), incluant analyse de qualité (SonarQube), scan de vulnérabilités (Trivy), conteneurisation (Docker), déploiement (Kubernetes k3s) et GitOps (Argo CD).
+
+\paragraph{BNF9 --- Résilience de l'agent.} L'agent Python continue de collecter les métriques localement même si le backend est temporairement indisponible, et reprend l'envoi dès que la connexion est rétablie.
+
+\section{Diagramme de cas d'utilisation global}
+
+La \cref{fig-uc-global} présente le diagramme de cas d'utilisation global de la plateforme, organisé par domaine fonctionnel~: authentification (gris), supervision (bleu), alertes (orange), actions à distance (violet), sauvegardes et notifications (vert).
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  actor/.style={align=center, font=\small},
+  usecase/.style={draw, ellipse, minimum width=3.6cm, minimum height=0.8cm, align=center, font=\small},
+  system/.style={draw, dashed, rounded corners, thick, color=clednavy},
+]
+  \node[actor] (admin) at (0,-3.5) {\Huge $\bullet$ \\ Administrateur};
+  \node[actor] (agent) at (11.5,-8.5) {\Huge $\bullet$ \\ Agent Python};
+
+  \node[system, minimum width=8.5cm, minimum height=11.5cm,
+        label={[font=\bfseries\small\color{clednavy}]above:Plateforme de monitoring}]
+        (sys) at (5.75,-3.75) {};
+
+  \node[usecase, fill=black!8]  (uc1) at (3.5,1.3)   {S'authentifier};
+  \node[usecase, fill=blue!12]  (uc2) at (3.5,0.0)   {Gérer les serveurs};
+  \node[usecase, fill=blue!12]  (uc3) at (3.5,-1.3)  {Superviser en temps réel};
+  \node[usecase, fill=blue!12]  (uc4) at (3.5,-2.6)  {Consulter les métriques détaillées};
+  \node[usecase, fill=orange!18](uc5) at (3.5,-3.9)  {Recevoir alertes critiques};
+  \node[usecase, fill=orange!18](uc6) at (3.5,-5.2)  {Gérer les alertes};
+  \node[usecase, fill=violet!14](uc7) at (3.3,-6.7)  {Actions à distance (serveur)};
+  \node[usecase, fill=violet!14](uc7a) at (8.4,-6.2) {Redémarrer serveur};
+  \node[usecase, fill=violet!14](uc7b) at (8.4,-7.2) {Arrêter serveur};
+  \node[usecase, fill=violet!14](uc8) at (3.3,-8.5)  {Actions à distance (services)};
+  \node[usecase, fill=violet!14](uc8a) at (8.4,-8.0) {Redémarrer service};
+  \node[usecase, fill=violet!14](uc8b) at (8.4,-9.0) {Arrêter service};
+  \node[usecase, fill=green!14] (uc9) at (3.5,-9.8)  {Vérifier les backups};
+  \node[usecase, fill=green!14] (uc10) at (3.5,-11.0){Recevoir notifications};
+  \node[usecase, fill=green!14] (uc11) at (3.5,-12.4){Collecter les métriques};
+
+  \draw (admin) -- (uc1);
+  \draw (admin) -- (uc2);
+  \draw (admin) -- (uc3);
+  \draw (admin) -- (uc4);
+  \draw (admin) -- (uc6);
+  \draw (admin) -- (uc7);
+  \draw (admin) -- (uc8);
+  \draw (admin) -- (uc9);
+  \draw (admin) -- (uc10);
+  \draw[dashed,-{Latex}] (uc5) -- node[above,sloped,font=\tiny]{\guillemotleft extend\guillemotright} (uc6);
+  \draw[dashed,-{Latex}] (uc7) -- node[above,sloped,font=\tiny]{\guillemotleft include\guillemotright} (uc7a);
+  \draw[dashed,-{Latex}] (uc7) -- node[above,sloped,font=\tiny]{\guillemotleft include\guillemotright} (uc7b);
+  \draw[dashed,-{Latex}] (uc8) -- node[above,sloped,font=\tiny]{\guillemotleft include\guillemotright} (uc8a);
+  \draw[dashed,-{Latex}] (uc8) -- node[above,sloped,font=\tiny]{\guillemotleft include\guillemotright} (uc8b);
+  \draw (agent) -- (uc11);
+\end{tikzpicture}%
+}
+\caption{Diagramme de cas d'utilisation global}
+\label{fig-uc-global}
+\end{figure}
+
+\section{Backlog du produit}
+
+Le \cref{tab-backlog-produit} présente un extrait représentatif du backlog du produit, exprimé sous forme de user stories.
+
+\begin{center}
+\small
+\begin{longtable}{@{}p{1.5cm}p{11.3cm}p{2.2cm}@{}}
+\caption{Extrait du backlog du produit}
+\label{tab-backlog-produit} \\
+\toprule
+\textbf{ID} & \textbf{User Story} & \textbf{Priorité} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{c}{\tablename\ \thetable\ -- \textit{(suite)}} \\
+\toprule
+\textbf{ID} & \textbf{User Story} & \textbf{Priorité} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\bottomrule
+\endlastfoot
+US01 & En tant qu'administrateur, je veux me connecter avec mon email et mon mot de passe afin d'accéder à la plateforme de manière sécurisée. & Élevée \\
+US02 & En tant qu'administrateur, je veux visualiser la liste des serveurs et leur statut (\texttt{OK}, \texttt{WARNING}, \texttt{CRITICAL}, \texttt{OFFLINE}) afin d'identifier rapidement un problème. & Élevée \\
+US03 & En tant qu'administrateur, je veux consulter l'historique des métriques d'un serveur (CPU, RAM, disque, réseau) sous forme de graphique afin d'analyser son évolution. & Élevée \\
+US04 & En tant qu'administrateur, je veux recevoir un email automatique lorsqu'un seuil critique est dépassé (\texttt{WARNING} 80\,\%, \texttt{CRITICAL} 90\,\%) afin d'être alerté sans consulter le tableau de bord. & Élevée \\
+US05 & En tant qu'administrateur, je veux acquitter une alerte afin d'indiquer qu'elle a été prise en charge. & Moyenne \\
+US06 & En tant qu'administrateur, je veux redémarrer ou arrêter un service à distance afin de résoudre un incident sans ouvrir de session SSH manuelle. & Élevée \\
+US07 & En tant qu'administrateur, je veux que les services affichés correspondent aux services réellement actifs sur le serveur afin d'éviter toute action sur un service inexistant. & Moyenne \\
+US08 & En tant qu'administrateur, je veux que les sauvegardes s'exécutent automatiquement chaque nuit à minuit et recevoir un email de confirmation afin de ne pas dépendre d'une action manuelle. & Moyenne \\
+US09 & En tant qu'administrateur, je veux accéder aux mêmes fonctionnalités depuis mon téléphone afin d'intervenir même hors de mon poste de travail. & Moyenne \\
+US10 & En tant qu'administrateur, je veux redémarrer complètement un serveur à distance afin de résoudre une panne critique sans intervention physique. & Élevée \\
+US11 & En tant qu'administrateur, je veux consulter le journal d'audit des actions effectuées afin d'assurer la traçabilité des interventions. & Moyenne \\
+US12 & En tant que responsable technique, je veux que chaque déploiement soit précédé d'une analyse de qualité (SonarQube) et de sécurité (Trivy) afin de limiter les régressions en production. & Moyenne \\
+US13 & En tant que responsable technique, je veux que le déploiement soit automatisé via un pipeline CI/CD Jenkins afin de réduire les erreurs manuelles de mise en production. & Moyenne \\
+US14 & En tant que responsable technique, je veux superviser l'infrastructure Kubernetes (pods, ressources) via Prometheus et Grafana afin de garantir la disponibilité de la plateforme. & Faible \\
+US15 & En tant que responsable technique, je veux que les secrets (mots de passe, tokens) soient gérés de manière sécurisée via HashiCorp Vault afin d'éviter toute exposition dans le code. & Faible \\
+\end{longtable}
+\end{center}
+
+\section{Diagramme de classes}
+
+Le \cref{fig-classes} présente le diagramme de classes du domaine, reflétant les principales entités persistées (collections MongoDB, modélisées via Mongoose).
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  class/.style={draw, rectangle, rounded corners=1pt, align=left, font=\scriptsize, fill=white, drop shadow},
+  every node/.style={font=\scriptsize},
+]
+  \node[class] (server) at (0,0) {%
+    \begin{minipage}{3.6cm}
+      \centering\textbf{Server}\\[2pt]\hrule\vspace{2pt}
+      server\_id: String\\ name: String\\ location: String\\ status: Enum\\ current\_metrics: Object\\ ip\_address, ssh\_username\\ ssh\_password, ssh\_port\\ services: [String]\\ is\_active: Boolean
+    \end{minipage}%
+  };
+
+  \node[class] (metric) at (5.5,2.6) {%
+    \begin{minipage}{3.2cm}
+      \centering\textbf{Metric}\\[2pt]\hrule\vspace{2pt}
+      server\_id: String\\ cpu\_percent: Number\\ ram\_percent: Number\\ disk\_percent: Number\\ network\_io: Object\\ status: Enum\\ timestamp: Date
+    \end{minipage}%
+  };
+
+  \node[class] (alert) at (5.5,-0.3) {%
+    \begin{minipage}{3.2cm}
+      \centering\textbf{Alert}\\[2pt]\hrule\vspace{2pt}
+      serverId: String\\ type, severity: Enum\\ status: Enum\\ metric: String\\ value, threshold: Number\\ message: String\\ timestamp: Date
+    \end{minipage}%
+  };
+
+  \node[class] (backup) at (5.5,-3.2) {%
+    \begin{minipage}{3.2cm}
+      \centering\textbf{Backup}\\[2pt]\hrule\vspace{2pt}
+      server\_id: String\\ filename: String\\ size\_bytes: Number\\ status: Enum\\ created\_at: Date
+    \end{minipage}%
+  };
+
+  \node[class] (audit) at (0,-4.6) {%
+    \begin{minipage}{3.6cm}
+      \centering\textbf{AuditLog}\\[2pt]\hrule\vspace{2pt}
+      action, target: String\\ admin\_email: String\\ server\_id: String\\ ip\_address: String\\ result: Enum\\ details: Object\\ timestamp: Date
+    \end{minipage}%
+  };
+
+  \node[class] (user) at (-5.5,-2.3) {%
+    \begin{minipage}{2.8cm}
+      \centering\textbf{User}\\[2pt]\hrule\vspace{2pt}
+      email: String\\ password: String (hash)\\ role: Enum
+    \end{minipage}%
+  };
+
+  \node[class] (threshold) at (-5.5,1) {%
+    \begin{minipage}{2.8cm}
+      \centering\textbf{Threshold}\\[2pt]\hrule\vspace{2pt}
+      metric\_name: String\\ warning\_level: Number\\ critical\_level: Number\\ enabled: Boolean
+    \end{minipage}%
+  };
+
+  \draw (server) -- node[above,sloped]{1 \ldots\ *} (metric);
+  \draw (server) -- node[above,sloped]{1 \ldots\ *} (alert);
+  \draw (server) -- node[above,sloped]{1 \ldots\ *} (backup);
+  \draw (server) -- node[above,sloped]{1 \ldots\ *} (audit);
+  \draw (user) -- node[above,sloped]{1 \ldots\ *} (audit);
+  \draw[dashed] (threshold) -- node[above,sloped,font=\tiny]{utilisé par} (alert);
+\end{tikzpicture}%
+}
+\caption{Diagramme de classes du domaine}
+\label{fig-classes}
+\end{figure}
+
+\section{Environnement de travail}
+
+\subsection{Langages et Frameworks utilisés}
+
+\paragraph{Node.js.} Node.js est un environnement d'exécution JavaScript open source, multiplateforme, orienté événements et non bloquant. Il est particulièrement adapté au développement d'applications réseau temps réel à haute performance. Dans ce projet, Node.js constitue le socle du backend de la plateforme de monitoring~\cite{nodejs}.
+
+\logofig{images/logo-nodejs.png}
+
+\paragraph{Express.js.} Express.js est un framework web minimaliste et flexible pour Node.js, fournissant un ensemble de fonctionnalités robustes pour le développement d'API REST. Il est utilisé dans ce projet pour structurer les routes du backend et gérer les requêtes HTTP entrantes~\cite{express}.
+
+\logofig{images/logo-express.png}
+
+\paragraph{Socket.io.} Socket.io est une bibliothèque JavaScript permettant la communication bidirectionnelle en temps réel entre un serveur Node.js et ses clients, via le protocole WebSocket. Elle est utilisée dans ce projet pour diffuser les métriques des serveurs en temps réel vers le tableau de bord~\cite{socketio}.
+
+\logofig{images/logo-socketio.png}
+
+\paragraph{React.js.} React.js est une bibliothèque JavaScript open source, développée par Meta, dédiée à la construction d'interfaces utilisateur dynamiques et réactives. Elle repose sur un système de composants réutilisables et une gestion efficace du DOM virtuel. Dans ce projet, React.js est utilisé pour développer le frontend web de la plateforme de monitoring~\cite{react}.
+
+\logofig{images/logo-react.png}
+
+\paragraph{React Native.} React Native est un framework JavaScript open source, développé par Meta, permettant de créer des applications mobiles natives pour iOS et Android à partir d'une base de code unique. Dans ce projet, React Native est utilisé conjointement avec Expo pour développer l'application mobile de monitoring~\cite{reactnative}.
+
+\logofig{images/logo-reactnative.png}
+
+\paragraph{Expo.} Expo est une plateforme open source construite autour de React Native, qui simplifie le développement, le test et le déploiement d'applications mobiles. Elle fournit un ensemble d'outils et de bibliothèques prêts à l'emploi. Dans ce projet, Expo est utilisé pour faciliter le développement et le test de l'application mobile~\cite{expo}.
+
+\logofig{images/logo-expo.png}
+
+\paragraph{Python.} Python est un langage de programmation interprété, multiparadigme et multiplateforme, reconnu pour sa lisibilité et sa richesse en bibliothèques. Dans ce projet, Python est utilisé pour développer l'agent de supervision installé sur chaque serveur supervisé~\cite{python}.
+
+\logofig{images/logo-python.png}
+
+\paragraph{MongoDB Atlas.} MongoDB Atlas est un service de base de données cloud entièrement géré, basé sur MongoDB, un système de gestion de bases de données NoSQL orienté documents. Dans ce projet, MongoDB Atlas est utilisé comme base de données centralisée, hébergeant les métriques, alertes, sauvegardes et données utilisateurs de la plateforme~\cite{mongodb}.
+
+\logofig{images/logo-mongodb-atlas.png}
+
+\paragraph{JWT (JSON Web Token).} JSON Web Token est un standard ouvert (RFC~7519) définissant un format compact et autonome pour la transmission sécurisée d'informations entre parties sous forme de jeton signé numériquement. Dans ce projet, JWT est utilisé pour sécuriser l'authentification des administrateurs et protéger les routes sensibles de l'API~\cite{jwt}.
+
+\logofig{images/logo-jwt.png}
+
+\subsection{Environnement logiciel}
+
+\paragraph{Visual Studio Code.} Visual Studio Code, souvent appelé VS Code, est un éditeur de code source léger, gratuit et open source, développé par Microsoft. Il offre une grande richesse d'extensions et un support natif de nombreux langages de programmation. Dans ce projet, VS Code est l'environnement de développement principal utilisé pour coder l'ensemble des composants de la plateforme (backend, frontend, agent Python, application mobile).
+
+\logofig{images/logo-vscode.png}
+
+\paragraph{Postman.} Postman est une application permettant de tester, documenter et déboguer des API REST. Elle offre une interface graphique intuitive pour envoyer des requêtes HTTP et analyser les réponses. Dans ce projet, Postman est utilisé pour tester les endpoints de l'API backend durant la phase de développement.
+
+\logofig{images/logo-postman.png}
+
+\paragraph{Expo Go.} Expo Go est une application mobile disponible sur iOS et Android, permettant de tester en temps réel une application React Native développée avec Expo, sans avoir à compiler un fichier APK ou IPA. Dans ce projet, Expo Go est utilisé pour tester l'application mobile de monitoring directement sur un appareil physique durant la phase de développement.
+
+\logofig{images/logo-expo-go.png}
+
+\paragraph{GitHub.} GitHub est une plateforme d'hébergement de code source basée sur Git, permettant la gestion de versions, la collaboration et le partage de code. Dans ce projet, GitHub héberge le code source de la plateforme et constitue la source de vérité pour le déploiement GitOps via Argo CD.
+
+\logofig{images/logo-github.png}
+
+\paragraph{MongoDB Compass.} MongoDB Compass est une interface graphique officielle pour MongoDB, permettant de visualiser, explorer et manipuler les données stockées dans une base MongoDB. Dans ce projet, MongoDB Compass est utilisé pour inspecter et gérer les données de MongoDB Atlas durant la phase de développement et de tests.
+
+\logofig{images/logo-mongodb-compass.png}
+
+\paragraph{Draw.io.} Draw.io est un outil de conception de diagrammes en ligne, gratuit et open source, permettant de créer des diagrammes UML, des schémas d'architecture et des organigrammes. Dans ce projet, Draw.io est utilisé pour concevoir les diagrammes de cas d'utilisation, de séquence et d'architecture de la plateforme.
+
+\logofig{images/logo-drawio.png}
+
+\subsection{Environnement matériel}
+
+\begin{itemize}
+  \item poste de développement local~;
+  \item serveur VPS OVH (Debian), hébergeant le cluster Kubernetes de production, adresse IP \texttt{141.227.129.194}~;
+  \item machine virtuelle VirtualBox, utilisée comme second serveur supervisé pour valider le fonctionnement multi-serveurs~;
+  \item smartphone / émulateur, pour les tests de l'application mobile.
+\end{itemize}
+
+\section{Architecture globale}
+
+\subsection{Architecture physique}
+
+La \cref{fig-archi-physique} présente l'architecture physique de la solution telle que déployée en production.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, minimum width=3.4cm, minimum height=1cm, align=center, font=\scriptsize},
+  cluster/.style={draw, dashed, rounded corners, color=clednavy, inner sep=10pt},
+]
+  \node[box, fill=cledaccent!10] (web) at (0,4)   {Client Web\\(navigateur)};
+  \node[box, fill=cledaccent!10] (mobile) at (0,1.5) {Client Mobile\\(Expo)};
+
+  \node[box, fill=clednavy!10] (front) at (5.5,4) {Frontend React\\Pod k3s -- NodePort 30080};
+  \node[box, fill=clednavy!10] (back) at (5.5,1.5) {Backend Node.js\\Pod k3s -- NodePort 30300};
+
+  \node[box, fill=white] (mongo) at (11,1.5) {MongoDB Atlas\\(cloud, managé)};
+
+  \node[box, fill=cledaccent!10] (agent1) at (0,-1.5) {Agent Python\\VPS OVH};
+  \node[box, fill=cledaccent!10] (agent2) at (0,-3.7) {Agent Python\\VM VirtualBox};
+
+  \node[cluster, fit=(front)(back), label={[font=\tiny\bfseries,color=clednavy]above:Cluster Kubernetes (k3s) -- VPS OVH 141.227.129.194}] {};
+
+  \draw[-{Latex}] (web) -- (front);
+  \draw[-{Latex}] (mobile.east) -- ++(1.5,0) |- (back.west);
+  \draw[-{Latex}] (front) -- (back);
+  \draw[-{Latex}] (back) -- (mongo);
+  \draw[-{Latex}] (agent1) -- node[above,font=\tiny]{POST /metrics} (back.south west);
+  \draw[-{Latex}] (agent2) -- node[below,font=\tiny]{POST /metrics} (back.south west);
+  \draw[{Latex}-,dashed] (back.south) .. controls +(0,-2) and +(1,-2) .. (agent2.east)
+    node[midway,below,font=\tiny]{SSH (actions à distance)};
+\end{tikzpicture}%
+}
+\caption{Architecture physique de la plateforme}
+\label{fig-archi-physique}
+\end{figure}
+
+\subsection{Architecture logique}
+
+D'un point de vue logique, la plateforme s'organise en trois couches, complétées par un canal de communication temps réel et un canal d'administration à distance~:
+
+\begin{itemize}
+  \item \textbf{couche présentation} — application web React et application mobile React Native, toutes deux consommant la même API REST~;
+  \item \textbf{couche applicative} — API REST Express (authentification, serveurs, métriques, alertes, actions à distance, sauvegardes), complétée par un canal WebSocket pour la diffusion des mises à jour en temps réel~;
+  \item \textbf{couche données} — base de données MongoDB (Atlas), organisée en collections correspondant aux entités du \cref{fig-classes}~;
+  \item \textbf{couche collecte} — agents Python déployés sur chaque serveur supervisé, transmettant leurs métriques à la couche applicative par requêtes HTTP périodiques~;
+  \item \textbf{couche administration} — connexions SSH établies à la demande par le backend vers les serveurs supervisés, pour l'exécution des actions à distance.
+\end{itemize}
+
+\section{Backlog général des sprints}
+
+Le \cref{tab-backlog-sprints} synthétise la répartition des objectifs entre les cinq sprints du projet.
+
+\begin{table}[H]
+\centering
+\caption{Backlog général des sprints}
+\label{tab-backlog-sprints}
+\small
+\begin{tabularx}{\linewidth}{@{}lXl@{}}
+\toprule
+\textbf{Sprint} & \textbf{Objectifs principaux} & \textbf{Chapitre} \\
+\midrule
+Sprint 0 & Analyse des besoins, architecture globale, choix technologiques & Chapitre 2 \\
+Sprint 1 & Backend, agent de collecte, tableau de bord temps réel, authentification & Chapitre 3 \\
+Sprint 2 & Alertes, actions à distance SSH, sauvegardes, application mobile & Chapitre 4 \\
+Sprint 3 & Conteneurisation, intégration continue, qualité et sécurité du code & Chapitre 5 \\
+Sprint 4 & Orchestration Kubernetes, GitOps, gestion des secrets, supervision d'infrastructure & Chapitre 6 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Ce chapitre a permis de poser les fondations du projet~: identification des acteurs, expression des besoins, architecture globale et environnement technique. Les chapitres suivants détaillent la réalisation de chacun des sprints identifiés dans le backlog général.

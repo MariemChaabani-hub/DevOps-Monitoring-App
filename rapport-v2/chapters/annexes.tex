@@ -1,0 +1,368 @@
+\thispagestyle{fancy}
+\fancyhead[R]{A.U 2025-2026}
+\fancyhead[L]{Annexes}
+
+% boîte utilisée pour encadrer les extraits de code (verbatim)
+\newsavebox{\annexbox}
+
+\chapter{Installation et configuration de l'agent}
+
+L'agent de collecte est un programme Python autonome à déployer sur chaque serveur à
+superviser. Son installation se déroule en quatre étapes.
+
+\section{Prérequis}
+\begin{itemize}[label=\ding{43}]
+  \item Python 3.8 ou version ultérieure.
+  \item Un accès réseau sortant vers le backend de la plateforme.
+  \item Les droits nécessaires à la création d'un service \texttt{systemd}.
+\end{itemize}
+
+\section{Installation des dépendances}
+
+\begin{lrbox}{\annexbox}
+\begin{minipage}{0.88\textwidth}
+\begin{verbatim}
+cd /opt/monitoring-agent
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+\end{verbatim}
+\end{minipage}
+\end{lrbox}
+\begin{figure}[H]
+\centering
+\fbox{\usebox{\annexbox}}
+\caption{Installation des dépendances de l'agent}
+\label{fig:annexe-install}
+\end{figure}
+
+\section{Fichier de configuration}
+Le comportement de l'agent est entièrement piloté par le fichier \texttt{config.json},
+présenté dans la figure~\ref{fig:annexe-config}.
+
+\begin{lrbox}{\annexbox}
+\begin{minipage}{0.88\textwidth}
+\begin{verbatim}
+{
+  "server_id": "srv-prod-01",
+  "server_name": "Serveur de production",
+  "backend_url": "http://141.227.129.194:30300/metrics",
+  "interval": 5,
+  "timeout": 10,
+  "detect_services": true
+}
+\end{verbatim}
+\end{minipage}
+\end{lrbox}
+\begin{figure}[H]
+\centering
+\fbox{\usebox{\annexbox}}
+\caption{Fichier de configuration \texttt{config.json} de l'agent}
+\label{fig:annexe-config}
+\end{figure}
+
+Le tableau~\ref{tab:annexe-config} détaille la signification de chaque paramètre.
+
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{3.6cm}
+                  |>{\raggedright\arraybackslash}p{10.2cm}|}
+\hline
+\textbf{Paramètre} & \textbf{Description} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Paramètre} & \textbf{Description} \\
+\hline
+\endhead
+
+\hline
+\caption{Paramètres de configuration de l'agent}
+\label{tab:annexe-config}
+\endlastfoot
+
+\texttt{server\_id} & Identifiant unique du serveur, utilisé comme clé côté backend. \\
+\hline
+\texttt{server\_name} & Libellé affiché dans l'interface d'administration. \\
+\hline
+\texttt{backend\_url} & Adresse de l'endpoint de réception des métriques. \\
+\hline
+\texttt{interval} & Intervalle de collecte, exprimé en secondes. \\
+\hline
+\texttt{timeout} & Délai maximal d'attente d'une réponse du backend, en secondes. \\
+\hline
+\texttt{detect\_services} & Active ou désactive la détection automatique des services actifs. \\
+\hline
+
+\end{longtable}
+
+\section{Déclaration du service systemd}
+Afin que l'agent démarre automatiquement avec le système et redémarre en cas d'arrêt
+inopiné, il est déclaré comme service \texttt{systemd}.
+
+\begin{lrbox}{\annexbox}
+\begin{minipage}{0.88\textwidth}
+\begin{verbatim}
+[Unit]
+Description=Agent de supervision CLEDISS
+After=network.target
+
+[Service]
+Type=simple
+User=monitoring
+WorkingDirectory=/opt/monitoring-agent
+ExecStart=/opt/monitoring-agent/venv/bin/python3 main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+\end{verbatim}
+\end{minipage}
+\end{lrbox}
+\begin{figure}[H]
+\centering
+\fbox{\usebox{\annexbox}}
+\caption{Unité \texttt{systemd} de l'agent de supervision}
+\label{fig:annexe-systemd}
+\end{figure}
+
+L'activation du service s'effectue ensuite par les commandes suivantes.
+
+\begin{lrbox}{\annexbox}
+\begin{minipage}{0.88\textwidth}
+\begin{verbatim}
+sudo systemctl daemon-reload
+sudo systemctl enable monitoring-agent
+sudo systemctl start monitoring-agent
+sudo systemctl status monitoring-agent
+\end{verbatim}
+\end{minipage}
+\end{lrbox}
+\begin{figure}[H]
+\centering
+\fbox{\usebox{\annexbox}}
+\caption{Activation du service de l'agent}
+\label{fig:annexe-activation}
+\end{figure}
+
+\chapter{Configuration du backend}
+
+\section{Variables d'environnement}
+La configuration du backend est intégralement externalisée sous forme de variables
+d'environnement, injectées en production depuis le coffre HashiCorp Vault. Le
+tableau~\ref{tab:annexe-env} en présente la liste.
+
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{4.2cm}
+                  |>{\raggedright\arraybackslash}p{9.6cm}|}
+\hline
+\textbf{Variable} & \textbf{Description} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Variable} & \textbf{Description} \\
+\hline
+\endhead
+
+\hline
+\caption{Variables d'environnement du backend}
+\label{tab:annexe-env}
+\endlastfoot
+
+\texttt{PORT} & Port d'écoute du serveur Express (3000 par défaut). \\
+\hline
+\texttt{MONGODB\_URI} & Chaîne de connexion authentifiée à la base MongoDB Atlas. \\
+\hline
+\texttt{JWT\_SECRET} & Clé de signature et de vérification des jetons d'authentification. \\
+\hline
+\texttt{EMAIL\_USER} & Adresse du compte SMTP émetteur des notifications. \\
+\hline
+\texttt{EMAIL\_PASS} & Mot de passe d'application du compte SMTP. \\
+\hline
+\texttt{ADMIN\_EMAIL} & Adresse du compte administrateur créé à l'initialisation. \\
+\hline
+\texttt{ADMIN\_PASSWORD} & Mot de passe du compte administrateur initial. \\
+\hline
+
+\end{longtable}
+
+\section{Seuils de déclenchement des alertes}
+Les seuils sont stockés en base de données et modifiables sans redéploiement. Leurs
+valeurs par défaut figurent dans le tableau~\ref{tab:annexe-seuils}.
+
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{4.6cm}
+                  |>{\centering\arraybackslash}p{3.4cm}
+                  |>{\centering\arraybackslash}p{3.4cm}|}
+\hline
+\textbf{Métrique} & \textbf{Seuil \texttt{WARNING}} & \textbf{Seuil \texttt{CRITICAL}} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Métrique} & \textbf{Seuil \texttt{WARNING}} & \textbf{Seuil \texttt{CRITICAL}} \\
+\hline
+\endhead
+
+\hline
+\caption{Seuils de déclenchement des alertes}
+\label{tab:annexe-seuils}
+\endlastfoot
+
+Utilisation du processeur & 80 \% & 90 \% \\
+\hline
+Utilisation de la mémoire vive & 80 \% & 90 \% \\
+\hline
+Utilisation du disque & 80 \% & 90 \% \\
+\hline
+Absence de métrique reçue & 2 minutes & 5 minutes \\
+\hline
+
+\end{longtable}
+
+\chapter{Commandes d'exploitation}
+
+\section{Cluster Kubernetes}
+
+\begin{lrbox}{\annexbox}
+\begin{minipage}{0.88\textwidth}
+\begin{verbatim}
+# État général du cluster
+kubectl get nodes
+kubectl get all -n monitoring
+
+# Journaux d'un pod
+kubectl logs -f deployment/backend -n monitoring
+
+# Redémarrage progressif d'un déploiement
+kubectl rollout restart deployment/backend -n monitoring
+kubectl rollout status deployment/backend -n monitoring
+
+# Retour à la version précédente
+kubectl rollout undo deployment/backend -n monitoring
+\end{verbatim}
+\end{minipage}
+\end{lrbox}
+\begin{figure}[H]
+\centering
+\fbox{\usebox{\annexbox}}
+\caption{Commandes d'exploitation du cluster k3s}
+\label{fig:annexe-kubectl}
+\end{figure}
+
+\section{Conteneurs Docker}
+
+\begin{lrbox}{\annexbox}
+\begin{minipage}{0.88\textwidth}
+\begin{verbatim}
+# Construction des images
+docker build -t monitoring-backend:latest ./backend
+docker build -t monitoring-frontend:latest ./frontend
+docker build -t monitoring-agent:latest ./agent
+
+# Démarrage de la pile complète en local
+docker compose up -d
+docker compose logs -f backend
+docker compose down
+
+# Analyse de vulnerabilites d'une image
+trivy image --severity HIGH,CRITICAL monitoring-backend:latest
+\end{verbatim}
+\end{minipage}
+\end{lrbox}
+\begin{figure}[H]
+\centering
+\fbox{\usebox{\annexbox}}
+\caption{Commandes de construction et d'analyse des images}
+\label{fig:annexe-docker}
+\end{figure}
+
+\chapter{Récapitulatif des services web}
+
+Le tableau~\ref{tab:annexe-api} récapitule l'ensemble des services web exposés par la
+plateforme à l'issue des quatre sprints de réalisation.
+
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{longtable}{|>{\raggedright\arraybackslash}p{1.6cm}
+                  |>{\raggedright\arraybackslash}p{7.4cm}
+                  |>{\centering\arraybackslash}p{2.4cm}
+                  |>{\centering\arraybackslash}p{2.6cm}|}
+\hline
+\textbf{Méthode} & \textbf{URL} & \textbf{Sprint} & \textbf{Auth.} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Méthode} & \textbf{URL} & \textbf{Sprint} & \textbf{Auth.} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{4}{r}{\textit{Suite du tableau à la page suivante}} \\
+\endfoot
+
+\hline
+\caption{Récapitulatif de l'ensemble des services web de la plateforme}
+\label{tab:annexe-api}
+\endlastfoot
+
+\texttt{POST} & \texttt{/api/auth/login} & 1 & -- \\
+\hline
+\texttt{GET} & \texttt{/api/auth/me} & 1 & JWT \\
+\hline
+\texttt{POST} & \texttt{/metrics} & 1 & -- \\
+\hline
+\texttt{GET} & \texttt{/api/servers} & 1 & JWT \\
+\hline
+\texttt{POST} & \texttt{/api/servers} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/servers/:server\_id} & 1 & JWT \\
+\hline
+\texttt{PUT} & \texttt{/api/servers/:server\_id} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/servers/:server\_id/metrics} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/metrics/latest} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/metrics/history/:serverId} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/metrics/stats} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/dashboard/summary} & 1 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/alerts} & 2 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/alerts/:alert\_id} & 2 & JWT \\
+\hline
+\texttt{PUT} & \texttt{/api/alerts/:alert\_id/acknowledge} & 2 & JWT \\
+\hline
+\texttt{PUT} & \texttt{/api/alerts/:alert\_id/resolve} & 2 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/alerts/stats/summary} & 2 & JWT \\
+\hline
+\texttt{POST} & \texttt{/api/alerts/bulk/acknowledge} & 2 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{services-status} & 2 & JWT + admin \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{start-service} & 2 & JWT + admin \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{stop-service} & 2 & JWT + admin \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{restart-service} & 2 & JWT + admin \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{restart} & 2 & JWT + admin \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{shutdown} & 2 & JWT + admin \\
+\hline
+\texttt{GET} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{audit-log} & 2 & JWT + admin \\
+\hline
+\texttt{GET} & \texttt{/api/backups} & 2 & JWT \\
+\hline
+\texttt{GET} & \texttt{/api/backups/:id} & 2 & JWT \\
+\hline
+
+\end{longtable}
+\normalsize

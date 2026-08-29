@@ -1,0 +1,65 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  st/.style   = {draw, rounded corners=4pt, very thick, align=center,
+                 font=\scriptsize, minimum width=3.3cm, minimum height=1.5cm,
+                 inner sep=4pt},
+  num/.style  = {font=\tiny\bfseries, text=white, fill=black!65,
+                 circle, inner sep=1.6pt},
+  arr/.style  = {-{Latex[length=2.5mm]}, very thick},
+  ko/.style   = {-{Latex[length=2.5mm]}, very thick, dashed, red!70!black},
+  lbl/.style  = {font=\tiny, fill=white, inner sep=1.5pt},
+]
+
+% --- Déclencheur ---
+\node[st, draw=black!55, fill=black!5, minimum width=2.6cm] (git) at (-1.6,0)
+     {\textbf{GitHub}\\\textit{webhook}\\sur \texttt{push}};
+
+% --- Ligne 1 ---
+\node[st, draw=blue!60, fill=blue!6]   (s1) at (2.6,0)  {\textbf{Checkout}\\Récupération du\\code source};
+\node[st, draw=blue!60, fill=blue!6]   (s2) at (6.8,0)  {\textbf{Build}\\Installation des\\dépendances et\\compilation};
+\node[st, draw=blue!60, fill=blue!6]   (s3) at (11.0,0) {\textbf{Tests}\\Exécution des\\tests unitaires};
+\node[st, draw=green!50!black, fill=green!7] (s4) at (15.2,0)
+     {\textbf{SonarQube}\\Analyse statique\\+ \textit{Quality Gate}};
+
+\node[num] at (1.25,0.62) {1};
+\node[num] at (5.45,0.62) {2};
+\node[num] at (9.65,0.62) {3};
+\node[num] at (13.85,0.62) {4};
+
+% --- Ligne 2 ---
+\node[st, draw=orange!70!black, fill=orange!7] (s5) at (2.6,-3.4)
+     {\textbf{Docker Build}\\Construction des\\trois images};
+\node[st, draw=red!60!black, fill=red!6] (s6) at (6.8,-3.4)
+     {\textbf{Trivy Scan}\\Analyse des\\vulnérabilités};
+\node[st, draw=violet!60, fill=violet!7] (s7) at (11.0,-3.4)
+     {\textbf{Push}\\Publication sur\\le registre d'images};
+\node[st, draw=black!55, fill=black!5] (fin) at (15.2,-3.4)
+     {\textbf{Cleanup}\\Nettoyage et\\notification};
+
+\node[num] at (1.25,-2.78) {5};
+\node[num] at (5.45,-2.78) {6};
+\node[num] at (9.65,-2.78) {7};
+
+% --- Flux principal ---
+\draw[arr] (git) -- (s1);
+\draw[arr] (s1) -- (s2);
+\draw[arr] (s2) -- (s3);
+\draw[arr] (s3) -- (s4);
+\draw[arr] (s4.south) -- ++(0,-0.95) -- node[lbl, pos=0.75]{\textit{Quality Gate} passée} (2.6,-1.7) -- (s5.north);
+\draw[arr] (s5) -- (s6);
+\draw[arr] (s6) -- node[lbl]{aucune faille critique} (s7);
+\draw[arr] (s7) -- (fin);
+
+% --- Flux d'échec ---
+\draw[ko] (s4.north) -- ++(0,0.95) -| node[lbl, pos=0.25, text=red!70!black]{échec : \textit{build} interrompu} (git.north);
+\draw[ko] (s6.south) -- ++(0,-1.0) -| node[lbl, pos=0.25, text=red!70!black]{faille critique : arrêt} (-1.6,-3.4) -- (git.south);
+
+\end{tikzpicture}
+\end{document}

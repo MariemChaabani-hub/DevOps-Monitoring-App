@@ -1,0 +1,116 @@
+\chapter{Sprint 4 -- Architecture DevSecOps (Partie 2)}
+\label{chap-sprint4}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Ce dernier chapitre technique présente le Sprint~4, consacré au déploiement et à l'exploitation de la plateforme sur un cluster \textbf{Kubernetes}, ainsi qu'à la sécurisation et à la supervision de cette infrastructure elle-même.
+
+\section{Objectif du sprint}
+
+L'objectif de ce sprint est de faire passer la plateforme d'un déploiement manuel à un déploiement \textbf{orchestré, reproductible et supervisé}~: orchestration des conteneurs, déploiement continu piloté par l'état du dépôt Git (GitOps), gestion sécurisée des secrets, contrôle d'accès au cluster, et supervision de l'infrastructure elle-même.
+
+\section{Analyse du sprint 4}
+
+\subsection{Sprint Backlog}
+
+\begin{table}[H]
+\centering
+\caption{Sprint Backlog -- Sprint 4}
+\small
+\begin{tabularx}{\linewidth}{@{}p{1.3cm}Xl@{}}
+\toprule
+\textbf{ID} & \textbf{Tâche} & \textbf{Statut} \\
+\midrule
+T4.1 & Installation et configuration du cluster Kubernetes léger (k3s) sur le VPS OVH & Terminé \\
+T4.2 & Rédaction des manifests Kubernetes (Deployment, Service) & Terminé \\
+T4.3 & Mise en place du déploiement continu GitOps avec Argo CD & Terminé \\
+T4.4 & Externalisation et sécurisation des secrets avec HashiCorp Vault & Terminé \\
+T4.5 & Configuration du contrôle d'accès RBAC sur le cluster & Terminé \\
+T4.6 & Déploiement de la supervision d'infrastructure Prometheus + Grafana & Terminé \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Diagramme de cas d'utilisation}
+
+Le \cref{fig-uc-sprint4} présente les cas d'utilisation couverts par ce sprint.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  actor/.style={align=center, font=\small},
+  usecase/.style={draw, ellipse, minimum width=3.8cm, minimum height=0.9cm, align=center, font=\small, fill=cledaccent!8},
+  system/.style={draw, rounded corners, thick, color=clednavy},
+]
+  \node[actor] (argocd) at (0,-0.5) {\Huge $\bullet$ \\ Argo CD};
+  \node[actor] (admin) at (0,-4.5) {\Huge $\bullet$ \\ Administrateur\\infrastructure};
+
+  \node[system, minimum width=8.5cm, minimum height=7.2cm,
+        label={[font=\bfseries\small\color{clednavy}]above:Cluster Kubernetes (k3s)}]
+        (sys) at (5.7,-2.5) {};
+
+  \node[usecase] (uc1) at (3.6,0.6)  {Synchroniser l'état\\du cluster (GitOps)};
+  \node[usecase] (uc2) at (7.8,0.6)  {Déployer une\\nouvelle version};
+  \node[usecase] (uc3) at (3.6,-1.2) {Récupérer un secret\\(Vault)};
+  \node[usecase] (uc4) at (7.8,-1.2) {Contrôler l'accès\\au cluster (RBAC)};
+  \node[usecase] (uc5) at (3.6,-3)   {Superviser les pods\\(Prometheus)};
+  \node[usecase] (uc6) at (7.8,-3)   {Visualiser les tableaux\\de bord (Grafana)};
+
+  \draw (argocd) -- (uc1);
+  \draw (argocd) -- (uc2);
+  \draw[dashed,-{Latex}] (uc2) -- node[above,font=\tiny]{\guillemotleft include\guillemotright} (uc3);
+  \draw (admin) -- (uc4);
+  \draw (admin) -- (uc5);
+  \draw (admin) -- (uc6);
+\end{tikzpicture}%
+}
+\caption{Diagramme de cas d'utilisation -- Sprint 4}
+\label{fig-uc-sprint4}
+\end{figure}
+
+\section{Réalisation}
+
+\subsection{Déploiement Kubernetes (k3s)}
+
+La plateforme est déployée sur un cluster \textbf{Kubernetes} allégé (\textbf{k3s}), installé directement sur le VPS OVH. Ce choix permet de bénéficier des mécanismes d'orchestration standards de Kubernetes (gestion déclarative des ressources, redémarrage automatique des conteneurs défaillants, mise à l'échelle) tout en conservant une empreinte système compatible avec un unique serveur de taille modeste.
+
+Chaque composant applicatif fait l'objet d'un \textbf{Deployment} et d'un \textbf{Service} Kubernetes dédiés. Le backend et le frontend sont exposés à l'extérieur du cluster via des services de type \texttt{NodePort} (\cref{tab-nodeports}), tandis que la base de données MongoDB reste accessible uniquement au sein du cluster. Les identifiants de connexion à la base de données (MongoDB Atlas) sont injectés dans le pod backend au moyen d'un objet \texttt{Secret} Kubernetes, plutôt que d'être codés en dur dans l'image ou le manifeste de déploiement.
+
+\begin{table}[H]
+\centering
+\caption{Exposition des services Kubernetes}
+\label{tab-nodeports}
+\begin{tabularx}{\linewidth}{@{}lXl@{}}
+\toprule
+\textbf{Service} & \textbf{Rôle} & \textbf{NodePort} \\
+\midrule
+\texttt{frontend} & Application web React (servie par Nginx) & 30080 \\
+\texttt{backend} & API REST + WebSocket (Node.js / Express) & 30300 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+L'ensemble des manifestes Kubernetes du projet est fourni en \cref{annexe-k8s}.
+
+\subsection{GitOps avec Argo CD}
+
+Le déploiement continu est piloté selon une approche \textbf{GitOps}, à l'aide d'\textbf{Argo CD}. Le principe consiste à faire du dépôt Git contenant les manifestes Kubernetes la \emph{source de vérité unique} de l'état souhaité du cluster~: Argo CD surveille en continu ce dépôt et réconcilie automatiquement l'état réel du cluster avec l'état déclaré, sans intervention manuelle de type \texttt{kubectl apply}. Cette approche apporte une traçabilité complète des évolutions de l'infrastructure (chaque changement d'état correspond à un commit Git) et facilite le retour arrière en cas de déploiement défectueux.
+
+\subsection{Gestion des secrets HashiCorp Vault}
+
+Afin de renforcer la sécurité de la gestion des informations sensibles (identifiants de base de données, identifiants SSH des serveurs supervisés), la plateforme s'appuie sur \textbf{HashiCorp Vault} pour centraliser le stockage et la distribution de ces secrets, plutôt que de les faire transiter uniquement par des objets \texttt{Secret} Kubernetes statiques. Vault permet une gestion centralisée du cycle de vie des secrets (rotation, révocation, contrôle d'accès fin) indépendamment du cycle de vie des applications qui les consomment.
+
+\subsection{Contrôle d'accès RBAC}
+
+L'accès au cluster Kubernetes est régi par un mécanisme de contrôle d'accès basé sur les rôles (\textbf{RBAC} -- \emph{Role-Based Access Control}). Des rôles (\texttt{Role} / \texttt{ClusterRole}) définissent des ensembles de permissions sur les ressources du cluster (consultation, modification, suppression), qui sont ensuite associés aux comptes de service ou aux utilisateurs via des liaisons (\texttt{RoleBinding} / \texttt{ClusterRoleBinding}). Cette approche permet d'appliquer le principe du moindre privilège~: chaque composant (par exemple, Argo CD) ne dispose que des permissions strictement nécessaires à son fonctionnement.
+
+\subsection{Monitoring Prometheus + Grafana}
+
+Au-delà du monitoring applicatif propre à la plateforme (objet des chapitres 3 et 4), l'infrastructure d'exécution elle-même est supervisée à l'aide de la stack \textbf{Prometheus} + \textbf{Grafana}, standard de l'écosystème Kubernetes~: Prometheus collecte périodiquement les métriques exposées par les composants du cluster (état des pods, consommation de ressources), tandis que Grafana permet de construire des tableaux de bord de visualisation de ces métriques. Cette supervision de l'infrastructure est complémentaire à celle assurée par l'agent Python développé au chapitre 3~: elle porte sur la santé du cluster d'exécution, là où l'agent porte sur la santé des serveurs supervisés par la plateforme elle-même. Un exemple de configuration Prometheus est fourni en \cref{annexe-prometheus}.
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Ce sprint conclut le volet DevSecOps du projet~: la plateforme de monitoring, développée au cours des Sprints~1 et~2, est désormais déployée de façon orchestrée et reproductible sur un cluster Kubernetes, avec une gestion sécurisée des secrets, un contrôle d'accès formalisé, et une supervision de l'infrastructure elle-même. Le chapitre suivant dresse le bilan général du projet.

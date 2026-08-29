@@ -19,6 +19,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [actionResult, setActionResult] = useState(null);
+  const [showAllServices, setShowAllServices] = useState(false);
 
   const statusIntervalRef = useRef(null);
 
@@ -42,13 +43,33 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     }));
   };
 
-  // Services supportés
-  const supportedServices = [
-    { id: 'pm2', name: 'PM2', icon: '', description: 'Gestionnaire de processus PM2' },
-    { id: 'nginx', name: 'Nginx', icon: '', description: 'Serveur web Nginx' },
-    { id: 'mongodb', name: 'MongoDB', icon: '', description: 'Base de données MongoDB' },
-    { id: 'apache', name: 'Apache', icon: '', description: 'Serveur HTTP Apache' }
-  ];
+  // Métadonnées d'affichage pour les services connus ; tout service détecté
+  // mais absent de cette liste retombe sur son nom brut (voir getServiceMeta).
+  const knownServiceMeta = {
+    pm2: { name: 'PM2', icon: '', description: 'Gestionnaire de processus PM2' },
+    nginx: { name: 'Nginx', icon: '', description: 'Serveur web Nginx' },
+    mongodb: { name: 'MongoDB', icon: '', description: 'Base de données MongoDB' },
+    mongod: { name: 'MongoDB', icon: '', description: 'Base de données MongoDB' },
+    apache: { name: 'Apache', icon: '', description: 'Serveur HTTP Apache' },
+    apache2: { name: 'Apache', icon: '', description: 'Serveur HTTP Apache' }
+  };
+
+  const getServiceMeta = (serviceName) => {
+    return knownServiceMeta[serviceName] || {
+      name: serviceName,
+      icon: '',
+      description: 'Service détecté sur le serveur'
+    };
+  };
+
+  // Serveur actuellement sélectionné (objet complet, pour lire ses services détectés)
+  const selectedServerObj = servers.find(
+    (s) => (s.server_id || s.serverId) === selectedServer
+  );
+  const allServiceNames = selectedServerObj?.services || [];
+  const visibleServiceNames = showAllServices
+    ? allServiceNames
+    : allServiceNames.slice(0, 4);
 
   // Fetch services status for selected server
   const fetchServicesStatus = async (serverId = selectedServer) => {
@@ -142,6 +163,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           success: true,
           message: result.message,
           verifiedStatus: result.verified_status || null,
+          verifiedStatusLabel: result.verified_status_label || null,
           commandOutput: result.command_output || null,
           details: result
         });
@@ -238,6 +260,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     if (selectedServer) {
       fetchServicesStatus(selectedServer);
       fetchAuditLogs(selectedServer);
+      setShowAllServices(false);
     }
 
     return () => {
@@ -279,61 +302,81 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         <>
           {/* Services Status */}
           <div className="services-status-section">
-            <h3>Statut des Services</h3>
-            <div className="services-grid">
-              {supportedServices.map((service) => {
-                const status = servicesStatus[service.id];
-                return (
-                  <div key={service.id} className="service-card">
-                    <div className="service-header">
-                      <span className="service-icon">{service.icon}</span>
-                      <span className="service-name">{service.name}</span>
-                      <span className={`status-badge ${status?.status || 'unknown'}`}>
-                        {status?.status === 'running' ? 'Actif' :
-                         status?.status === 'stopped' ? 'Inactif' :
-                         'Inconnu'}
-                      </span>
-                    </div>
-                    <div className="service-details">
-                      <p className="service-description">{service.description}</p>
-                      {status && (
-                        <p className="service-uptime">
-                          Disponibilité : {status.uptime || 'Indisponible'}
-                        </p>
-                      )}
-                    </div>
-                    <div className="service-action-buttons">
-                      <button
-                        onClick={() => executeRemoteAction(
-                          service.id,
-                          'restart',
-                          'restart-service',
-                          { service_name: service.id }
-                        )}
-                        disabled={isActionLoading(service.id, 'restart')}
-                        className="action-btn restart-btn"
-                        title="Redémarrer le service"
-                      >
-                        {isActionLoading(service.id, 'restart') ? 'Redémarrage...' : 'Redémarrer'}
-                      </button>
-                      <button
-                        onClick={() => executeRemoteAction(
-                          service.id,
-                          'stop',
-                          'stop-service',
-                          { service_name: service.id }
-                        )}
-                        disabled={isActionLoading(service.id, 'stop')}
-                        className="action-btn stop-btn"
-                        title="Arrêter le service"
-                      >
-                        {isActionLoading(service.id, 'stop') ? 'Arrêt...' : 'Arrêter'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <h3>Statut des Services ({allServiceNames.length})</h3>
+            {allServiceNames.length === 0 ? (
+              <p className="no-services-message">
+                Aucun service détecté pour ce serveur pour le moment.
+              </p>
+            ) : (
+              <>
+                <div className="services-grid">
+                  {visibleServiceNames.map((serviceName) => {
+                    const service = getServiceMeta(serviceName);
+                    const status = servicesStatus[serviceName];
+                    return (
+                      <div key={serviceName} className="service-card">
+                        <div className="service-header">
+                          <span className="service-icon">{service.icon}</span>
+                          <span className="service-name">{service.name}</span>
+                          <span
+                            className={`status-badge ${status?.status || 'unknown'}`}
+                            title={status?.raw || ''}
+                          >
+                            {status?.label || 'Inconnu'}
+                          </span>
+                        </div>
+                        <div className="service-details">
+                          <p className="service-description">{service.description}</p>
+                          {status && (
+                            <p className="service-uptime">
+                              Disponibilité : {status.uptime || 'Indisponible'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="service-action-buttons">
+                          <button
+                            onClick={() => executeRemoteAction(
+                              serviceName,
+                              'restart',
+                              'restart-service',
+                              { service_name: serviceName }
+                            )}
+                            disabled={isActionLoading(serviceName, 'restart')}
+                            className="action-btn restart-btn"
+                            title="Redémarrer le service"
+                          >
+                            {isActionLoading(serviceName, 'restart') ? 'Redémarrage...' : 'Redémarrer'}
+                          </button>
+                          <button
+                            onClick={() => executeRemoteAction(
+                              serviceName,
+                              'stop',
+                              'stop-service',
+                              { service_name: serviceName }
+                            )}
+                            disabled={isActionLoading(serviceName, 'stop')}
+                            className="action-btn stop-btn"
+                            title="Arrêter le service"
+                          >
+                            {isActionLoading(serviceName, 'stop') ? 'Arrêt...' : 'Arrêter'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {allServiceNames.length > 4 && (
+                  <button
+                    onClick={() => setShowAllServices(!showAllServices)}
+                    className="toggle-audit-btn"
+                  >
+                    {showAllServices
+                      ? 'Réduire'
+                      : `Voir tous les services (${allServiceNames.length})`}
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           {/* Server Actions */}
@@ -388,9 +431,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                 </span>
                 {actionResult.verifiedStatus && (
                   <span className={`verified-status-badge ${actionResult.verifiedStatus}`}>
-                    {actionResult.verifiedStatus === 'active' ? 'Vérifié: Actif' :
-                     actionResult.verifiedStatus === 'inactive' ? 'Vérifié: Inactif' :
-                     'Vérifié: Inconnu'}
+                    Vérifié: {actionResult.verifiedStatusLabel || 'Inconnu'}
                   </span>
                 )}
               </div>

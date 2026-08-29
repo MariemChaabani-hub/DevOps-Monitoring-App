@@ -1,0 +1,23 @@
+\chapter*{Conclusion Générale}
+\addcontentsline{toc}{chapter}{Conclusion Générale}
+\markboth{Conclusion Générale}{}
+
+Le présent projet de fin d'études a consisté à concevoir, développer et mettre en production une plateforme complète de \textbf{monitoring et de gestion à distance} d'infrastructure serveur pour le compte de CLEDISS, structurée selon une démarche agile Scrum en cinq sprints.
+
+Les deux premiers sprints applicatifs ont permis de bâtir une chaîne complète de supervision~: un agent Python léger, installé sur chaque serveur supervisé, collecte en continu les métriques système et détecte automatiquement les services actifs~; un backend Node.js centralise ces données, calcule le statut de chaque serveur, génère des alertes lors du dépassement de seuils configurables et notifie l'administrateur par courrier électronique~; un client web React et un client mobile React Native, tous deux consommant la même API REST protégée par authentification JWT, offrent une expérience homogène de supervision et d'administration, y compris depuis un smartphone. Le module d'actions à distance, sécurisé par une double vérification d'authentification et intégralement journalisé, permet d'intervenir directement sur un service ou un serveur sans ouverture manuelle d'une session SSH, tandis que le module de sauvegarde garantit la disponibilité des données par une exécution planifiée et notifiée.
+
+Les deux sprints suivants ont porté sur l'industrialisation du déploiement de cette plateforme selon une démarche \textbf{DevSecOps}~: conteneurisation de chaque composant, chaîne d'intégration continue Jenkins intégrant systématiquement une analyse de qualité (SonarQube) et un scan de vulnérabilités (Trivy) avant toute publication d'image, puis déploiement orchestré sur un cluster Kubernetes, piloté par une approche GitOps (Argo CD), avec une gestion centralisée des secrets (Vault), un contrôle d'accès formalisé (RBAC) et une supervision de l'infrastructure elle-même (Prometheus, Grafana).
+
+Ce projet a ainsi permis de couvrir l'intégralité du cycle de vie d'une plateforme logicielle moderne~: de la conception fonctionnelle à l'exploitation en production, en passant par la sécurisation de chacune de ses étapes. Sur le plan personnel, il a été l'occasion d'approfondir des compétences en développement full-stack (Node.js, React, React Native), en administration système (SSH, systemd), ainsi qu'en intégration et déploiement continus, autant de compétences directement mobilisables dans un contexte professionnel.
+
+\section*{Perspectives}
+
+Plusieurs axes d'évolution peuvent être envisagés pour prolonger ce travail~:
+
+\begin{itemize}
+  \item \textbf{alerting avancé} — introduction de règles d'alerte personnalisables par serveur et de mécanismes de corrélation entre plusieurs métriques~;
+  \item \textbf{historisation et analyse de tendances} — exploitation de l'historique des métriques à des fins d'analyse prédictive (anticipation d'une saturation de ressources)~;
+  \item \textbf{extension multi-environnements} — généralisation du support à d'autres fournisseurs cloud, au-delà d'OVH~;
+  \item \textbf{gestion fine des rôles} — introduction de rôles utilisateurs intermédiaires entre lecture seule et administration complète~;
+  \item \textbf{tests automatisés} — renforcement de la couverture de tests automatisés (unitaires et d'intégration) intégrés à la chaîne CI/CD, afin de fiabiliser davantage encore les déploiements continus.
+\end{itemize}

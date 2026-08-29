@@ -1,0 +1,70 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+
+\begin{tikzpicture}[
+  uc/.style   = {draw, ellipse, minimum width=3.6cm, minimum height=0.9cm,
+                 align=center, font=\scriptsize, inner sep=2pt},
+  ucg/.style  = {uc, fill=black!12},
+  sys/.style  = {draw, dashed, rounded corners, thick},
+  rel/.style  = {draw, -},
+  inc/.style  = {draw, dashed, -{Latex[length=2mm]}, font=\tiny},
+  gen/.style  = {draw, -{Triangle[open, length=2.5mm, width=2.5mm]}},
+]
+
+% ---------- Frontière du système ----------
+\node[sys, minimum width=14cm, minimum height=14.6cm] (S) at (8.5,-5.4) {};
+\node[font=\scriptsize\bfseries] at (8.5,2.2) {Plateforme de supervision};
+
+% ---------- Acteur : Administrateur ----------
+\begin{scope}[shift={(-2.4,-5)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries] at (0,-1.5) {Administrateur};
+\end{scope}
+
+% ---------- Cas d'utilisation ----------
+\node[uc]  (login)   at (5.4, 1.1)   {Se connecter};
+\node[ucg] (jwt)     at (12.4, 1.1)  {Vérifier le jeton JWT};
+\node[uc]  (logout)  at (5.4, -0.2)  {Se déconnecter};
+\node[uc]  (profil)  at (5.4, -1.5)  {Consulter son profil};
+\draw[inc] (login) -- node[above]{\guillemotleft include\guillemotright} (jwt);
+
+\node[uc]  (dash)    at (5.4, -3.1)  {Consulter le tableau\\de bord};
+\node[ucg] (synth)   at (12.4, -3.1) {Consulter la synthèse\\globale du parc};
+\node[uc]  (detail)  at (5.4, -4.9)  {Consulter le détail\\d'un serveur};
+\node[uc]  (rt)      at (3.6, -6.7)  {Visualiser les métriques\\en temps réel};
+\node[uc]  (hist)    at (8.6, -6.7)  {Consulter l'historique\\(graphiques)};
+\draw[inc] (dash) -- node[above]{\guillemotleft extend\guillemotright} (synth);
+\draw[gen] (rt)   -- (detail);
+\draw[gen] (hist) -- (detail);
+
+\node[uc]  (alertes) at (5.4, -8.5)   {Gérer les alertes};
+\node[ucg] (mail)    at (12.4, -8.5)  {Recevoir une\\notification par email};
+\node[uc]  (consA)   at (3.6, -10.3)  {Consulter les\\alertes actives};
+\node[uc]  (ackA)    at (8.6, -10.3)  {Acquitter une alerte};
+\node[ucg] (logAck)  at (13.4, -10.3) {Enregistrer\\l'acquittement};
+\draw[gen] (consA) -- (alertes);
+\draw[gen] (ackA)  -- (alertes);
+\draw[inc] (ackA)    -- node[above]{\guillemotleft include\guillemotright} (logAck);
+\draw[inc] (alertes) -- node[above]{\guillemotleft extend\guillemotright} (mail);
+
+\node[uc] (backup) at (5.4, -11.9) {Consulter l'historique\\des sauvegardes};
+
+% ---------- Liens acteur : bus vertical + branches horizontales ----------
+\draw[rel] (-2.0,-5) -- (0.6,-5);
+\draw[rel] (0.6,1.1) -- (0.6,-11.9);
+\foreach \n in {login, logout, profil, dash, detail, alertes, backup}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\end{tikzpicture}
+
+\end{document}

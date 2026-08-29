@@ -1,0 +1,30 @@
+\chapter*{Annexe C -- Configuration Prometheus}
+\addcontentsline{toc}{chapter}{Annexe C -- Configuration Prometheus}
+\label{annexe-prometheus}
+
+L'extrait ci-dessous illustre une configuration standard de \textbf{Prometheus} pour la découverte et la supervision des pods d'un cluster Kubernetes, telle qu'évoquée au \cref{chap-sprint4}. \emph{À remplacer par la configuration exacte déployée sur le cluster avant soutenance.}
+
+\begin{lstlisting}[language=bash,caption={Extrait de configuration \texttt{prometheus.yml}}]
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  - job_name: 'monitoring-backend'
+    static_configs:
+      - targets: ['backend.monitoring.svc.cluster.local:3000']
+\end{lstlisting}
+
+Les métriques ainsi collectées par Prometheus sont ensuite exploitées par \textbf{Grafana} pour la construction de tableaux de bord de supervision de l'infrastructure (état des pods, consommation CPU/mémoire par conteneur, disponibilité des services).

@@ -160,9 +160,16 @@ const verifyServiceStatus = async (serviceName, server) => {
   // states the caller asked for get their own label; anything else
   // (including the transitional activating/deactivating states) is
   // reported as 'unknown' rather than silently folded into 'inactive'.
+  //
+  // No `sudo` here: `is-active` only reads state over D-Bus and doesn't
+  // need root, unlike restart/stop/start. Running it under sudo on a host
+  // where sudo isn't configured NOPASSWD for this exact command (or has
+  // no TTY to prompt for a password) makes the command fail outright —
+  // stdout comes back empty and this falls through to 'unknown', which is
+  // exactly the "always Inconnu" symptom this fixes.
   try {
     const resolvedName = SERVICE_NAME_ALIASES[serviceName] || serviceName;
-    const result = await execSshRaw(server, `sudo systemctl is-active ${resolvedName}`);
+    const result = await execSshRaw(server, `systemctl is-active ${resolvedName}`);
     const rawStatus = (result.stdout || '').trim().toLowerCase();
     const status = ['active', 'inactive', 'failed'].includes(rawStatus) ? rawStatus : 'unknown';
     return buildStatusResult(status, result.stdout || result.stderr);

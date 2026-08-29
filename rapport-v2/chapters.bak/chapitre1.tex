@@ -1,0 +1,462 @@
+\thispagestyle{fancy}
+\fancyhead[R]{A.U 2025-2026}
+\fancyhead[L]{Chapitre 1 : Cadre général du projet}
+
+\chapter{Cadre général du projet}
+
+\section*{Introduction}
+Dans ce chapitre, nous commençons par la présentation du cadre de stage ainsi que
+l'organisme d'accueil. Puis, nous mettons le projet dans son contexte général, en
+identifiant la problématique et en étudiant les solutions existantes sur le marché.
+Nous présentons ensuite la solution proposée. Finalement, nous exposons la
+méthodologie de travail adoptée dans ce projet.
+
+\section{Présentation de l'organisme d'accueil}
+Fondée en 2018, CLEDISS~\cite{clediss} est une entreprise tunisienne éditrice de
+logiciels, spécialisée dans la conception de solutions SaaS (\textit{Software as a
+Service}) destinées à la digitalisation des processus métier. Créative et rigoureuse,
+passionnée par le monde des technologies et des affaires, l'entreprise transforme les
+ressources informatiques en véritables alliés stratégiques pour ses clients.
+
+Positionnée sur le marché des progiciels de gestion intégrés, CLEDISS accompagne les
+entreprises dans la transformation numérique de leurs activités en proposant une
+plateforme hébergée dans le cloud, accessible à distance et maintenue en continu par
+les équipes internes de l'entreprise.
+
+L'équipe d'experts se consacre à l'élaboration de solutions sur mesure, adaptées aux
+besoins spécifiques de chaque client. En travaillant en étroite collaboration avec eux,
+l'entreprise comprend les défis uniques de chaque secteur et développe des stratégies
+qui optimisent les opérations, augmentent la productivité et renforcent la
+compétitivité sur le marché. La figure~\ref{fig:logo-clediss} présente le logo de
+CLEDISS.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=4cm]{Image/LogoClediss.png}
+    \caption{Logo de l'entreprise CLEDISS}
+    \label{fig:logo-clediss}
+\end{figure}
+
+\subsection{Fiche d'identité de CLEDISS}
+Le tableau~\ref{tab:fiche-identite} présente la fiche d'identité de CLEDISS.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{|p{4.5cm}|p{9cm}|}
+\hline
+\textbf{Nom de la société} & \textbf{CLEDISS} \\
+\hline
+Année de création & 2018 \\
+\hline
+Secteur d'activité & Édition de logiciels SaaS \\
+\hline
+Produit phare & Nomadis ERP \\
+\hline
+Adresse & Tunis, Tunisie \\
+\hline
+Téléphone & +216 XX XXX XXX \\
+\hline
+Adresse-Mail & contact@clediss.com \\
+\hline
+Site Web & https://www.clediss.com \\
+\hline
+Logo & \includegraphics[width=3cm]{Image/LogoClediss.png} \\
+\hline
+\end{tabular}
+\caption{Fiche d'identité de CLEDISS}~\cite{clediss}
+\label{tab:fiche-identite}
+\end{table}
+
+\subsection{Organigramme de l'entreprise}
+Dans cette partie, nous présentons l'organigramme de l'entreprise ainsi que le rôle de
+chaque direction. La figure~\ref{fig:organigramme} illustre la structure
+organisationnelle de CLEDISS.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/Organigramme.png}
+    \caption{Organigramme de l'entreprise}
+    \label{fig:organigramme}
+\end{figure}
+
+\subsection{Domaines d'activité de CLEDISS}
+CLEDISS est une entreprise spécialisée dans l'édition de solutions logicielles SaaS et
+les services informatiques destinés principalement aux entreprises souhaitant
+digitaliser leurs processus métier. Ses domaines d'activité couvrent plusieurs axes
+stratégiques :
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Édition de progiciels de gestion intégrés :}
+\begin{itemize}[label=\ding{43}]
+    \item Conception et développement de la solution Nomadis ERP ;
+    \item Gestion commerciale, suivi de stock, comptabilité et ressources humaines ;
+    \item Évolutions fonctionnelles continues du produit.
+\end{itemize}
+
+\item \textbf{Digitalisation des processus métier :}
+\begin{itemize}[label=\ding{43}]
+    \item Automatisation de la force de vente et de la logistique ;
+    \item Dématérialisation de la facturation et de l'inventaire ;
+    \item Mise en place de solutions innovantes pour améliorer la productivité.
+\end{itemize}
+
+\item \textbf{Hébergement et exploitation d'infrastructure :}
+\begin{itemize}[label=\ding{43}]
+    \item Hébergement cloud de la plateforme Nomadis ERP ;
+    \item Administration des serveurs et des bases de données ;
+    \item Garantie de la continuité de service pour l'ensemble des clients.
+\end{itemize}
+
+\item \textbf{Accompagnement et support client :}
+\begin{itemize}[label=\ding{43}]
+    \item Paramétrage et accompagnement au déploiement de la solution ;
+    \item Support technique et maintenance applicative ;
+    \item Formation des utilisateurs sur les solutions déployées.
+\end{itemize}
+\end{itemize}
+
+\section{Contexte du projet}
+Dans cette section, nous décrivons la problématique, puis nous examinons les solutions
+existantes ainsi que la solution proposée.
+
+\subsection{Problématique}
+Dans les entreprises éditrices de solutions SaaS, et plus particulièrement chez
+CLEDISS, la disponibilité de l'infrastructure serveur constitue un élément central pour
+assurer la continuité des services et la satisfaction des clients. Chaque incident
+nécessite une détection rapide ainsi qu'une intervention efficace afin de garantir un
+rétablissement dans les meilleurs délais.
+
+Cependant, de nombreuses organisations continuent d'utiliser des méthodes
+traditionnelles telles que la connexion manuelle en SSH, la consultation ponctuelle des
+journaux système ou le suivi dans des fichiers Excel, voire l'absence totale de
+supervision automatisée. Ces approches rendent la supervision peu centralisée, difficile
+à suivre et souvent sujette à des retards ou à un manque de visibilité.
+
+Cette absence de système unifié entraîne des difficultés dans la détection des
+anomalies, la coordination entre les équipes techniques et le contrôle global du parc de
+serveurs. Elle limite également la capacité à disposer d'indicateurs fiables pour
+évaluer et améliorer la performance de l'infrastructure.
+
+Les principales difficultés identifiées sont les suivantes :
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Détection tardive des incidents :}
+\begin{itemize}[label=\ding{55}]
+    \item Une saturation de ressources (CPU, mémoire, disque) n'est identifiée qu'a
+          posteriori, une fois ses effets visibles côté utilisateur ;
+    \item Aucun mécanisme ne notifie automatiquement un administrateur en cas de
+          dépassement d'un seuil critique.
+\end{itemize}
+
+\item \textbf{Absence de traçabilité :}
+\begin{itemize}[label=\ding{55}]
+    \item Aucune historisation des métriques permettant d'analyser l'évolution de la
+          charge dans le temps ;
+    \item Aucun journal des interventions effectuées sur les serveurs.
+\end{itemize}
+
+\item \textbf{Réactivité limitée :}
+\begin{itemize}[label=\ding{55}]
+    \item Toute action corrective nécessite une connexion manuelle, ce qui allonge le
+          délai de résolution ;
+    \item L'intervention exige un poste de travail équipé d'un client SSH, ce qui limite
+          la réactivité en dehors des horaires de bureau.
+\end{itemize}
+
+\item \textbf{Absence de vision consolidée :}
+\begin{itemize}[label=\ding{55}]
+    \item Aucun tableau de bord unique ne permet de visualiser l'état de l'ensemble du
+          parc de serveurs ;
+    \item Aucune application mobile ne permet d'intervenir à distance en dehors du
+          bureau.
+\end{itemize}
+
+\item \textbf{Absence de sauvegarde automatisée :}
+\begin{itemize}[label=\ding{55}]
+    \item Les sauvegardes, lorsqu'elles existent, ne sont ni planifiées, ni historisées,
+          ni notifiées ;
+    \item Aucun email de confirmation n'est envoyé après l'exécution d'une sauvegarde.
+\end{itemize}
+\end{itemize}
+
+Ces insuffisances montrent la nécessité de mettre en place une solution moderne,
+centralisée et automatisée, déployée selon une approche DevSecOps garantissant qualité,
+sécurité et reproductibilité des mises en production.
+
+La problématique peut donc être résumée comme suit :
+
+\begin{center}
+\fbox{\parbox{0.92\textwidth}{\centering \textbf{Comment surveiller en temps réel
+l'état des serveurs, détecter les anomalies et intervenir à distance de manière
+sécurisée ? Et comment automatiser et sécuriser le déploiement de cette solution, du
+code jusqu'à la mise en production ?}}}
+\end{center}
+
+\subsection{Étude de l'existant}
+Dans le domaine de la supervision d'infrastructure, plusieurs solutions de monitoring
+permettent de collecter des métriques, de générer des alertes et de visualiser l'état
+des serveurs. Ces outils visent à améliorer la disponibilité des services, la
+traçabilité des opérations ainsi que la productivité des équipes techniques.
+
+\subsubsection*{Zabbix}
+Zabbix~\cite{zabbix} est une solution open source dédiée à la supervision
+d'infrastructure. Elle permet la collecte de métriques, la génération d'alertes,
+l'inventaire des équipements ainsi que la gestion des utilisateurs.
+
+\subsubsection*{Nagios}
+Nagios~\cite{nagios} est un outil de supervision réseau et système très répandu. Il
+offre un système d'alertes par courrier électronique et une grande stabilité, reconnue
+dans les environnements de production.
+
+\subsubsection*{Prometheus et Grafana}
+Prometheus~\cite{prometheus} associé à Grafana~\cite{grafana} constitue une combinaison
+moderne de collecte de métriques et de visualisation. Elle est largement utilisée dans
+les environnements conteneurisés et orchestrés par Kubernetes.
+
+\subsubsection*{Comparaison des solutions existantes}
+Le tableau~\ref{tab:comparaison-existant} présente une comparaison des principales
+solutions de supervision étudiées.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{|p{4.8cm}|p{2.6cm}|p{2.6cm}|p{3.2cm}|}
+\hline
+\textbf{Critères} & \textbf{Zabbix} & \textbf{Nagios} & \textbf{Prometheus + Grafana} \\
+\hline
+Collecte de métriques & Oui & Oui & Oui \\
+\hline
+Alertes par email & Oui & Oui & Oui \\
+\hline
+Tableaux de bord & Moyen & Limité & Très avancé \\
+\hline
+Suivi en temps réel & Oui & Limité & Oui \\
+\hline
+Actions à distance (SSH) & Non & Non & Non \\
+\hline
+Application mobile native & Non & Non & Non \\
+\hline
+Gestion des sauvegardes & Non & Non & Non \\
+\hline
+Détection auto. des services & Partiel & Non & Partiel \\
+\hline
+Intégration DevSecOps & Non & Non & Partiel \\
+\hline
+Facilité de configuration & Faible & Faible & Moyenne \\
+\hline
+Modèle économique & Open Source & Open Source & Open Source \\
+\hline
+\end{tabular}
+\caption{Comparaison des solutions existantes de supervision}
+\label{tab:comparaison-existant}
+\end{table}
+
+\subsubsection*{Critique de l'existant}
+L'étude des solutions existantes montre que les outils de supervision offrent des
+fonctionnalités avancées pour la collecte et la visualisation des métriques. Cependant,
+aucune d'entre elles ne répond de manière complète aux besoins spécifiques de CLEDISS :
+
+\begin{itemize}[label=\ding{55}]
+\item Aucune n'intègre d'actions à distance permettant de redémarrer un service ou un
+      serveur directement depuis l'interface ;
+\item Aucune ne propose une application mobile native permettant d'intervenir en
+      mobilité ;
+\item Aucune ne gère les sauvegardes automatiques avec suivi et historique ;
+\item Aucune n'est intégrée dans une chaîne DevSecOps complète, de l'analyse du code
+      jusqu'au déploiement.
+\end{itemize}
+
+Ces constats mettent en évidence la nécessité de disposer d'un outil de supervision
+centralisé, temps réel et accessible depuis n'importe quel appareil, ce qui justifie le
+développement d'une solution sur mesure répondant précisément aux exigences du projet.
+
+\subsection{Solution proposée}
+Afin de répondre aux problématiques identifiées dans la partie précédente, nous
+proposons la conception et le développement d'une \textbf{plateforme web et mobile
+centralisée de supervision et de gestion à distance d'infrastructure serveur}.
+
+Cette solution vise à digitaliser et automatiser l'ensemble du processus de supervision,
+depuis la collecte des métriques sur les serveurs jusqu'à l'intervention corrective,
+tout en assurant un suivi en temps réel et une meilleure traçabilité des interventions.
+
+Le principe fondamental de cette solution est qu'elle adopte une approche hybride
+combinant la \textbf{supervision applicative} et l'\textbf{administration à distance},
+le tout industrialisé selon une démarche \textbf{DevSecOps}.
+
+\subsubsection*{Principales fonctionnalités de la solution}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Collecte automatisée des métriques :} un agent Python léger, installé sur
+      chaque serveur supervisé, collecte les métriques système (CPU, RAM, disque,
+      réseau, uptime) toutes les 5 secondes et les transmet au backend centralisé.
+
+\item \textbf{Tableau de bord temps réel :} visualisation consolidée de l'ensemble des
+      serveurs avec leur statut (OK, WARNING, CRITICAL, OFFLINE), les métriques
+      globales et le nombre d'alertes actives, actualisée en continu via WebSocket.
+
+\item \textbf{Système d'alertes automatiques :} génération d'alertes lors du dépassement
+      de seuils configurables, accompagnée d'une notification par courrier électronique
+      à l'administrateur.
+
+\item \textbf{Actions à distance sécurisées :} redémarrage ou arrêt d'un service
+      applicatif, redémarrage complet d'un serveur, exécutés via une connexion SSH
+      initiée par le backend, sans ouverture manuelle de session.
+
+\item \textbf{Détection automatique des services :} identification des services
+      \texttt{systemd} réellement actifs sur chaque serveur, sans configuration manuelle
+      préalable.
+
+\item \textbf{Sauvegardes automatisées :} exécution planifiée quotidienne des
+      sauvegardes, avec historique consultable et notification du résultat par email.
+
+\item \textbf{Journalisation et audit :} traçabilité complète de toute action
+      d'administration exécutée à distance (auteur, cible, commande, horodatage,
+      résultat).
+
+\item \textbf{Application mobile :} accès à l'ensemble des fonctionnalités depuis un
+      smartphone, consommant le même backend que l'application web.
+\end{itemize}
+
+\subsubsection*{Apports de la solution}
+La solution proposée permet de :
+
+\begin{itemize}[label=\ding{51}]
+\item Centraliser l'ensemble des informations liées aux serveurs sur une seule
+      plateforme ;
+\item Détecter les incidents de manière proactive grâce aux alertes automatiques ;
+\item Réduire significativement le délai d'intervention en cas d'incident ;
+\item Assurer une meilleure transparence et traçabilité des opérations ;
+\item Offrir une mobilité totale grâce à l'application mobile ;
+\item Garantir des déploiements fiables et sécurisés grâce à la chaîne DevSecOps.
+\end{itemize}
+
+Ainsi, la solution proposée constitue une réponse efficace aux limites des systèmes
+existants et permet d'optimiser la gestion globale de l'infrastructure au sein de
+l'entreprise.
+
+\section{Étude des méthodologies de développement}
+Le choix d'une méthodologie de développement constitue une étape essentielle dans la
+réussite d'un projet logiciel. Une méthode adaptée permet d'améliorer l'organisation du
+travail, de faciliter la collaboration entre les différents acteurs et d'assurer une
+réalisation efficace des fonctionnalités attendues.
+
+\subsection{Choix de la méthodologie}
+Il existe plusieurs méthodologies de développement logiciel, chacune présentant des
+avantages et des limites. Afin de sélectionner la plus adaptée à notre projet, nous
+avons réalisé une étude comparative des principales méthodes, présentée dans le
+tableau~\ref{tab:comparaison-methodo}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{|p{2.2cm}|p{5.8cm}|p{5.8cm}|}
+\hline
+\textbf{Méthode} & \textbf{Forces} & \textbf{Faiblesses} \\
+\hline
+RUP &
+\ding{51} Bonne traçabilité. \newline
+\ding{51} Architecture bien structurée. &
+\ding{55} Coût de mise en œuvre élevé. \newline
+\ding{55} Complexité lors des premières phases. \\
+\hline
+XP &
+\ding{51} Développement progressif. \newline
+\ding{51} Tests continus. \newline
+\ding{51} Coût relativement réduit. &
+\ding{55} Forte implication de l'équipe requise. \newline
+\ding{55} Difficile à appliquer sur de grands projets. \\
+\hline
+2TUP &
+\ding{51} Adaptée à des projets de différentes tailles. \newline
+\ding{51} Prise en compte des risques. \newline
+\ding{51} Développement itératif. &
+\ding{55} Principalement centrée sur le développement. \newline
+\ding{55} Peu de modèles documentaires. \\
+\hline
+Scrum &
+\ding{51} Forte implication du client. \newline
+\ding{51} Travail collaboratif. \newline
+\ding{51} Adaptation rapide aux changements. \newline
+\ding{51} Livraison incrémentale. &
+\ding{55} Gestion plus complexe avec de grandes équipes. \newline
+\ding{55} Dépend fortement de l'implication des membres. \\
+\hline
+\end{tabular}
+\caption{Étude comparative des méthodologies de développement}
+\label{tab:comparaison-methodo}
+\end{table}
+
+\subsection{Méthodologie adoptée}
+À l'issue de cette étude comparative, nous avons retenu la méthodologie agile
+\textbf{Scrum}, qui répond le mieux aux besoins de notre projet.
+
+Scrum repose sur un développement itératif et incrémental organisé en cycles courts
+appelés \textit{sprints}. Cette approche favorise la collaboration entre les membres de
+l'équipe et les parties prenantes, tout en permettant de s'adapter rapidement aux
+évolutions des besoins. Elle offre également la possibilité de livrer régulièrement des
+versions fonctionnelles de l'application afin de recueillir les retours des utilisateurs
+et d'améliorer progressivement le produit.
+
+Ce choix est d'autant plus pertinent que notre projet combine deux volets de nature
+différente — le développement fonctionnel de la plateforme et la mise en place
+progressive d'une chaîne d'exploitation DevSecOps — chacun pouvant être livré et validé
+de manière incrémentale.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/scrum.png}
+    \caption{Cycle de la méthodologie Scrum}
+    \label{fig:scrum}
+\end{figure}
+
+\subsubsection*{Organisation de l'équipe Scrum}
+La méthodologie Scrum s'appuie sur trois rôles principaux :
+
+\noindent\textbf{Product Owner :} il représente les besoins des utilisateurs et définit
+la vision du produit. Il est chargé de gérer et de prioriser le \textit{backlog} afin de
+maximiser la valeur du projet. Ses principales responsabilités sont :
+
+\begin{itemize}[label=\ding{43}]
+\item Définir et prioriser les fonctionnalités ;
+\item Planifier les différentes \textit{releases} ;
+\item Ajuster les priorités en fonction des besoins ;
+\item Valider les fonctionnalités développées.
+\end{itemize}
+
+\noindent\textbf{Scrum Master :} il veille au respect des principes Scrum et facilite la
+collaboration entre les membres de l'équipe. Il accompagne également l'équipe dans la
+résolution des obstacles pouvant ralentir le développement.
+
+\noindent\textbf{Équipe de développement :} elle est responsable de la conception, de
+l'implémentation et des tests des différentes fonctionnalités du système afin
+d'atteindre les objectifs fixés pour chaque sprint.
+
+\subsubsection*{Répartition des rôles}
+Dans le cadre de notre projet, les rôles Scrum sont répartis comme indiqué dans le
+tableau~\ref{tab:roles-scrum}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{|p{5cm}|p{8cm}|}
+\hline
+\textbf{Rôle Scrum} & \textbf{Personne responsable} \\
+\hline
+Product Owner & Encadrant professionnel CLEDISS \\
+\hline
+Scrum Master & Encadrant académique ESPRIT \\
+\hline
+Équipe de développement & Mariem Chaabani \\
+\hline
+\end{tabular}
+\caption{Répartition des rôles Scrum dans notre projet}
+\label{tab:roles-scrum}
+\end{table}
+
+\section*{Conclusion}
+Dans ce chapitre, nous avons présenté l'organisme d'accueil ainsi que le contexte
+général du projet. Nous avons ensuite exposé la problématique, étudié les solutions
+existantes et comparé plusieurs méthodologies de développement afin de justifier le
+choix de Scrum. Le chapitre suivant sera consacré à la phase préparatoire du projet,
+communément appelée Sprint~0.

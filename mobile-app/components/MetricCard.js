@@ -1,12 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Theme } from '../constants/theme';
 
-const MetricCard = ({ title, value, icon, color, small = false }) => {
+const MetricCard = ({ title, value, color = Theme.colors.accent, small = false }) => {
   return (
     <View style={[styles.container, small && styles.smallContainer]}>
-      <View style={[styles.iconContainer, { backgroundColor: color }]}>
-        <Text style={styles.icon}>{icon}</Text>
-      </View>
+      <View style={[styles.bar, { backgroundColor: color }]} />
       <Text style={[styles.title, small && styles.smallTitle]}>{title}</Text>
       <Text style={[styles.value, small && styles.smallValue]}>{value}</Text>
     </View>
@@ -16,36 +15,25 @@ const MetricCard = ({ title, value, icon, color, small = false }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: Theme.radius.md,
+    padding: Theme.spacing.md,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
   },
   smallContainer: {
-    padding: 12,
+    padding: Theme.spacing.sm,
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  icon: {
-    fontSize: 24,
+  bar: {
+    width: 32,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: Theme.spacing.sm,
   },
   title: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: Theme.colors.textSecondary,
     fontWeight: '500',
     marginBottom: 4,
     textAlign: 'center',
@@ -56,7 +44,7 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: Theme.colors.textPrimary,
     textAlign: 'center',
   },
   smallValue: {

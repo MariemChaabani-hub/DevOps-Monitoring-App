@@ -1,0 +1,32 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=3cm,
+                     minimum height=0.8cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+  frame/.style  = {draw, thin, gray},
+]
+  \node[actorbox] (a1) at (0,0)  {Administrateur};
+  \node[actorbox] (a2) at (6,0)  {Plateforme};
+  \foreach \i in {1,2} \draw[life] (a\i.south) -- ++(0,-7.4);
+
+  \draw[msg] (0,-1.0) -- node[above]{Saisir email et mot de passe} (6,-1.0);
+  \draw[msg] (6,-1.9) -- node[above]{Vérifier les identifiants} ++(1.6,0)
+             -- ++(0,-0.5) -- ++(-1.6,0);
+  \draw[msg] (6,-3.2) -- node[above]{Générer le jeton JWT} ++(1.6,0)
+             -- ++(0,-0.5) -- ++(-1.6,0);
+  \draw[ret] (6,-4.5) -- node[above]{Retourner le jeton et le profil} (0,-4.5);
+  \draw[msg] (0,-5.4) -- node[above]{Persister le jeton localement} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[ret] (6,-6.6) -- node[above]{Rediriger vers le tableau de bord} (0,-6.6);
+\end{tikzpicture}
+\end{document}

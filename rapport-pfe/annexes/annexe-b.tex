@@ -1,0 +1,106 @@
+\chapter*{Annexe B -- Manifests Kubernetes}
+\addcontentsline{toc}{chapter}{Annexe B -- Manifests Kubernetes}
+\label{annexe-k8s}
+
+Les manifestes ci-dessous correspondent aux ressources Kubernetes réellement déployées sur le cluster k3s du VPS OVH, référencées au \cref{chap-sprint4}. \emph{Par mesure de sécurité, les valeurs du manifeste \texttt{Secret} sont remplacées par des espaces réservés~: les valeurs réelles ne doivent jamais figurer dans ce rapport ni dans le dépôt Git du projet.}
+
+\begin{lstlisting}[language=bash,caption={Deployment et Service -- Backend}]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: mariemchaabani/monitoring-backend:<tag>
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: monitoring-secret
+        volumeMounts:
+        - name: backups
+          mountPath: /app/backups
+      volumes:
+      - name: backups
+        hostPath:
+          path: /home/debian/DevOps-Monitoring-App/backups
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: monitoring
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 3000
+    targetPort: 3000
+  nodePort: 30300
+  type: NodePort
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash,caption={Deployment et Service -- Frontend}]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: mariemchaabani/monitoring-frontend:<tag>
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: monitoring
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
+  type: NodePort
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash,caption={Secret -- configuration sensible (valeurs redigees)}]
+apiVersion: v1
+kind: Secret
+metadata:
+  name: monitoring-secret
+  namespace: monitoring
+type: Opaque
+stringData:
+  MONGODB_URI: "<mongodb-atlas-connection-string>"
+  EMAIL_USER: "<email-expediteur>"
+  EMAIL_PASS: "<mot-de-passe-application>"
+  PORT: "3000"
+  JWT_SECRET: "<cle-secrete-jwt>"
+  ADMIN_EMAIL: "<email-admin>"
+  ADMIN_PASSWORD: "<mot-de-passe-admin>"
+\end{lstlisting}

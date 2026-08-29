@@ -180,6 +180,7 @@ const ServicesPanel = ({ server }) => {
                       <span
                         className="status-badge"
                         style={{ color: statusBadge.color }}
+                        title={statusInfo?.raw || ''}
                       >
                         {statusBadge.text}
                       </span>

@@ -1,0 +1,662 @@
+\thispagestyle{fancy}
+\fancyhead[R]{A.U 2025-2026}
+\fancyhead[L]{Chapitre 4 : Sprint 2 -- Administration et mobilité}
+
+\chapter{Sprint 2 : Administration à distance et mobilité}
+
+\section*{Introduction}
+Ce chapitre est consacré au \textbf{Sprint 2} du projet. Alors que le sprint précédent a
+permis de construire le socle de supervision, ce sprint transforme la plateforme d'un
+simple outil de \emph{visualisation} en un véritable outil d'\emph{administration}.
+
+Il couvre quatre axes complémentaires : la détection automatique des anomalies à travers
+un système d'alertes par seuils, l'exécution d'actions de maintenance à distance via des
+connexions SSH sécurisées, l'automatisation des sauvegardes quotidiennes, et enfin la
+mise à disposition de l'ensemble de ces fonctionnalités sur une application mobile
+consommant la même API que le client web.
+
+\section{Backlog du Sprint 2}
+Après la définition des objectifs du Sprint 2, les \textit{User Stories} sélectionnées à
+partir du \textit{Product Backlog} ont été décomposées en tâches techniques afin de
+faciliter leur implémentation et leur suivi. Le tableau~\ref{tab:backlog-sprint2}
+présente le backlog détaillé du Sprint 2.
+
+\renewcommand{\arraystretch}{1.4}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{4.1cm}
+                  |>{\raggedright\arraybackslash}p{7.7cm}
+                  |>{\centering\arraybackslash}p{2.4cm}|}
+\hline
+\textbf{User Story} & \textbf{Tâches} & \textbf{Estimation} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{User Story} & \textbf{Tâches} & \textbf{Estimation} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\textit{Suite du tableau à la page suivante}} \\
+\endfoot
+
+\hline
+\caption{Backlog du Sprint 2}
+\label{tab:backlog-sprint2}
+\endlastfoot
+
+En tant que système, je veux générer une alerte lors du dépassement d'un seuil.
+& Concevoir le modèle Mongoose \texttt{Alert}. & 1 \\
+& Développer le service de génération d'alertes (\texttt{AlertService}). & 2 \\
+& Externaliser les seuils dans la collection \texttt{Threshold}. & 1 \\
+& Implémenter la détection des niveaux \texttt{WARNING} et \texttt{CRITICAL}. & 1 \\
+& Éviter la génération d'alertes redondantes. & 2 \\
+& Tester la génération. & 1 \\
+\hline
+
+En tant qu'administrateur, je veux être notifié par courrier électronique.
+& Configurer le service d'envoi d'e-mails (Nodemailer / SMTP). & 1 \\
+& Concevoir le modèle de message HTML de notification. & 2 \\
+& Déclencher l'envoi lors de la génération d'une alerte. & 1 \\
+& Tracer l'état d'envoi dans le document d'alerte. & 1 \\
+& Tester la réception des notifications. & 1 \\
+\hline
+
+En tant qu'administrateur, je veux consulter et acquitter les alertes.
+& Développer l'API de liste des alertes avec filtres. & 1 \\
+& Développer l'API d'acquittement (\texttt{PUT .../acknowledge}). & 1 \\
+& Développer l'API de résolution d'alerte. & 1 \\
+& Réaliser l'interface de gestion des alertes. & 2 \\
+& Tester les fonctionnalités. & 1 \\
+\hline
+
+En tant qu'agent, je veux détecter automatiquement les services actifs.
+& Développer la fonction \texttt{detect\_active\_services()} en Python. & 2 \\
+& Analyser la sortie de la commande \texttt{systemctl list-units}. & 1 \\
+& Gérer les hôtes non-\texttt{systemd} sans interrompre la collecte. & 1 \\
+& Ajouter le champ \texttt{services} au modèle \texttt{Server}. & 1 \\
+& Persister la liste détectée à chaque cycle de collecte. & 1 \\
+& Tester la détection. & 1 \\
+\hline
+
+En tant qu'administrateur, je veux redémarrer ou arrêter un service à distance.
+& Développer le service d'exécution de commandes SSH (\texttt{node-ssh}). & 2 \\
+& Implémenter la double vérification d'autorisation. & 2 \\
+& Valider le nom de service par expression régulière. & 1 \\
+& Développer les endpoints \texttt{restart-service} et \texttt{stop-service}. & 2 \\
+& Gérer le cas particulier du gestionnaire de processus PM2. & 1 \\
+& Vérifier le statut réel du service après l'action. & 2 \\
+& Réaliser l'interface d'actions à distance. & 2 \\
+& Tester les fonctionnalités. & 1 \\
+\hline
+
+En tant qu'administrateur, je veux redémarrer complètement un serveur.
+& Développer l'endpoint de redémarrage du serveur. & 1 \\
+& Implémenter la temporisation avant redémarrage. & 1 \\
+& Mettre à jour le statut du serveur après l'action. & 1 \\
+& Tester la fonctionnalité. & 1 \\
+\hline
+
+En tant qu'administrateur, je veux consulter le journal d'audit.
+& Concevoir le modèle \texttt{AuditLog}. & 1 \\
+& Développer le middleware de journalisation des actions. & 1 \\
+& Envoyer une notification e-mail à chaque action d'administration. & 1 \\
+& Développer l'API de consultation du journal. & 1 \\
+& Réaliser l'interface de consultation. & 1 \\
+& Tester la traçabilité. & 1 \\
+\hline
+
+En tant que système, je veux exécuter une sauvegarde quotidienne.
+& Concevoir le modèle \texttt{Backup}. & 1 \\
+& Mettre en place la tâche planifiée avec \texttt{node-cron}. & 1 \\
+& Développer la procédure d'export de la base de données. & 2 \\
+& Implémenter la vérification horaire des sauvegardes manquantes. & 1 \\
+& Envoyer un e-mail de confirmation ou d'échec. & 1 \\
+& Développer l'API et l'interface d'historique. & 1 \\
+& Tester la planification. & 1 \\
+\hline
+
+En tant qu'administrateur, je veux accéder à la plateforme depuis mon téléphone.
+& Mettre en place la navigation et la garde d'authentification (Expo Router). & 2 \\
+& Développer le contexte d'authentification et la persistance du jeton. & 2 \\
+& Réécrire la couche d'accès à l'API mobile. & 2 \\
+& Développer l'écran de connexion. & 1 \\
+& Développer le tableau de bord et le détail d'un serveur. & 2 \\
+& Développer les écrans d'alertes et d'actions à distance. & 2 \\
+& Implémenter le rafraîchissement automatique toutes les 5 secondes. & 1 \\
+& Tester l'application sur appareil réel. & 1 \\
+\hline
+
+\end{longtable}
+
+\section{Diagramme de cas d'utilisation du Sprint 2}
+Dans cette section, nous présentons le diagramme de cas d'utilisation correspondant aux
+fonctionnalités développées lors du deuxième sprint, tel qu'illustré dans la
+figure~\ref{fig:uc-sprint2}.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  uc/.style   = {draw, ellipse, minimum width=3.8cm, minimum height=0.95cm,
+                 align=center, font=\scriptsize, inner sep=2pt},
+  ucg/.style  = {uc, fill=black!12},
+  sys/.style  = {draw, dashed, rounded corners, thick},
+  rel/.style  = {draw, -},
+  inc/.style  = {draw, dashed, -{Latex[length=2mm]}, font=\tiny},
+  gen/.style  = {draw, -{Triangle[open, length=2.5mm, width=2.5mm]}},
+]
+
+\node[sys, minimum width=14.5cm, minimum height=15.4cm] (S) at (8.5,-6.4) {};
+\node[font=\scriptsize\bfseries] at (8.5,1.6) {Plateforme de supervision -- Sprint 2};
+
+% --- Acteur Administrateur ---
+\begin{scope}[shift={(-2.4,-4.6)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries] at (0,-1.5) {Administrateur};
+\end{scope}
+
+% --- Acteur Planificateur ---
+\begin{scope}[shift={(-2.4,-12.4)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries, align=center] at (0,-1.5) {Planificateur\\(cron)};
+\end{scope}
+
+% --- Bloc Alertes ---
+\node[uc]  (alertes) at (5.4, 0.6)   {Gérer les alertes};
+\node[ucg] (mail)    at (12.6, 0.6)  {Recevoir une\\notification e-mail};
+\node[uc]  (consA)   at (3.6, -1.1)  {Consulter les\\alertes actives};
+\node[uc]  (ackA)    at (8.6, -1.1)  {Acquitter une alerte};
+\node[ucg] (logAck)  at (13.4, -1.1) {Enregistrer\\l'acquittement};
+\draw[gen] (consA) -- (alertes);
+\draw[gen] (ackA)  -- (alertes);
+\draw[inc] (alertes) -- node[above]{\guillemotleft extend\guillemotright} (mail);
+\draw[inc] (ackA) -- node[above]{\guillemotleft include\guillemotright} (logAck);
+
+% --- Bloc Actions sur services ---
+\node[uc]  (gserv)  at (5.4, -3.0)   {Gérer les services\\d'un serveur};
+\node[ucg] (ssh)    at (12.6, -3.0)  {Établir une\\connexion SSH};
+\node[uc]  (rserv)  at (3.6, -4.7)   {Redémarrer\\un service};
+\node[uc]  (aserv)  at (8.6, -4.7)   {Arrêter un service};
+\node[ucg] (vstat)  at (12.6, -5.4)  {Vérifier le statut\\du service};
+\draw[gen] (rserv) -- (gserv);
+\draw[gen] (aserv) -- (gserv);
+\draw[inc] (gserv) -- node[above]{\guillemotleft include\guillemotright} (ssh);
+\draw[inc] (aserv) -- node[below, pos=0.6]{\guillemotleft include\guillemotright} (vstat);
+
+% --- Bloc Actions sur serveur ---
+\node[uc]  (gsrv)   at (5.4, -7.0)   {Redémarrer un serveur};
+\node[ucg] (audit)  at (12.6, -7.6)  {Journaliser l'action\\(audit)};
+\node[uc]  (detect) at (5.4, -8.6)   {Consulter les services\\détectés};
+\draw[inc] (gsrv) -- node[above]{\guillemotleft include\guillemotright} (audit);
+
+% --- Bloc Audit et sauvegardes ---
+\node[uc]  (jaudit) at (5.4, -10.2)  {Consulter le journal\\d'audit};
+\node[uc]  (hbck)   at (5.4, -11.6)  {Consulter l'historique\\des sauvegardes};
+\node[uc]  (bck)    at (5.4, -13.2)  {Exécuter la sauvegarde\\quotidienne};
+\draw[inc] (bck) -- node[above]{\guillemotleft include\guillemotright} (12.6,-13.2);
+\node[ucg] (mailb)  at (12.6, -13.2) {Notifier le résultat\\par e-mail};
+
+% --- Liens acteurs : bus vertical ---
+\draw[rel] (-2.0,-4.6) -- (0.6,-4.6);
+\draw[rel] (0.6,0.6) -- (0.6,-11.6);
+\foreach \n in {alertes, gserv, gsrv, detect, jaudit, hbck}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\draw[rel] (-2.0,-12.4) -- (0.6,-12.4);
+\draw[rel] (0.6,-12.4) -- (0.6,-13.2);
+\draw[rel] (0.6,0 |- bck.west) -- (bck.west);
+
+\end{tikzpicture}%
+}
+\caption{Diagramme de cas d'utilisation du Sprint 2}
+\label{fig:uc-sprint2}
+\end{figure}
+
+\section{Services Web du Sprint 2}
+Les services web développés durant ce sprint concernent la gestion des alertes,
+l'exécution des actions à distance, la traçabilité des interventions et la consultation
+des sauvegardes. Ils sont résumés dans le tableau~\ref{tab:ws-sprint2}.
+
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{longtable}{|p{1.6cm}|>{\raggedright\arraybackslash}p{7.4cm}|p{5.4cm}|}
+\hline
+\textbf{Méthode} & \textbf{URL} & \textbf{Description} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Méthode} & \textbf{URL} & \textbf{Description} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\textit{Suite du tableau à la page suivante}} \\
+\endfoot
+
+\hline
+\caption{Liste des services web du Sprint 2}
+\label{tab:ws-sprint2}
+\endlastfoot
+
+\multicolumn{3}{|c|}{\textbf{Gestion des alertes}} \\
+\hline
+\texttt{GET} & \texttt{/api/alerts} & Récupérer les alertes filtrées par statut, sévérité ou serveur. \\
+\hline
+\texttt{GET} & \texttt{/api/alerts/:alert\_id} & Consulter le détail d'une alerte. \\
+\hline
+\texttt{PUT} & \texttt{/api/alerts/:alert\_id/acknowledge} & Acquitter une alerte prise en charge. \\
+\hline
+\texttt{PUT} & \texttt{/api/alerts/:alert\_id/resolve} & Marquer une alerte comme résolue. \\
+\hline
+\texttt{GET} & \texttt{/api/alerts/stats/summary} & Obtenir les statistiques des alertes actives. \\
+\hline
+\texttt{POST} & \texttt{/api/alerts/bulk/acknowledge} & Acquitter plusieurs alertes en une seule opération. \\
+\hline
+
+\multicolumn{3}{|c|}{\textbf{Actions à distance sur les services}} \\
+\hline
+\texttt{GET} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{services-status} & Vérifier l'état réel des services détectés sur un serveur. \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{restart-service} & Redémarrer un service applicatif via SSH. \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{stop-service} & Arrêter un service applicatif via SSH. \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{start-service} & Démarrer un service applicatif via SSH. \\
+\hline
+
+\multicolumn{3}{|c|}{\textbf{Actions à distance sur le serveur}} \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{restart} & Redémarrer complètement un serveur via SSH. \\
+\hline
+\texttt{POST} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{shutdown} & Arrêter un serveur avec motif d'intervention. \\
+\hline
+\texttt{GET} & \texttt{/api/remote-actions/}\allowbreak\texttt{:server\_id/}\allowbreak\texttt{audit-log} & Consulter le journal d'audit des actions d'un serveur. \\
+\hline
+
+\multicolumn{3}{|c|}{\textbf{Gestion des sauvegardes}} \\
+\hline
+\texttt{GET} & \texttt{/api/backups} & Récupérer l'historique des sauvegardes réalisées. \\
+\hline
+\texttt{GET} & \texttt{/api/backups/:id} & Consulter le détail d'une sauvegarde. \\
+\hline
+
+\end{longtable}
+\normalsize
+
+\section{Les cas d'utilisation du Sprint 2}
+
+\subsection{Cas d'utilisation : « Redémarrer un service à distance »}
+Ce cas d'utilisation constitue la fonctionnalité la plus sensible de la plateforme,
+puisqu'elle permet d'exécuter une commande privilégiée sur un serveur distant depuis
+l'interface. Elle fait donc l'objet d'un dispositif de sécurité renforcé.
+
+\subsubsection*{Description textuelle}
+
+\renewcommand{\arraystretch}{1.4}
+\begin{longtable}{|p{3.0cm}|>{\raggedright\arraybackslash}p{11.4cm}|}
+\hline
+\textbf{Acteurs} & Administrateur \\
+\hline
+\textbf{Objectif} & Permettre à l'administrateur authentifié de redémarrer un service
+applicatif sur un serveur supervisé, directement depuis l'interface web ou mobile, sans
+ouvrir manuellement de session SSH, tout en garantissant la traçabilité de l'action. \\
+\hline
+\textbf{Pré-condition} & L'administrateur est authentifié et dispose du rôle
+\texttt{admin}. Le serveur cible possède des identifiants SSH renseignés
+(\texttt{ip\_address}, \texttt{ssh\_username}, \texttt{ssh\_password}). Le service visé
+figure parmi ceux détectés par l'agent. \\
+\hline
+\textbf{Scénario principal} &
+\begin{enumerate}[leftmargin=*, nosep]
+  \item L'administrateur sélectionne un serveur dans le module d'actions à distance.
+  \item Le système affiche la liste des services réellement détectés sur ce serveur,
+        accompagnés de leur état courant.
+  \item L'administrateur clique sur le bouton « Redémarrer » du service concerné.
+  \item Le système vérifie la validité du jeton JWT.
+  \item Le système vérifie en base de données que l'utilisateur possède le rôle
+        administrateur.
+  \item Le système valide le nom du service par expression régulière afin de prévenir
+        toute injection de commande.
+  \item Le système établit une connexion SSH vers le serveur cible.
+  \item Le système exécute la commande \texttt{sudo systemctl restart <service>}.
+  \item Le système vérifie l'état réel du service au moyen de
+        \texttt{systemctl is-active}.
+  \item Le système journalise l'action dans le journal d'audit et envoie une
+        notification par courrier électronique.
+  \item Le système retourne le résultat accompagné du statut vérifié.
+\end{enumerate} \\
+\hline
+\textbf{Scénarios alternatifs} &
+\textit{A1 : Jeton absent ou expiré}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Le système renvoie une erreur 401 et invite l'utilisateur à se reconnecter.
+\end{enumerate}
+\textit{A2 : Utilisateur non administrateur}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Le système renvoie une erreur 403 et refuse l'exécution.
+\end{enumerate}
+\textit{A3 : Identifiants SSH incomplets}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Le système renvoie une erreur 400 en précisant les champs manquants.
+\end{enumerate}
+\textit{A4 : Échec de la commande distante}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Le système récupère le flux d'erreur, journalise l'échec et le retourne à
+        l'administrateur.
+\end{enumerate}
+\textit{A5 : Cas particulier de PM2}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item PM2 n'étant pas un service \texttt{systemd}, le système exécute la commande
+        \texttt{pm2 restart all} et vérifie l'état via \texttt{pm2 jlist}.
+\end{enumerate} \\
+\hline
+\caption{Cas d'utilisation : Redémarrer un service à distance}
+\label{tab:cu-restart}
+\end{longtable}
+
+\subsubsection*{Diagramme de séquence système}
+La figure~\ref{fig:seq-sys-restart} illustre les interactions entre l'administrateur et
+le système lors de l'exécution d'une action à distance.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.9\textwidth}{!}{%
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=3cm,
+                     minimum height=0.8cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+]
+  \node[actorbox] (a1) at (0,0)   {Administrateur};
+  \node[actorbox] (a2) at (6.5,0) {Plateforme};
+  \foreach \i in {1,2} \draw[life] (a\i.south) -- ++(0,-8.6);
+
+  \draw[msg] (0,-1.0)   -- node[above]{Sélectionner un serveur} (6.5,-1.0);
+  \draw[ret] (6.5,-1.8) -- node[above]{Liste des services détectés} (0,-1.8);
+  \draw[msg] (0,-2.7)   -- node[above]{Demander le redémarrage d'un service} (6.5,-2.7);
+  \draw[msg] (6.5,-3.6) -- node[above]{Vérifier les autorisations} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[msg] (6.5,-4.9) -- node[above]{Exécuter la commande via SSH} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[msg] (6.5,-6.2) -- node[above]{Vérifier le statut réel} ++(1.8,0)
+             -- ++(0,-0.5) -- ++(-1.8,0);
+  \draw[ret] (6.5,-7.5) -- node[above]{Résultat et statut vérifié} (0,-7.5);
+\end{tikzpicture}%
+}
+\caption{Diagramme de séquence système du cas d'utilisation « Redémarrer un service à distance »}
+\label{fig:seq-sys-restart}
+\end{figure}
+
+\subsubsection*{Diagramme de séquence objet}
+La figure~\ref{fig:seq-obj-restart} détaille les interactions entre les composants
+internes du système lors de l'exécution d'une action à distance.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=2.7cm,
+                     minimum height=0.85cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+]
+  \node[actorbox] (a1) at (0,0)    {Interface\\Actions};
+  \node[actorbox] (a2) at (4.3,0)  {\texttt{verifyToken} \\ \texttt{requireAdmin}};
+  \node[actorbox] (a3) at (8.6,0)  {\texttt{remoteActions}};
+  \node[actorbox] (a4) at (12.9,0) {Serveur cible\\(SSH)};
+  \node[actorbox] (a5) at (17.2,0) {\texttt{AuditLog} \\ + e-mail};
+  \foreach \i in {1,...,5} \draw[life] (a\i.south) -- ++(0,-9.8);
+
+  \draw[msg] (0,-1.1)    -- node[above]{\texttt{POST .../restart-service}} (4.3,-1.1);
+  \draw[msg] (4.3,-2.0)  -- node[above]{jeton + rôle validés} (8.6,-2.0);
+  \draw[msg] (8.6,-2.9)  -- node[above]{valider le nom du service} ++(1.6,0)
+             -- ++(0,-0.5) -- ++(-1.6,0);
+  \draw[msg] (8.6,-4.2)  -- node[above]{\texttt{ssh.connect()}} (12.9,-4.2);
+  \draw[msg] (8.6,-5.1)  -- node[above]{\texttt{sudo systemctl restart}} (12.9,-5.1);
+  \draw[ret] (12.9,-5.9) -- node[above]{code de retour} (8.6,-5.9);
+  \draw[msg] (8.6,-6.7)  -- node[above]{\texttt{systemctl is-active}} (12.9,-6.7);
+  \draw[ret] (12.9,-7.5) -- node[above]{statut du service} (8.6,-7.5);
+  \draw[msg] (8.6,-8.3)  -- node[above]{journaliser + notifier} (17.2,-8.3);
+  \draw[ret] (8.6,-9.2)  -- node[above]{\texttt{200 OK} -- statut vérifié} (0,-9.2);
+\end{tikzpicture}%
+}
+\caption{Diagramme de séquence objet du cas d'utilisation « Redémarrer un service à distance »}
+\label{fig:seq-obj-restart}
+\end{figure}
+
+\subsection{Cas d'utilisation : « Générer et notifier une alerte »}
+Ce cas d'utilisation décrit le mécanisme automatique de détection des anomalies, qui
+constitue le cœur de la valeur ajoutée de la plateforme.
+
+\subsubsection*{Description textuelle}
+
+\renewcommand{\arraystretch}{1.4}
+\begin{longtable}{|p{3.0cm}|>{\raggedright\arraybackslash}p{11.4cm}|}
+\hline
+\textbf{Acteurs} & Système (traitement automatique), Administrateur (destinataire) \\
+\hline
+\textbf{Objectif} & Détecter automatiquement le dépassement d'un seuil de consommation
+de ressources sur un serveur supervisé, générer l'alerte correspondante et en informer
+immédiatement l'administrateur. \\
+\hline
+\textbf{Pré-condition} & Une métrique vient d'être reçue et persistée. Les seuils sont
+configurés dans la base de données. \\
+\hline
+\textbf{Scénario principal} &
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Le système reçoit une nouvelle métrique de l'agent.
+  \item Le service de calcul de statut compare successivement les valeurs de CPU, RAM et
+        disque aux seuils configurés.
+  \item Un dépassement est détecté (\texttt{WARNING} à 80\,\%, \texttt{CRITICAL} à
+        90\,\%).
+  \item Le système vérifie qu'une alerte identique n'est pas déjà active sur ce serveur
+        afin d'éviter les doublons.
+  \item Le système crée un document \texttt{Alert} avec la sévérité, la métrique
+        concernée, la valeur mesurée, le seuil dépassé et un message explicite.
+  \item Le système envoie une notification par courrier électronique à l'administrateur.
+  \item Le système marque l'alerte comme notifiée et diffuse la mise à jour aux clients
+        connectés.
+  \item L'alerte apparaît dans la liste des alertes actives sur l'interface web et
+        mobile.
+\end{enumerate} \\
+\hline
+\textbf{Scénarios alternatifs} &
+\textit{A1 : Alerte déjà active}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Aucune nouvelle alerte n'est créée ; l'alerte existante reste active.
+\end{enumerate}
+\textit{A2 : Retour à la normale}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Les valeurs repassent sous les seuils : les alertes actives du serveur sont
+        automatiquement résolues.
+\end{enumerate}
+\textit{A3 : Échec de l'envoi du courrier électronique}
+\begin{enumerate}[leftmargin=*, nosep]
+  \item L'alerte est tout de même enregistrée ; l'échec d'envoi est journalisé.
+\end{enumerate} \\
+\hline
+\caption{Cas d'utilisation : Générer et notifier une alerte}
+\label{tab:cu-alerte}
+\end{longtable}
+
+\subsubsection*{Diagramme de séquence objet}
+La figure~\ref{fig:seq-obj-alerte} illustre les interactions internes lors de la
+génération d'une alerte.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  ->,>=Latex,
+  life/.style   = {draw, dashed},
+  actorbox/.style = {draw, rounded corners=3pt, fill=blue!8, minimum width=2.8cm,
+                     minimum height=0.85cm, align=center, font=\scriptsize},
+  msg/.style    = {draw, -{Latex[length=2mm]}, font=\scriptsize},
+  ret/.style    = {draw, dashed, -{Latex[length=2mm]}, font=\scriptsize},
+]
+  \node[actorbox] (a1) at (0,0)    {\texttt{POST /metrics}};
+  \node[actorbox] (a2) at (4.5,0)  {\texttt{AlertService}};
+  \node[actorbox] (a3) at (9.0,0)  {Modèle\\\texttt{Alert}};
+  \node[actorbox] (a4) at (13.5,0) {\texttt{EmailService}};
+  \node[actorbox] (a5) at (18.0,0) {Administrateur};
+  \foreach \i in {1,...,5} \draw[life] (a\i.south) -- ++(0,-8.6);
+
+  \draw[msg] (0,-1.1)    -- node[above]{\texttt{checkAndGenerateAlerts()}} (4.5,-1.1);
+  \draw[msg] (4.5,-2.0)  -- node[above]{comparer aux seuils} ++(1.7,0)
+             -- ++(0,-0.5) -- ++(-1.7,0);
+  \draw[msg] (4.5,-3.3)  -- node[above]{vérifier les alertes actives} (9.0,-3.3);
+  \draw[ret] (9.0,-4.1)  -- node[above]{aucun doublon} (4.5,-4.1);
+  \draw[msg] (4.5,-4.9)  -- node[above]{\texttt{save()} nouvelle alerte} (9.0,-4.9);
+  \draw[msg] (4.5,-5.9)  -- node[above]{demander la notification} (13.5,-5.9);
+  \draw[msg] (13.5,-6.8) -- node[above]{envoyer l'e-mail} (18.0,-6.8);
+  \draw[ret] (4.5,-7.8)  -- node[above]{alerte créée et notifiée} (0,-7.8);
+\end{tikzpicture}%
+}
+\caption{Diagramme de séquence objet du cas d'utilisation « Générer et notifier une alerte »}
+\label{fig:seq-obj-alerte}
+\end{figure}
+
+\section{Détection automatique des services}
+Une contrainte majeure identifiée lors de la conception concernait la gestion des
+services applicatifs : imposer une liste fixe de services aurait limité la plateforme à
+un ensemble prédéfini, incompatible avec un parc hétérogène.
+
+La solution retenue repose sur une \textbf{détection dynamique} réalisée par l'agent
+Python. À chaque cycle de collecte, celui-ci exécute la commande présentée dans
+l'extrait~\ref{lst:systemctl}, analyse la sortie obtenue et transmet au backend la liste
+des unités actives, débarrassées de leur suffixe.
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.92\textwidth}{\ttfamily\small
+systemctl list-units -{}-type=service -{}-state=active -{}-no-pager -{}-plain
+}}
+\caption{Commande de détection des services actifs}
+\label{lst:systemctl}
+\end{figure}
+
+Cette liste est persistée dans le champ \texttt{services} du document \texttt{Server},
+puis exploitée de deux manières complémentaires :
+
+\begin{itemize}[label=\ding{43}]
+  \item l'interface n'affiche que les services \emph{réellement présents} sur le serveur
+        sélectionné, évitant toute action sur un service inexistant ;
+  \item le backend s'appuie sur cette liste comme \emph{liste blanche} avant d'exécuter
+        une commande, renforçant ainsi la protection contre l'injection de commandes.
+\end{itemize}
+
+Le traitement est conçu pour ne jamais interrompre la collecte : si la commande échoue —
+par exemple sur un hôte dépourvu de \texttt{systemd} — la liste retournée est simplement
+vide et les métriques continuent d'être transmises normalement.
+
+\section{Réalisation du Sprint 2}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Gestion des alertes :}
+\end{itemize}
+La figure~\ref{fig:real-alertes} illustre l'interface de gestion des alertes.
+L'administrateur y consulte l'ensemble des alertes actives avec leur sévérité, le serveur
+concerné, la métrique en cause et la valeur mesurée. Chaque alerte peut être acquittée
+d'un simple clic.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/real-alertes.png}
+    \caption{Interface de gestion des alertes}
+    \label{fig:real-alertes}
+\end{figure}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Notification par courrier électronique :}
+\end{itemize}
+La figure~\ref{fig:real-email} présente le courrier électronique reçu automatiquement par
+l'administrateur lors du dépassement d'un seuil. Il précise le serveur concerné, la
+métrique en cause, la valeur mesurée et le seuil franchi.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Image/real-email-alerte.png}
+    \caption{Notification d'alerte par courrier électronique}
+    \label{fig:real-email}
+\end{figure}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Actions à distance sur les services :}
+\end{itemize}
+La figure~\ref{fig:real-actions} illustre le module d'actions à distance. Après sélection
+d'un serveur, l'administrateur visualise les services réellement détectés avec leur état
+courant, et dispose pour chacun des boutons « Redémarrer » et « Arrêter ».
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/real-actions.png}
+    \caption{Module d'actions à distance sur les services}
+    \label{fig:real-actions}
+\end{figure}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Journal d'audit :}
+\end{itemize}
+La figure~\ref{fig:real-audit} présente le journal d'audit. Chaque action d'administration
+y est enregistrée avec son auteur, sa cible, la commande exécutée, l'horodatage et le
+résultat obtenu, garantissant une traçabilité complète des interventions.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/real-audit.png}
+    \caption{Journal d'audit des actions à distance}
+    \label{fig:real-audit}
+\end{figure}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Historique des sauvegardes :}
+\end{itemize}
+La figure~\ref{fig:real-backups} illustre l'interface de consultation des sauvegardes.
+L'administrateur y suit l'exécution quotidienne planifiée à minuit, avec pour chaque
+sauvegarde son horodatage, sa taille et son statut.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Image/real-backups.png}
+    \caption{Historique des sauvegardes automatisées}
+    \label{fig:real-backups}
+\end{figure}
+
+\begin{itemize}[label=\ding{220}]
+\item \textbf{Application mobile :}
+\end{itemize}
+La figure~\ref{fig:real-mobile} présente les principaux écrans de l'application mobile :
+connexion, tableau de bord, gestion des alertes et actions à distance. L'application
+consomme la même API REST que le client web et se rafraîchit automatiquement toutes les
+5 secondes, permettant à l'administrateur d'intervenir en situation de mobilité.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Image/real-mobile.png}
+    \caption{Écrans de l'application mobile}
+    \label{fig:real-mobile}
+\end{figure}
+
+\section*{Conclusion}
+Ce chapitre a présenté les fonctionnalités développées lors du Sprint 2. Celui-ci a
+permis de doter la plateforme d'un système d'alertes automatique par seuils avec
+notification par courrier électronique, d'un module d'actions à distance sécurisé par
+double vérification et intégralement tracé, d'une détection dynamique des services
+applicatifs, d'un mécanisme de sauvegarde quotidienne automatisée, ainsi que d'une
+application mobile offrant les mêmes fonctionnalités en situation de mobilité.
+
+À l'issue de ce sprint, l'application de supervision est fonctionnellement complète. Les
+deux sprints suivants portent sur son industrialisation selon une démarche DevSecOps.

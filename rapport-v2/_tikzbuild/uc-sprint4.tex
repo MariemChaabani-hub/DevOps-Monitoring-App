@@ -1,0 +1,80 @@
+\documentclass[border=4pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+  uc/.style   = {draw, ellipse, minimum width=3.8cm, minimum height=0.95cm,
+                 align=center, font=\scriptsize, inner sep=2pt},
+  ucg/.style  = {uc, fill=black!12},
+  sys/.style  = {draw, dashed, rounded corners, thick},
+  rel/.style  = {draw, -},
+  inc/.style  = {draw, dashed, -{Latex[length=2mm]}, font=\tiny},
+  gen/.style  = {draw, -{Triangle[open, length=2.5mm, width=2.5mm]}},
+]
+
+\node[sys, minimum width=14.5cm, minimum height=12.4cm] (S) at (8.5,-5.4) {};
+\node[font=\scriptsize\bfseries] at (8.5,1.4) {Cluster Kubernetes k3s -- Sprint 4};
+
+% --- Acteur Responsable DevSecOps ---
+\begin{scope}[shift={(-2.4,-2.6)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries, align=center] at (0,-1.5) {Responsable\\DevSecOps};
+\end{scope}
+
+% --- Acteur Argo CD ---
+\begin{scope}[shift={(-2.4,-9.4)}]
+  \draw (0,0) circle (0.22);
+  \draw (0,-0.22) -- (0,-0.9);
+  \draw (-0.35,-0.45) -- (0.35,-0.45);
+  \draw (0,-0.9) -- (-0.28,-1.4);
+  \draw (0,-0.9) -- (0.28,-1.4);
+  \node[below, font=\scriptsize\bfseries, align=center] at (0,-1.5) {Argo CD\\(agent GitOps)};
+\end{scope}
+
+% --- Cas d'utilisation : administration ---
+\node[uc]  (mani)   at (5.4, 0.4)   {Versionner les\\manifestes};
+\node[uc]  (super)  at (5.4, -1.2)  {Superviser le cluster};
+\node[uc]  (cpu)    at (12.6, -0.5) {Consulter les métriques\\du cluster};
+\node[uc]  (dash)   at (12.6, -1.9) {Consulter les tableaux\\de bord Grafana};
+\draw[gen] (cpu)  -- (super);
+\draw[gen] (dash) -- (super);
+
+\node[uc]  (secr)   at (5.4, -2.8)  {Gérer les secrets\\(Vault)};
+\node[ucg] (chif)   at (12.6, -3.3) {Chiffrer et stocker\\dans le coffre};
+\draw[inc] (secr) -- node[above]{\guillemotleft include\guillemotright} (chif);
+
+\node[uc]  (droits) at (5.4, -4.2)  {Gérer les droits\\d'accès (RBAC)};
+
+% --- Cas d'utilisation : agent GitOps ---
+\node[uc]  (detect) at (5.4, -6.2)  {Détecter une\\modification du dépôt};
+\node[uc]  (sync)   at (5.4, -7.5)  {Synchroniser l'état\\du cluster};
+\node[ucg] (apply)  at (12.6, -7.5) {Appliquer les\\manifestes};
+\draw[inc] (sync) -- node[above]{\guillemotleft include\guillemotright} (apply);
+
+\node[uc]  (deploy) at (5.4, -8.8)  {Déployer la nouvelle\\version des pods};
+\node[uc]  (heal)   at (5.4, -10.1) {Réparer une dérive\\de configuration};
+\node[uc]  (roll)   at (5.4, -11.4) {Revenir à la version\\précédente};
+\node[ucg] (notif)  at (12.6, -10.7){Notifier l'état de\\synchronisation};
+\draw[inc] (deploy) -- node[above, pos=0.6]{\guillemotleft include\guillemotright} (notif);
+
+% --- Liens acteurs : bus vertical ---
+\draw[rel] (-2.0,-2.6) -- (0.6,-2.6);
+\draw[rel] (0.6,0.4) -- (0.6,-4.2);
+\foreach \n in {mani, super, secr, droits}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\draw[rel] (-2.0,-9.4) -- (0.6,-9.4);
+\draw[rel] (0.6,-6.2) -- (0.6,-11.4);
+\foreach \n in {detect, sync, deploy, heal, roll}
+   \draw[rel] (0.6,0 |- \n.west) -- (\n.west);
+
+\end{tikzpicture}
+\end{document}
