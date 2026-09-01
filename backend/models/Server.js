@@ -70,6 +70,13 @@ const ServerSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // Version string reported by the agent with each metrics payload — lets
+  // the UI flag a server running stale agent code instead of that looking
+  // like a detection bug (see agent/collector.py AGENT_VERSION).
+  agent_version: {
+    type: String,
+    default: null
+  },
   created_at: {
     type: Date,
     default: Date.now

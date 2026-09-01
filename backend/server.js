@@ -52,14 +52,18 @@ const normalizeServices = (rawServices) => {
   return rawServices
     .map(entry => {
       if (typeof entry === 'string') {
-        return { name: entry, active_state: 'unknown', sub_state: 'unknown', description: '' };
+        // Unclassifiable (no is_system info from this agent generation) —
+        // default to visible/application rather than hidden, per product
+        // decision: noise beats a wrongly-hidden service.
+        return { name: entry, active_state: 'unknown', sub_state: 'unknown', description: '', is_system: false };
       }
       if (entry && typeof entry === 'object' && entry.name) {
         return {
           name: entry.name,
           active_state: entry.active_state || 'unknown',
           sub_state: entry.sub_state || 'unknown',
-          description: entry.description || ''
+          description: entry.description || '',
+          is_system: entry.is_system === true
         };
       }
       return null;
@@ -277,6 +281,9 @@ app.post('/metrics', async (req, res) => {
       }
     } else if (metric.services === null) {
       server.services_detection_failed_at = new Date();
+    }
+    if (metric.agent_version) {
+      server.agent_version = metric.agent_version;
     }
     await server.save();
 

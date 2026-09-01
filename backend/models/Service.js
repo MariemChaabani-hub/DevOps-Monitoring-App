@@ -6,10 +6,12 @@ const ServiceSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  // Free-form systemd unit name (or 'pm2') — any service the agent
+  // actually detects can be restarted and logged here, not just the
+  // handful known ahead of time.
   service_name: {
     type: String,
-    required: true,
-    enum: ['pm2', 'nginx', 'mongodb', 'apache', 'apache2']
+    required: true
   },
   status: {
     type: String,

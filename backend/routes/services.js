@@ -78,32 +78,11 @@ router.get('/:server_id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Serveur non trouvé' });
     }
 
-    // Récupérer les services du serveur
-    let services = await Service.find({ server_id });
-
-    // Initialiser/compléter les services par défaut si nécessaire
-    const defaultKeys = ['pm2', 'nginx', 'mongodb', 'apache'];
-    const existingKeys = services.map(s => s.service_name);
-    
-    const missingKeys = defaultKeys.filter(key => {
-      if (key === 'apache') {
-        return !existingKeys.includes('apache') && !existingKeys.includes('apache2');
-      }
-      return !existingKeys.includes(key);
-    });
-
-    if (missingKeys.length > 0) {
-      for (const serviceKey of missingKeys) {
-        const service = new Service({
-          server_id,
-          service_name: serviceKey,
-          status: 'unknown',
-          uptime: 'N/A'
-        });
-        await service.save();
-        services.push(service);
-      }
-    }
+    // Récupérer les services du serveur — pas de seeding : cette collection
+    // ne journalise que les services qui ont réellement eu une action
+    // (restart-log), la liste affichée à l'admin vient du serveur détecté
+    // par l'agent (Server.services), pas d'ici.
+    const services = await Service.find({ server_id });
 
     res.json({
       server_id,
@@ -128,14 +107,6 @@ router.get('/:server_id', requireAdmin, async (req, res) => {
 router.get('/:server_id/:service_name', requireAdmin, async (req, res) => {
   try {
     const { server_id, service_name } = req.params;
-
-    // Vérifier que le service est supporté
-    if (!SUPPORTED_SERVICES[service_name]) {
-      return res.status(400).json({ 
-        error: 'Service non supporté',
-        supported_services: Object.keys(SUPPORTED_SERVICES)
-      });
-    }
 
     // Vérifier que le serveur existe
     const server = await Server.findOne({ server_id });
@@ -179,11 +150,6 @@ router.put('/:server_id/:service_name', requireAdmin, async (req, res) => {
   try {
     const { server_id, service_name } = req.params;
     const { status, uptime, process_id, memory_usage, cpu_usage } = req.body;
-
-    // Vérifier que le service est supporté
-    if (!SUPPORTED_SERVICES[service_name]) {
-      return res.status(400).json({ error: 'Service non supporté' });
-    }
 
     // Vérifier que le serveur existe
     const server = await Server.findOne({ server_id });
@@ -237,11 +203,6 @@ router.post('/:server_id/:service_name/restart-log', requireAdmin, async (req, r
   try {
     const { server_id, service_name } = req.params;
 
-    // Vérifier que le service est supporté
-    if (!SUPPORTED_SERVICES[service_name]) {
-      return res.status(400).json({ error: 'Service non supporté' });
-    }
-
     // Vérifier que le serveur existe
     const server = await Server.findOne({ server_id });
     if (!server) {
@@ -291,11 +252,6 @@ router.post('/:server_id/:service_name/restart-log', requireAdmin, async (req, r
 router.get('/:server_id/:service_name/restart-history', requireAdmin, async (req, res) => {
   try {
     const { server_id, service_name } = req.params;
-
-    // Vérifier que le service est supporté
-    if (!SUPPORTED_SERVICES[service_name]) {
-      return res.status(400).json({ error: 'Service non supporté' });
-    }
 
     // Vérifier que le serveur existe
     const server = await Server.findOne({ server_id });

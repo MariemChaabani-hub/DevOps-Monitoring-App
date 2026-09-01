@@ -6,7 +6,25 @@
 import React from 'react';
 import './ServerList.css';
 
+// Compares two "x.y.z" version strings numerically (not lexically — "1.10.0"
+// must beat "1.9.0"). Missing/malformed versions sort lowest.
+const compareVersions = (a, b) => {
+  const partsA = (a || '0').split('.').map(n => parseInt(n, 10) || 0);
+  const partsB = (b || '0').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const diff = (partsA[i] || 0) - (partsB[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+};
+
 const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) => {
+  // Newest agent_version observed across all servers — used to flag a
+  // server running stale agent code (e.g. missing detection features)
+  // instead of that looking like a bug in the app itself.
+  const latestAgentVersion = servers.reduce((latest, s) => (
+    s.agent_version && compareVersions(s.agent_version, latest) > 0 ? s.agent_version : latest
+  ), null);
   /**
    * Calculate server status based on its active alerts
    * CRITICAL > WARNING > OK
@@ -88,6 +106,24 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
                   <span className="label">Emplacement :</span>
                   <span className="value">{server.location}</span>
                 </div>
+                {server.agent_version && (
+                  <div className="detail-item">
+                    <span className="label">Agent :</span>
+                    <span
+                      className="value"
+                      title={
+                        latestAgentVersion && compareVersions(server.agent_version, latestAgentVersion) < 0
+                          ? `Agent obsolète — dernière version observée : v${latestAgentVersion}`
+                          : ''
+                      }
+                    >
+                      v{server.agent_version}
+                      {latestAgentVersion && compareVersions(server.agent_version, latestAgentVersion) < 0 && (
+                        <span className="agent-version-outdated"> ⚠ obsolète</span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Alert Summary */}
@@ -161,7 +197,8 @@ const ServerList = ({ servers, selectedServer, onSelectServer, alerts = [] }) =>
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {servers.length === 0 && (
           <div className="no-servers">

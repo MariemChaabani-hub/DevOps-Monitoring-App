@@ -241,6 +241,99 @@
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
 }
 
+.start-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.start-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.service-protected-note {
+  font-size: 12px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.service-description {
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 0 0 12px 0;
+}
+
+/* Quick filter + zones */
+.quick-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.quick-filter-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #4b5563;
+  color: #d1d5db;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.quick-filter-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+.services-zone {
+  margin-bottom: 20px;
+}
+
+.services-zone h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.services-zone-failed h4 {
+  color: #f87171;
+}
+
+.services-zone-failed .service-card {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.toggle-system-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #4b5563;
+  color: #d1d5db;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.toggle-system-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.empty-state-small {
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 0 0 10px 0;
+}
+
 /* Service Footer */
 .service-footer {
   padding-top: 8px;

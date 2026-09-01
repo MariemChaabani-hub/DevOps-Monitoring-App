@@ -11,10 +11,39 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Bump on any change to what/how this module reports (new metrics fields,
+# detection behavior, payload shape) — sent with every metrics payload so a
+# server running a stale agent is visible from the dashboard instead of
+# looking like a detection bug (see collect()/AGENT_VERSION usage below).
+AGENT_VERSION = "1.2.0"
+
+# Unit-name prefixes that are always host/OS infrastructure, never an
+# application Clediss cares about monitoring individually.
+SYSTEM_UNIT_PREFIXES = ('systemd-', 'getty@', 'user@', 'snap-')
+
+# Exact unit names classified as system/infra rather than application.
+# ssh/sshd is deliberately NOT here: an admin managing remote servers wants
+# it in the default view at all times since it's their access to the
+# machine — it stays visible, just protected by criticality='restart_only'
+# on the actions side.
+SYSTEM_UNIT_NAMES = frozenset({
+    'dbus', 'polkit', 'udisks2', 'multipathd', 'ModemManager',
+    'accounts-daemon', 'packagekit', 'colord', 'avahi-daemon',
+    'cron', 'rsyslog', 'unattended-upgrades', 'apport',
+})
+
 
 class SystemCollector:
     """Collects system metrics and returns as JSON."""
-    
+
+    @staticmethod
+    def _is_system_unit(name: str) -> bool:
+        """Classify a unit name as system/infra (True) vs application (False)."""
+        if name in SYSTEM_UNIT_NAMES:
+            return True
+        return any(name.startswith(prefix) for prefix in SYSTEM_UNIT_PREFIXES)
+
+
     @staticmethod
     def get_cpu_percent() -> float:
         """Get CPU usage percentage (0-100)."""
@@ -90,11 +119,13 @@ class SystemCollector:
                 unit, _load_state, active_state, sub_state = parts[:4]
                 if not unit.endswith('.service'):
                     continue
+                name = unit[:-len('.service')]
                 services.append({
-                    'name': unit[:-len('.service')],
+                    'name': name,
                     'active_state': active_state,
                     'sub_state': sub_state,
                     'description': parts[4] if len(parts) > 4 else '',
+                    'is_system': SystemCollector._is_system_unit(name),
                 })
             return services
 
@@ -140,6 +171,7 @@ class SystemCollector:
             'network_io': SystemCollector.get_network_io(),
             'uptime': SystemCollector.get_uptime(),
             'services': SystemCollector.detect_services(),
+            'agent_version': AGENT_VERSION,
         }
 
         # Server identification: always included as keys (the backend

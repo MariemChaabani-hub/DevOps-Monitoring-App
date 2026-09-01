@@ -77,6 +77,61 @@
   color: #10b981;
 }
 
+.quick-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.quick-filter-btn {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-filter-btn:hover {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.quick-filter-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #60a5fa;
+}
+
+.services-zone {
+  margin-bottom: 24px;
+}
+
+.services-zone h4 {
+  margin: 0 0 14px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.services-zone-failed h4 {
+  color: #f87171;
+}
+
+.services-zone-failed .service-card {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.service-protected-note {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  font-style: italic;
+  padding: 6px 0;
+}
+
 .services-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

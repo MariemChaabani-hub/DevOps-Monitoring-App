@@ -10,6 +10,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './RemoteActionsPanel.css';
 import { authHeaders } from '../utils/auth';
+import ConfirmActionModal from './ConfirmActionModal';
+
+const QUICK_FILTERS = [
+  { key: 'all', label: 'Tous' },
+  { key: 'active', label: 'Actifs' },
+  { key: 'stopped', label: 'Arrêtés' },
+  { key: 'failed', label: 'En échec' }
+];
 
 const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const [selectedServer, setSelectedServer] = useState('');
@@ -19,7 +27,11 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [actionResult, setActionResult] = useState(null);
-  const [showAllServices, setShowAllServices] = useState(false);
+  const [showSystemServices, setShowSystemServices] = useState(false);
+  const [quickFilter, setQuickFilter] = useState('all');
+  // { serviceName, action, endpoint, payload } of the action pending
+  // confirmation, or null. Only used for restart_only + restart.
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
 
   const statusIntervalRef = useRef(null);
 
@@ -43,25 +55,6 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     }));
   };
 
-  // Métadonnées d'affichage pour les services connus ; tout service détecté
-  // mais absent de cette liste retombe sur son nom brut (voir getServiceMeta).
-  const knownServiceMeta = {
-    pm2: { name: 'PM2', icon: '', description: 'Gestionnaire de processus PM2' },
-    nginx: { name: 'Nginx', icon: '', description: 'Serveur web Nginx' },
-    mongodb: { name: 'MongoDB', icon: '', description: 'Base de données MongoDB' },
-    mongod: { name: 'MongoDB', icon: '', description: 'Base de données MongoDB' },
-    apache: { name: 'Apache', icon: '', description: 'Serveur HTTP Apache' },
-    apache2: { name: 'Apache', icon: '', description: 'Serveur HTTP Apache' }
-  };
-
-  const getServiceMeta = (serviceName) => {
-    return knownServiceMeta[serviceName] || {
-      name: serviceName,
-      icon: '',
-      description: 'Service détecté sur le serveur'
-    };
-  };
-
   // Real status label per sub-state, used when the live /services-status
   // check hasn't answered yet and we fall back to the last state the agent
   // reported. 'running' is the only state that should ever read as green —
@@ -78,12 +71,27 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   // Combines the live per-action verification (servicesStatus, from
   // /services-status) with the service's last-known state from the agent's
   // own detection, live check taking priority. Never defaults to "running".
-  const getServiceBadge = (service) => {
+  const getEffectiveSubState = (service) => {
     const live = servicesStatus[service.name];
     const status = live?.status || service.active_state || 'unknown';
     const subState = live?.subState || service.sub_state || 'unknown';
-    if (status === 'failed' || subState === 'failed') return SUB_STATE_META.failed;
-    return SUB_STATE_META[subState] || SUB_STATE_META.unknown;
+    return (status === 'failed' || subState === 'failed') ? 'failed' : subState;
+  };
+
+  const getServiceBadge = (service) => SUB_STATE_META[getEffectiveSubState(service)] || SUB_STATE_META.unknown;
+
+  // Criticality is decided server-side (see remoteActions.js) and only
+  // known once /services-status has answered for this service — default
+  // to 'none' until then rather than guessing.
+  const getServiceCriticality = (serviceName) => servicesStatus[serviceName]?.criticality || 'none';
+
+  const matchesQuickFilter = (service) => {
+    if (quickFilter === 'all') return true;
+    const subState = getEffectiveSubState(service);
+    if (quickFilter === 'active') return subState === 'running';
+    if (quickFilter === 'stopped') return subState === 'dead' || subState === 'exited';
+    if (quickFilter === 'failed') return subState === 'failed';
+    return true;
   };
 
   // Serveur actuellement sélectionné (objet complet, pour lire ses services détectés)
@@ -91,17 +99,29 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     (s) => (s.server_id || s.serverId) === selectedServer
   );
   // server.services is normalized backend-side to {name, active_state,
-  // sub_state, description} objects — but a document not yet refreshed by
-  // a new-format agent, or an agent that was never updated, can still
-  // hand us a plain string. Normalize defensively here too.
+  // sub_state, description, is_system} objects — but a document not yet
+  // refreshed by a new-format agent, or an agent that was never updated,
+  // can still hand us a plain string. Normalize defensively here too.
   const allServices = (selectedServerObj?.services || []).map(s =>
     typeof s === 'string'
-      ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '' }
+      ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '', is_system: false }
       : s
   );
   const allServiceNames = allServices.map(s => s.name);
-  const visibleServices = showAllServices ? allServices : allServices.slice(0, 4);
   const servicesDetectionFailedAt = selectedServerObj?.services_detection_failed_at;
+
+  // Three zones: failures always float to the top regardless of category,
+  // then applicative services (the default, actionable view), then system/
+  // infra services (collapsed by default — that's most of the noise on a
+  // real host). The quick filter narrows what's visible within each zone,
+  // it never removes services from `allServices` itself.
+  const failedServices = allServices.filter(s => getEffectiveSubState(s) === 'failed').filter(matchesQuickFilter);
+  const applicativeServices = allServices
+    .filter(s => !s.is_system && getEffectiveSubState(s) !== 'failed')
+    .filter(matchesQuickFilter);
+  const systemServices = allServices
+    .filter(s => s.is_system && getEffectiveSubState(s) !== 'failed')
+    .filter(matchesQuickFilter);
 
   // Fetch services status for selected server
   const fetchServicesStatus = async (serverId = selectedServer) => {
@@ -200,7 +220,20 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           commandOutput: result.command_output || null,
           details: result
         });
-        
+
+        // Traceability: log to the per-service restart history for ANY
+        // detected service, not just a fixed handful — restart-log only
+        // makes sense for actions that leave the service running.
+        if (serviceName !== 'server' && (actionType === 'restart' || actionType === 'start')) {
+          fetch(
+            `${API_BASE}/api/services/${currentServer}/${serviceName}/restart-log`,
+            {
+              method: 'POST',
+              headers: { 'x-admin-email': localStorage.getItem('adminEmail') || '', ...authHeaders() }
+            }
+          ).catch(() => {});
+        }
+
         // Refresh services status and audit logs immediately
         await fetchServicesStatus(currentServer);
         await fetchAuditLogs(currentServer);
@@ -231,6 +264,27 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
       // Désactiver le loading pour cette action spécifique
       setActionLoading(serviceName, actionType, false);
     }
+  };
+
+  // Entry point for every service action button. Restart on a
+  // 'restart_only' service (ssh, network stack, ...) needs an explicit
+  // confirmation first — the actual enforcement happens server-side
+  // (remoteActions.js requires confirm:true in the body), this is just
+  // the UI step that produces it.
+  const handleServiceActionClick = (serviceName, actionType, endpoint) => {
+    const criticality = getServiceCriticality(serviceName);
+    if (criticality === 'restart_only' && actionType === 'restart') {
+      setPendingConfirmation({ serviceName, actionType, endpoint });
+      return;
+    }
+    executeRemoteAction(serviceName, actionType, endpoint, { service_name: serviceName });
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingConfirmation) return;
+    const { serviceName, actionType, endpoint } = pendingConfirmation;
+    executeRemoteAction(serviceName, actionType, endpoint, { service_name: serviceName, confirm: true });
+    setPendingConfirmation(null);
   };
 
   // Format timestamp
@@ -293,7 +347,8 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     if (selectedServer) {
       fetchServicesStatus(selectedServer);
       fetchAuditLogs(selectedServer);
-      setShowAllServices(false);
+      setShowSystemServices(false);
+      setQuickFilter('all');
     }
 
     return () => {
@@ -303,6 +358,70 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
       }
     };
   }, [selectedServer]);
+
+  const renderServiceCard = (detectedService) => {
+    const serviceName = detectedService.name;
+    const badge = getServiceBadge(detectedService);
+    const live = servicesStatus[serviceName];
+    const criticality = getServiceCriticality(serviceName);
+    const canStop = criticality === 'none';
+    const canRestart = criticality !== 'locked';
+    const canStart = getEffectiveSubState(detectedService) !== 'running';
+
+    return (
+      <div key={serviceName} className="service-card">
+        <div className="service-header">
+          <span className="service-name">{serviceName}</span>
+          <span
+            className={`status-badge ${badge.className}`}
+            title={live?.raw || ''}
+          >
+            {badge.label}
+          </span>
+        </div>
+        <div className="service-details">
+          <p className="service-description">
+            {detectedService.description || 'Aucune description disponible'}
+          </p>
+        </div>
+        <div className="service-action-buttons">
+          {canStart && (
+            <button
+              onClick={() => handleServiceActionClick(serviceName, 'start', 'start-service')}
+              disabled={isActionLoading(serviceName, 'start')}
+              className="action-btn start-btn"
+              title="Démarrer le service"
+            >
+              {isActionLoading(serviceName, 'start') ? 'Démarrage...' : 'Démarrer'}
+            </button>
+          )}
+          {canRestart && (
+            <button
+              onClick={() => handleServiceActionClick(serviceName, 'restart', 'restart-service')}
+              disabled={isActionLoading(serviceName, 'restart')}
+              className="action-btn restart-btn"
+              title={criticality === 'restart_only' ? 'Redémarrer le service (confirmation requise)' : 'Redémarrer le service'}
+            >
+              {isActionLoading(serviceName, 'restart') ? 'Redémarrage...' : 'Redémarrer'}
+            </button>
+          )}
+          {canStop && (
+            <button
+              onClick={() => handleServiceActionClick(serviceName, 'stop', 'stop-service')}
+              disabled={isActionLoading(serviceName, 'stop')}
+              className="action-btn stop-btn"
+              title="Arrêter le service"
+            >
+              {isActionLoading(serviceName, 'stop') ? 'Arrêt...' : 'Arrêter'}
+            </button>
+          )}
+          {!canStop && !canRestart && (
+            <span className="service-protected-note">Service protégé</span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="remote-actions-panel">
@@ -348,71 +467,55 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
               </p>
             ) : (
               <>
-                <div className="services-grid">
-                  {visibleServices.map((detectedService) => {
-                    const serviceName = detectedService.name;
-                    const service = getServiceMeta(serviceName);
-                    const badge = getServiceBadge(detectedService);
-                    const live = servicesStatus[serviceName];
-                    return (
-                      <div key={serviceName} className="service-card">
-                        <div className="service-header">
-                          <span className="service-icon">{service.icon}</span>
-                          <span className="service-name">{service.name}</span>
-                          <span
-                            className={`status-badge ${badge.className}`}
-                            title={live?.raw || ''}
-                          >
-                            {badge.label}
-                          </span>
-                        </div>
-                        <div className="service-details">
-                          <p className="service-description">
-                            {service.description || detectedService.description}
-                          </p>
-                        </div>
-                        <div className="service-action-buttons">
-                          <button
-                            onClick={() => executeRemoteAction(
-                              serviceName,
-                              'restart',
-                              'restart-service',
-                              { service_name: serviceName }
-                            )}
-                            disabled={isActionLoading(serviceName, 'restart')}
-                            className="action-btn restart-btn"
-                            title="Redémarrer le service"
-                          >
-                            {isActionLoading(serviceName, 'restart') ? 'Redémarrage...' : 'Redémarrer'}
-                          </button>
-                          <button
-                            onClick={() => executeRemoteAction(
-                              serviceName,
-                              'stop',
-                              'stop-service',
-                              { service_name: serviceName }
-                            )}
-                            disabled={isActionLoading(serviceName, 'stop')}
-                            className="action-btn stop-btn"
-                            title="Arrêter le service"
-                          >
-                            {isActionLoading(serviceName, 'stop') ? 'Arrêt...' : 'Arrêter'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="quick-filter-bar">
+                  {QUICK_FILTERS.map(f => (
+                    <button
+                      key={f.key}
+                      className={`quick-filter-btn ${quickFilter === f.key ? 'active' : ''}`}
+                      onClick={() => setQuickFilter(f.key)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
                 </div>
-                {allServiceNames.length > 4 && (
-                  <button
-                    onClick={() => setShowAllServices(!showAllServices)}
-                    className="toggle-audit-btn"
-                  >
-                    {showAllServices
-                      ? 'Réduire'
-                      : `Voir tous les services (${allServiceNames.length})`}
-                  </button>
+
+                {failedServices.length > 0 && (
+                  <div className="services-zone services-zone-failed">
+                    <h4>En échec ({failedServices.length})</h4>
+                    <div className="services-grid">
+                      {failedServices.map(renderServiceCard)}
+                    </div>
+                  </div>
                 )}
+
+                <div className="services-zone">
+                  <h4>Applicatifs ({applicativeServices.length})</h4>
+                  {applicativeServices.length === 0 ? (
+                    <p className="no-services-message">Aucun service applicatif ne correspond à ce filtre.</p>
+                  ) : (
+                    <div className="services-grid">
+                      {applicativeServices.map(renderServiceCard)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="services-zone">
+                  <button
+                    className="toggle-audit-btn"
+                    onClick={() => setShowSystemServices(!showSystemServices)}
+                  >
+                    {showSystemServices ? 'Masquer' : 'Afficher'} les services système ({systemServices.length})
+                  </button>
+                  {showSystemServices && (
+                    systemServices.length === 0 ? (
+                      <p className="no-services-message">Aucun service système ne correspond à ce filtre.</p>
+                    ) : (
+                      <div className="services-grid">
+                        {systemServices.map(renderServiceCard)}
+                      </div>
+                    )
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -552,6 +655,18 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           <p>Veuillez sélectionner un serveur pour voir les actions disponibles</p>
         </div>
       )}
+
+      <ConfirmActionModal
+        isOpen={!!pendingConfirmation}
+        title="Confirmation requise"
+        message={pendingConfirmation
+          ? `Redémarrer ${pendingConfirmation.serviceName} sur ${selectedServerObj?.name || selectedServer} ? Cette action peut interrompre l'accès au serveur.`
+          : ''}
+        confirmLabel="Redémarrer"
+        busy={pendingConfirmation ? isActionLoading(pendingConfirmation.serviceName, 'restart') : false}
+        onConfirm={confirmPendingAction}
+        onCancel={() => setPendingConfirmation(null)}
+      />
     </div>
   );
 };

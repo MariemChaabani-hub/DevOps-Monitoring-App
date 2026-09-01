@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 load_dotenv()
 
-from collector import collect_metrics
+from collector import collect_metrics, AGENT_VERSION
 from sender import MetricsSender
 
 
@@ -172,6 +172,7 @@ class MonitoringAgent:
         """Log startup information."""
         logger.info("=" * 70)
         logger.info("[START] MONITORING AGENT STARTED")
+        logger.info(f"Agent Version:      {AGENT_VERSION}")
         logger.info(f"Server ID:          {self.server_id}")
         logger.info(f"Server Name:        {self.server_name}")
         logger.info(f"Server Location:    {self.server_location}")

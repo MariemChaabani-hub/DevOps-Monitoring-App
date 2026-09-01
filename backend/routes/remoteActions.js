@@ -101,6 +101,43 @@ const buildServiceActionCommand = (serviceName, action) => {
 };
 
 // ============================================================
+// Service criticality — decided here, server-side, and never duplicated
+// in the frontend. The frontend only reads the `criticality` value this
+// module returns (via /services-status and action error payloads) to
+// decide which buttons to show/enable.
+//
+// 'locked': stop AND restart forbidden outright. systemd-journald/dbus/
+// systemd-logind/polkit are core OS plumbing; monitoring-agent is this
+// very agent — stopping it makes the server vanish from the dashboard
+// with no way left to restart it from the app.
+//
+// 'restart_only': stop forbidden, restart allowed but only with an
+// explicit confirmation (see CONFIRMABLE_ACTION below) — ssh/sshd and the
+// network stack can legitimately need a restart (e.g. after a config
+// change) but a stop can cut off access to the machine entirely.
+// ============================================================
+const LOCKED_SERVICES = new Set([
+  'systemd-journald', 'dbus', 'systemd-logind', 'polkit', 'monitoring-agent'
+]);
+
+const RESTART_ONLY_SERVICES = new Set([
+  'ssh', 'sshd', 'networking', 'network', 'systemd-networkd', 'systemd-resolved'
+]);
+
+const getServiceCriticality = (serviceName) => {
+  const resolvedName = SERVICE_NAME_ALIASES[serviceName] || serviceName;
+  if (LOCKED_SERVICES.has(resolvedName)) return 'locked';
+  if (RESTART_ONLY_SERVICES.has(resolvedName)) return 'restart_only';
+  return 'none';
+};
+
+// Actions that a 'restart_only' service still allows, but only once the
+// caller has explicitly confirmed — enforced here, not just in the UI,
+// since a frontend-only confirmation modal is trivially bypassed with a
+// direct API call (curl/Postman) by anyone holding an admin session.
+const CONFIRMABLE_ACTION = 'restart';
+
+// ============================================================
 // Helper: Verify the real status of a service after an action, checked
 // over SSH on the target server for any service name.
 //
@@ -305,6 +342,40 @@ const handleServiceAction = (action) => async (req, res) => {
       return res.status(404).json({ error: 'Serveur non trouvé' });
     }
 
+    // Criticality guard — checked before any SSH command is built or run,
+    // and enforced here regardless of what the frontend sent, since this
+    // is the only place a bypass (curl/Postman with a valid admin session)
+    // can be stopped.
+    const criticality = getServiceCriticality(service_name);
+    if (criticality === 'locked' && (action === 'stop' || action === 'restart')) {
+      const blocked = {
+        success: false,
+        error: `Action interdite : ${service_name} est un service protégé (criticality: locked). L'arrêter ou le redémarrer via l'application n'est pas autorisé.`,
+        criticality
+      };
+      await logAuditAction(req.auditData, blocked);
+      return res.status(403).json(blocked);
+    }
+    if (criticality === 'restart_only' && action === 'stop') {
+      const blocked = {
+        success: false,
+        error: `Action interdite : arrêter ${service_name} peut couper l'accès au serveur (criticality: restart_only). Seul un redémarrage confirmé est autorisé.`,
+        criticality
+      };
+      await logAuditAction(req.auditData, blocked);
+      return res.status(403).json(blocked);
+    }
+    if (criticality === 'restart_only' && action === CONFIRMABLE_ACTION && req.body.confirm !== true) {
+      const blocked = {
+        success: false,
+        error: `Confirmation requise : redémarrer ${service_name} peut interrompre l'accès au serveur. Renvoyez la requête avec confirm: true pour confirmer.`,
+        criticality,
+        requires_confirmation: true
+      };
+      await logAuditAction(req.auditData, blocked);
+      return res.status(400).json(blocked);
+    }
+
     const command = buildServiceActionCommand(service_name, action);
     console.log(`[Remote Action] ${action} du service ${service_name} sur le serveur ${server_id} via SSH`);
 
@@ -322,6 +393,7 @@ const handleServiceAction = (action) => async (req, res) => {
         verified_status_label: verifiedStatus.label,
         verified_sub_state: verifiedStatus.subState,
         verified_sub_state_label: verifiedStatus.subStateLabel,
+        criticality,
         command_output: execResult.stdout,
         timestamp: new Date()
       };
@@ -607,12 +679,15 @@ router.get('/:server_id/services-status',
 
       for (const svcName of serviceNames) {
         const verified = await verifyServiceStatus(svcName, server);
+        const criticality = getServiceCriticality(svcName);
         servicesStatus[svcName] = {
           status: verified.status,
           label: verified.label,
           subState: verified.subState,
           subStateLabel: verified.subStateLabel,
-          raw: verified.raw
+          raw: verified.raw,
+          criticality,
+          requiresConfirmation: criticality === 'restart_only'
         };
       }
 

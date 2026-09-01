@@ -158,6 +158,12 @@
   font-family: 'Courier New', monospace;
 }
 
+.agent-version-outdated {
+  color: #ffc107;
+  font-family: inherit;
+  font-weight: 600;
+}
+
 /* Metrics Preview */
 .metrics-preview {
   display: flex;

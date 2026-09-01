@@ -1,38 +1,46 @@
 /**
  * Services Management Component
- * Affiche les services réellement détectés et actifs sur le serveur
- * sélectionné (remontés automatiquement par l'agent via systemctl),
- * avec les actions Redémarrer / Arrêter.
+ * Affiche les services réellement détectés sur le serveur sélectionné
+ * (remontés automatiquement par l'agent via systemctl), avec les actions
+ * Démarrer / Redémarrer / Arrêter.
  */
 
 import React, { useState, useEffect } from 'react';
 import './ServicesPanel.css';
 import { authHeaders } from '../utils/auth';
+import ConfirmActionModal from './ConfirmActionModal';
+
+const QUICK_FILTERS = [
+  { key: 'all', label: 'Tous' },
+  { key: 'active', label: 'Actifs' },
+  { key: 'stopped', label: 'Arrêtés' },
+  { key: 'failed', label: 'En échec' }
+];
 
 const ServicesPanel = ({ server }) => {
   const [statusMap, setStatusMap] = useState({});
   const [loading, setLoading] = useState(false);
   const [actionResult, setActionResult] = useState(null);
+  const [showSystemServices, setShowSystemServices] = useState(false);
+  const [quickFilter, setQuickFilter] = useState('all');
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
 
   const API_BASE = '';
   const adminEmail = localStorage.getItem('adminEmail') || '';
 
-  // Legacy services keep a restart-history log in the old Service
-  // collection; dynamically detected services have no such record.
-  const legacyServiceNames = ['pm2', 'nginx', 'mongodb', 'apache', 'apache2'];
-
   const serverId = server?.server_id || server?.serverId;
   // server.services is normalized backend-side to {name, active_state,
-  // sub_state, description} objects — fall back defensively for a
-  // document not yet refreshed by an updated agent (plain string).
+  // sub_state, description, is_system} objects — fall back defensively for
+  // a document not yet refreshed by an updated agent (plain string).
   const detectedServices = (server?.services || []).map(s =>
     typeof s === 'string'
-      ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '' }
+      ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '', is_system: false }
       : s
   );
   const servicesDetectionFailedAt = server?.services_detection_failed_at;
 
-  // Fetch real status (running/stopped) for the server's detected services
+  // Fetch real status (running/stopped/failed + criticality) for the
+  // server's detected services
   const fetchServiceStatus = async () => {
     if (!serverId) return;
 
@@ -53,13 +61,18 @@ const ServicesPanel = ({ server }) => {
     }
   };
 
-  // Execute service action (restart or stop)
-  const executeServiceAction = async (action, serviceName) => {
+  // Execute service action (start/restart/stop). `confirm` is forwarded to
+  // the backend for a 'restart_only' service's restart — the server-side
+  // guard requires it explicitly (see remoteActions.js), a UI confirmation
+  // alone can be bypassed with a direct API call.
+  const executeServiceAction = async (action, serviceName, confirm = false) => {
     setLoading(true);
     setActionResult(null);
 
     try {
-      const endpoint = action === 'restart' ? 'restart-service' : 'stop-service';
+      const endpoint = action === 'restart' ? 'restart-service' : action === 'start' ? 'start-service' : 'stop-service';
+      const payload = { service_name: serviceName };
+      if (confirm) payload.confirm = true;
 
       const response = await fetch(
         `${API_BASE}/api/remote-actions/${serverId}/${endpoint}`,
@@ -70,27 +83,29 @@ const ServicesPanel = ({ server }) => {
             'x-admin-email': adminEmail,
             ...authHeaders()
           },
-          body: JSON.stringify({ service_name: serviceName })
+          body: JSON.stringify(payload)
         }
       );
 
       const result = await response.json();
 
       if (response.ok) {
-        // Only the legacy services have a restart-history log to update
-        if (action === 'restart' && legacyServiceNames.includes(serviceName)) {
-          await fetch(
+        // Traceability: log to the per-service restart history for ANY
+        // detected service, not just a fixed handful — restart-log only
+        // makes sense for actions that leave the service running.
+        if (action === 'restart' || action === 'start') {
+          fetch(
             `${API_BASE}/api/services/${serverId}/${serviceName}/restart-log`,
             {
               method: 'POST',
               headers: { 'x-admin-email': adminEmail, ...authHeaders() }
             }
-          );
+          ).catch(() => {});
         }
 
         setActionResult({
           success: true,
-          message: `Service ${serviceName} ${action === 'restart' ? 'redémarré' : 'arrêté'} avec succès`
+          message: result.message || `Service ${serviceName} ${action === 'restart' ? 'redémarré' : action === 'start' ? 'démarré' : 'arrêté'} avec succès`
         });
 
         // Refresh status
@@ -111,39 +126,80 @@ const ServicesPanel = ({ server }) => {
     }
   };
 
+  const handleActionClick = (action, serviceName) => {
+    const criticality = statusMap[serviceName]?.criticality || 'none';
+    if (criticality === 'restart_only' && action === 'restart') {
+      setPendingConfirmation({ serviceName, action });
+      return;
+    }
+    executeServiceAction(action, serviceName);
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingConfirmation) return;
+    executeServiceAction(pendingConfirmation.action, pendingConfirmation.serviceName, true);
+    setPendingConfirmation(null);
+  };
+
   // Get status badge — colored by SubState (running/exited/dead/failed),
   // not just ActiveState: a one-shot unit reports ActiveState=active with
   // SubState=exited, which must NOT show green like a real running daemon.
   // Falls back to the service's own last-known state (from the agent's
   // detection) when the live /services-status check hasn't answered yet —
   // never defaults to green.
-  const getStatusBadge = (statusInfo, detectedService) => {
-    const colorBySubState = {
-      running: '#10B981',
-      exited: '#3B82F6',
-      dead: '#EF4444',
-      failed: '#F59E0B',
-      unknown: '#6B7280'
-    };
-    const labelBySubState = {
-      running: 'En cours d\'exécution',
-      exited: 'Terminé (ponctuel)',
-      dead: 'Arrêté',
-      failed: 'Échec',
-      unknown: 'Inconnu'
-    };
-    const subState = statusInfo?.subState || detectedService?.sub_state || 'unknown';
-    const isFailed = statusInfo?.status === 'failed' || subState === 'failed';
-    const effectiveSubState = isFailed ? 'failed' : subState;
+  const COLOR_BY_SUB_STATE = {
+    running: '#10B981',
+    exited: '#3B82F6',
+    dead: '#EF4444',
+    failed: '#F59E0B',
+    unknown: '#6B7280'
+  };
+  const LABEL_BY_SUB_STATE = {
+    running: 'En cours d\'exécution',
+    exited: 'Terminé (ponctuel)',
+    dead: 'Arrêté',
+    failed: 'Échec',
+    unknown: 'Inconnu'
+  };
+
+  const getEffectiveSubState = (detectedService) => {
+    const statusInfo = statusMap[detectedService.name];
+    const status = statusInfo?.status || detectedService.active_state || 'unknown';
+    const subState = statusInfo?.subState || detectedService.sub_state || 'unknown';
+    return (status === 'failed' || subState === 'failed') ? 'failed' : subState;
+  };
+
+  const getStatusBadge = (detectedService) => {
+    const statusInfo = statusMap[detectedService.name];
+    const effectiveSubState = getEffectiveSubState(detectedService);
     return {
-      text: statusInfo?.subStateLabel || labelBySubState[effectiveSubState] || 'Inconnu',
-      color: colorBySubState[effectiveSubState] || colorBySubState.unknown
+      text: statusInfo?.subStateLabel || LABEL_BY_SUB_STATE[effectiveSubState] || 'Inconnu',
+      color: COLOR_BY_SUB_STATE[effectiveSubState] || COLOR_BY_SUB_STATE.unknown
     };
   };
+
+  const matchesQuickFilter = (detectedService) => {
+    if (quickFilter === 'all') return true;
+    const subState = getEffectiveSubState(detectedService);
+    if (quickFilter === 'active') return subState === 'running';
+    if (quickFilter === 'stopped') return subState === 'dead' || subState === 'exited';
+    if (quickFilter === 'failed') return subState === 'failed';
+    return true;
+  };
+
+  const failedServices = detectedServices.filter(s => getEffectiveSubState(s) === 'failed').filter(matchesQuickFilter);
+  const applicativeServices = detectedServices
+    .filter(s => !s.is_system && getEffectiveSubState(s) !== 'failed')
+    .filter(matchesQuickFilter);
+  const systemServices = detectedServices
+    .filter(s => s.is_system && getEffectiveSubState(s) !== 'failed')
+    .filter(matchesQuickFilter);
 
   // Fetch status when the selected server changes, then auto-refresh
   useEffect(() => {
     setStatusMap({});
+    setShowSystemServices(false);
+    setQuickFilter('all');
 
     if (!serverId) return;
 
@@ -169,6 +225,74 @@ const ServicesPanel = ({ server }) => {
     return null;
   }
 
+  const renderServiceCard = (detectedService) => {
+    const serviceName = detectedService.name;
+    const statusBadge = getStatusBadge(detectedService);
+    const statusInfo = statusMap[serviceName];
+    const criticality = statusInfo?.criticality || 'none';
+    const canStop = criticality === 'none';
+    const canRestart = criticality !== 'locked';
+    const canStart = getEffectiveSubState(detectedService) !== 'running';
+
+    return (
+      <div key={serviceName} className="service-card">
+        <div className="service-header">
+          <div className="service-icon-title">
+            <div className="service-title-info">
+              <h3>{serviceName}</h3>
+              <span
+                className="status-badge"
+                style={{ color: statusBadge.color }}
+                title={statusInfo?.raw || ''}
+              >
+                {statusBadge.text}
+              </span>
+            </div>
+          </div>
+        </div>
+        <p className="service-description">
+          {detectedService.description || 'Aucune description disponible'}
+        </p>
+
+        <div className="service-actions">
+          {canStart && (
+            <button
+              onClick={() => handleActionClick('start', serviceName)}
+              disabled={loading}
+              className="action-btn start-btn"
+              title="Démarrer le service"
+            >
+              Démarrer
+            </button>
+          )}
+          {canRestart && (
+            <button
+              onClick={() => handleActionClick('restart', serviceName)}
+              disabled={loading}
+              className="action-btn restart-btn"
+              title={criticality === 'restart_only' ? 'Redémarrer le service (confirmation requise)' : 'Redémarrer le service'}
+            >
+              Redémarrer
+            </button>
+          )}
+          {canStop && (
+            <button
+              onClick={() => handleActionClick('stop', serviceName)}
+              disabled={loading}
+              className="action-btn stop-btn"
+              title="Arrêter le service"
+            >
+              Arrêter
+            </button>
+          )}
+          {!canStop && !canRestart && (
+            <span className="service-protected-note">Service protégé</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="services-panel">
       <div className="panel-header">
@@ -187,7 +311,6 @@ const ServicesPanel = ({ server }) => {
         </div>
       )}
 
-      {/* Services Grid */}
       {servicesDetectionFailedAt && (
         <div className="action-alert error">
           <span className="alert-message">
@@ -195,52 +318,59 @@ const ServicesPanel = ({ server }) => {
           </span>
         </div>
       )}
+
       {detectedServices.length > 0 && (
-        <div className="services-grid">
-          {detectedServices.map((detectedService) => {
-            const serviceName = detectedService.name;
-            const statusInfo = statusMap[serviceName];
-            const statusBadge = getStatusBadge(statusInfo, detectedService);
+        <>
+          <div className="quick-filter-bar">
+            {QUICK_FILTERS.map(f => (
+              <button
+                key={f.key}
+                className={`quick-filter-btn ${quickFilter === f.key ? 'active' : ''}`}
+                onClick={() => setQuickFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
-            return (
-              <div key={serviceName} className="service-card">
-                <div className="service-header">
-                  <div className="service-icon-title">
-                    <div className="service-title-info">
-                      <h3>{serviceName}</h3>
-                      <span
-                        className="status-badge"
-                        style={{ color: statusBadge.color }}
-                        title={statusInfo?.raw || ''}
-                      >
-                        {statusBadge.text}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="service-actions">
-                  <button
-                    onClick={() => executeServiceAction('restart', serviceName)}
-                    disabled={loading}
-                    className="action-btn restart-btn"
-                    title="Redémarrer le service"
-                  >
-                    Redémarrer
-                  </button>
-                  <button
-                    onClick={() => executeServiceAction('stop', serviceName)}
-                    disabled={loading}
-                    className="action-btn stop-btn"
-                    title="Arrêter le service"
-                  >
-                    Arrêter
-                  </button>
-                </div>
+          {failedServices.length > 0 && (
+            <div className="services-zone services-zone-failed">
+              <h4>En échec ({failedServices.length})</h4>
+              <div className="services-grid">
+                {failedServices.map(renderServiceCard)}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          )}
+
+          <div className="services-zone">
+            <h4>Applicatifs ({applicativeServices.length})</h4>
+            {applicativeServices.length === 0 ? (
+              <p className="empty-state-small">Aucun service applicatif ne correspond à ce filtre.</p>
+            ) : (
+              <div className="services-grid">
+                {applicativeServices.map(renderServiceCard)}
+              </div>
+            )}
+          </div>
+
+          <div className="services-zone">
+            <button
+              className="toggle-system-btn"
+              onClick={() => setShowSystemServices(!showSystemServices)}
+            >
+              {showSystemServices ? 'Masquer' : 'Afficher'} les services système ({systemServices.length})
+            </button>
+            {showSystemServices && (
+              systemServices.length === 0 ? (
+                <p className="empty-state-small">Aucun service système ne correspond à ce filtre.</p>
+              ) : (
+                <div className="services-grid">
+                  {systemServices.map(renderServiceCard)}
+                </div>
+              )
+            )}
+          </div>
+        </>
       )}
 
       {/* Empty State */}
@@ -249,6 +379,18 @@ const ServicesPanel = ({ server }) => {
           <p>Aucun service détecté pour ce serveur pour le moment.</p>
         </div>
       )}
+
+      <ConfirmActionModal
+        isOpen={!!pendingConfirmation}
+        title="Confirmation requise"
+        message={pendingConfirmation
+          ? `Redémarrer ${pendingConfirmation.serviceName} sur ${server.name || serverId} ? Cette action peut interrompre l'accès au serveur.`
+          : ''}
+        confirmLabel="Redémarrer"
+        busy={loading}
+        onConfirm={confirmPendingAction}
+        onCancel={() => setPendingConfirmation(null)}
+      />
     </div>
   );
 };
