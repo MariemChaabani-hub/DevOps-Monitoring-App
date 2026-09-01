@@ -131,13 +131,24 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   // infra services (collapsed by default — that's most of the noise on a
   // real host). The quick filter narrows what's visible within each zone,
   // it never removes services from `allServices` itself.
+  // Running services first — so an actually-active, admin-relevant service
+  // (ssh, apache2, ...) surfaces within the first page of cards instead of
+  // being pushed past it by plain alphabetical order.
+  const SUB_STATE_SORT_RANK = { running: 0, exited: 1, dead: 2, unknown: 3, failed: 4 };
+  const byRunningFirst = (a, b) => {
+    const rankDiff = (SUB_STATE_SORT_RANK[getEffectiveSubState(a)] ?? 3) - (SUB_STATE_SORT_RANK[getEffectiveSubState(b)] ?? 3);
+    return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
+  };
+
   const failedServices = allServices.filter(s => getEffectiveSubState(s) === 'failed').filter(matchesQuickFilter);
   const applicativeServices = allServices
     .filter(s => !s.is_system && getEffectiveSubState(s) !== 'failed')
-    .filter(matchesQuickFilter);
+    .filter(matchesQuickFilter)
+    .sort(byRunningFirst);
   const systemServices = allServices
     .filter(s => s.is_system && getEffectiveSubState(s) !== 'failed')
-    .filter(matchesQuickFilter);
+    .filter(matchesQuickFilter)
+    .sort(byRunningFirst);
 
   // Fetch services status for selected server
   const fetchServicesStatus = async (serverId = selectedServer) => {
@@ -408,10 +419,17 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     const serviceName = detectedService.name;
     const badge = getServiceBadge(detectedService);
     const live = servicesStatus[serviceName];
+    // Criticality is only known once /services-status has answered for
+    // this exact service — until then, show no action buttons at all
+    // rather than defaulting to "allowed" (which could flash an enabled
+    // Arrêter on a locked service) or to disabled-but-visible (confusing:
+    // invites a click that the backend then rejects with an unexplained
+    // 403).
+    const statusKnown = !!live;
     const criticality = getServiceCriticality(serviceName);
-    const canStop = criticality === 'none';
-    const canRestart = criticality !== 'locked';
-    const canStart = getEffectiveSubState(detectedService) !== 'running';
+    const canStop = statusKnown && criticality === 'none';
+    const canRestart = statusKnown && criticality !== 'locked';
+    const canStart = statusKnown && getEffectiveSubState(detectedService) !== 'running';
 
     return (
       <div key={serviceName} className="service-card">
@@ -430,6 +448,9 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           </p>
         </div>
         <div className="service-action-buttons">
+          {!statusKnown && (
+            <span className="service-loading-note">Chargement...</span>
+          )}
           {canStart && (
             <button
               onClick={() => handleServiceActionClick(serviceName, 'start', 'start-service')}
@@ -460,7 +481,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
               {isActionLoading(serviceName, 'stop') ? 'Arrêt...' : 'Arrêter'}
             </button>
           )}
-          {!canStop && !canRestart && (
+          {statusKnown && !canStop && !canRestart && (
             <span className="service-protected-note">Service protégé</span>
           )}
         </div>

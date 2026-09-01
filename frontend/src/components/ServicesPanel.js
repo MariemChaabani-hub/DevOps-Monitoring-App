@@ -203,13 +203,24 @@ const ServicesPanel = ({ server }) => {
     return true;
   };
 
+  // Running services first — so an actually-active, admin-relevant service
+  // (ssh, apache2, ...) surfaces within the first page of cards instead of
+  // being pushed past it by plain alphabetical order.
+  const SUB_STATE_SORT_RANK = { running: 0, exited: 1, dead: 2, unknown: 3, failed: 4 };
+  const byRunningFirst = (a, b) => {
+    const rankDiff = (SUB_STATE_SORT_RANK[getEffectiveSubState(a)] ?? 3) - (SUB_STATE_SORT_RANK[getEffectiveSubState(b)] ?? 3);
+    return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
+  };
+
   const failedServices = detectedServices.filter(s => getEffectiveSubState(s) === 'failed').filter(matchesQuickFilter);
   const applicativeServices = detectedServices
     .filter(s => !s.is_system && getEffectiveSubState(s) !== 'failed')
-    .filter(matchesQuickFilter);
+    .filter(matchesQuickFilter)
+    .sort(byRunningFirst);
   const systemServices = detectedServices
     .filter(s => s.is_system && getEffectiveSubState(s) !== 'failed')
-    .filter(matchesQuickFilter);
+    .filter(matchesQuickFilter)
+    .sort(byRunningFirst);
 
   // Fetch status when the selected server changes, then auto-refresh
   useEffect(() => {
@@ -274,10 +285,16 @@ const ServicesPanel = ({ server }) => {
     const serviceName = detectedService.name;
     const statusBadge = getStatusBadge(detectedService);
     const statusInfo = statusMap[serviceName];
+    // Criticality is only known once /services-status has answered for
+    // this exact service — until then, show no action buttons at all
+    // rather than defaulting to "allowed" or to disabled-but-visible
+    // (confusing: invites a click the backend then rejects with an
+    // unexplained 403).
+    const statusKnown = !!statusInfo;
     const criticality = statusInfo?.criticality || 'none';
-    const canStop = criticality === 'none';
-    const canRestart = criticality !== 'locked';
-    const canStart = getEffectiveSubState(detectedService) !== 'running';
+    const canStop = statusKnown && criticality === 'none';
+    const canRestart = statusKnown && criticality !== 'locked';
+    const canStart = statusKnown && getEffectiveSubState(detectedService) !== 'running';
 
     return (
       <div key={serviceName} className="service-card">
@@ -300,6 +317,9 @@ const ServicesPanel = ({ server }) => {
         </p>
 
         <div className="service-actions">
+          {!statusKnown && (
+            <span className="service-loading-note">Chargement...</span>
+          )}
           {canStart && (
             <button
               onClick={() => handleActionClick('start', serviceName)}
@@ -330,7 +350,7 @@ const ServicesPanel = ({ server }) => {
               Arrêter
             </button>
           )}
-          {!canStop && !canRestart && (
+          {statusKnown && !canStop && !canRestart && (
             <span className="service-protected-note">Service protégé</span>
           )}
         </div>

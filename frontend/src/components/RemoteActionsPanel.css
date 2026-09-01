@@ -125,7 +125,8 @@
   border-color: rgba(239, 68, 68, 0.4);
 }
 
-.service-protected-note {
+.service-protected-note,
+.service-loading-note {
   font-size: 0.8rem;
   color: #9ca3af;
   font-style: italic;

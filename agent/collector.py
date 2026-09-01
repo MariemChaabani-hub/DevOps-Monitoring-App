@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # detection behavior, payload shape) — sent with every metrics payload so a
 # server running a stale agent is visible from the dashboard instead of
 # looking like a detection bug (see collect()/AGENT_VERSION usage below).
-AGENT_VERSION = "1.3.0"
+AGENT_VERSION = "1.3.1"
 
 # Unit-name prefixes that are always host/OS infrastructure, never an
 # application Clediss cares about monitoring individually. Broad on
@@ -39,7 +39,7 @@ SYSTEM_UNIT_NAMES = frozenset({
     'accounts-daemon', 'packagekit', 'colord', 'avahi-daemon',
     'cron', 'rsyslog', 'unattended-upgrades', 'apport',
     'apparmor', 'apport-autoreport', 'auditd', 'blk-availability',
-    'keyboard-setup', 'console-setup', 'setvtrgb',
+    'keyboard-setup', 'console-setup', 'setvtrgb', 'networkd-dispatcher',
 })
 
 
