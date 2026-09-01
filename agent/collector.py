@@ -15,11 +15,19 @@ logger = logging.getLogger(__name__)
 # detection behavior, payload shape) — sent with every metrics payload so a
 # server running a stale agent is visible from the dashboard instead of
 # looking like a detection bug (see collect()/AGENT_VERSION usage below).
-AGENT_VERSION = "1.2.0"
+AGENT_VERSION = "1.3.0"
 
 # Unit-name prefixes that are always host/OS infrastructure, never an
-# application Clediss cares about monitoring individually.
-SYSTEM_UNIT_PREFIXES = ('systemd-', 'getty@', 'user@', 'snap-')
+# application Clediss cares about monitoring individually. Broad on
+# purpose — a real Ubuntu host has dozens of these (apt-daily-upgrade,
+# apt-daily, cloud-init, cloud-final, snapd.seeded, e2scrub_all, ...) and
+# the whole point of is_system is to keep them out of the default
+# "Applicatifs" view, which should hold only the handful an admin actually
+# cares about (apache2, nginx, mongod, ssh, docker, mysql, ...).
+SYSTEM_UNIT_PREFIXES = (
+    'systemd-', 'getty@', 'user@', 'snap-', 'snapd',
+    'apt-', 'cloud-', 'e2scrub', 'plymouth',
+)
 
 # Exact unit names classified as system/infra rather than application.
 # ssh/sshd is deliberately NOT here: an admin managing remote servers wants
@@ -30,6 +38,8 @@ SYSTEM_UNIT_NAMES = frozenset({
     'dbus', 'polkit', 'udisks2', 'multipathd', 'ModemManager',
     'accounts-daemon', 'packagekit', 'colord', 'avahi-daemon',
     'cron', 'rsyslog', 'unattended-upgrades', 'apport',
+    'apparmor', 'apport-autoreport', 'auditd', 'blk-availability',
+    'keyboard-setup', 'console-setup', 'setvtrgb',
 })
 
 

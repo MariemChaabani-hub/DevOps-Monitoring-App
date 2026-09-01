@@ -17,6 +17,10 @@ const QUICK_FILTERS = [
   { key: 'failed', label: 'En échec' }
 ];
 
+// How many cards a section shows before "Voir plus" — applied after the
+// quick filter, so filtering down to fewer than this never shows a button.
+const SERVICES_PAGE_SIZE = 6;
+
 const ServicesPanel = ({ server }) => {
   const [statusMap, setStatusMap] = useState({});
   const [loading, setLoading] = useState(false);
@@ -24,6 +28,9 @@ const ServicesPanel = ({ server }) => {
   const [showSystemServices, setShowSystemServices] = useState(false);
   const [quickFilter, setQuickFilter] = useState('all');
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
+  // Independent "voir plus" state per zone — expanding Applicatifs must
+  // not expand Système, and vice versa.
+  const [expandedZones, setExpandedZones] = useState({ failed: false, applicative: false, system: false });
 
   const API_BASE = '';
   const adminEmail = localStorage.getItem('adminEmail') || '';
@@ -126,6 +133,15 @@ const ServicesPanel = ({ server }) => {
     }
   };
 
+  const handleQuickFilterChange = (filterKey) => {
+    setQuickFilter(filterKey);
+    setExpandedZones({ failed: false, applicative: false, system: false });
+  };
+
+  const toggleZoneExpanded = (zone) => {
+    setExpandedZones(prev => ({ ...prev, [zone]: !prev[zone] }));
+  };
+
   const handleActionClick = (action, serviceName) => {
     const criticality = statusMap[serviceName]?.criticality || 'none';
     if (criticality === 'restart_only' && action === 'restart') {
@@ -200,6 +216,7 @@ const ServicesPanel = ({ server }) => {
     setStatusMap({});
     setShowSystemServices(false);
     setQuickFilter('all');
+    setExpandedZones({ failed: false, applicative: false, system: false });
 
     if (!serverId) return;
 
@@ -224,6 +241,34 @@ const ServicesPanel = ({ server }) => {
   if (!server) {
     return null;
   }
+
+  // Renders a zone's grid capped at SERVICES_PAGE_SIZE cards, with a
+  // "Voir plus"/"Voir moins" toggle below — applied after the quick
+  // filter already narrowed `services`, so a filtered-down list under the
+  // page size never shows a button.
+  const renderZoneGrid = (services, zoneKey) => {
+    const expanded = expandedZones[zoneKey];
+    const visible = expanded ? services : services.slice(0, SERVICES_PAGE_SIZE);
+    const remaining = services.length - visible.length;
+
+    return (
+      <>
+        <div className="services-grid">
+          {visible.map(renderServiceCard)}
+        </div>
+        {remaining > 0 && (
+          <button className="show-more-btn" onClick={() => toggleZoneExpanded(zoneKey)}>
+            Voir les {remaining} autres services
+          </button>
+        )}
+        {remaining === 0 && expanded && services.length > SERVICES_PAGE_SIZE && (
+          <button className="show-more-btn" onClick={() => toggleZoneExpanded(zoneKey)}>
+            Voir moins
+          </button>
+        )}
+      </>
+    );
+  };
 
   const renderServiceCard = (detectedService) => {
     const serviceName = detectedService.name;
@@ -326,7 +371,7 @@ const ServicesPanel = ({ server }) => {
               <button
                 key={f.key}
                 className={`quick-filter-btn ${quickFilter === f.key ? 'active' : ''}`}
-                onClick={() => setQuickFilter(f.key)}
+                onClick={() => handleQuickFilterChange(f.key)}
               >
                 {f.label}
               </button>
@@ -336,9 +381,7 @@ const ServicesPanel = ({ server }) => {
           {failedServices.length > 0 && (
             <div className="services-zone services-zone-failed">
               <h4>En échec ({failedServices.length})</h4>
-              <div className="services-grid">
-                {failedServices.map(renderServiceCard)}
-              </div>
+              {renderZoneGrid(failedServices, 'failed')}
             </div>
           )}
 
@@ -346,11 +389,7 @@ const ServicesPanel = ({ server }) => {
             <h4>Applicatifs ({applicativeServices.length})</h4>
             {applicativeServices.length === 0 ? (
               <p className="empty-state-small">Aucun service applicatif ne correspond à ce filtre.</p>
-            ) : (
-              <div className="services-grid">
-                {applicativeServices.map(renderServiceCard)}
-              </div>
-            )}
+            ) : renderZoneGrid(applicativeServices, 'applicative')}
           </div>
 
           <div className="services-zone">
@@ -363,11 +402,7 @@ const ServicesPanel = ({ server }) => {
             {showSystemServices && (
               systemServices.length === 0 ? (
                 <p className="empty-state-small">Aucun service système ne correspond à ce filtre.</p>
-              ) : (
-                <div className="services-grid">
-                  {systemServices.map(renderServiceCard)}
-                </div>
-              )
+              ) : renderZoneGrid(systemServices, 'system')
             )}
           </div>
         </>

@@ -334,6 +334,23 @@
   margin: 0 0 10px 0;
 }
 
+.show-more-btn {
+  display: block;
+  margin: 4px 0 12px 0;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid #4b5563;
+  color: #60a5fa;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.show-more-btn:hover {
+  background: rgba(96, 165, 250, 0.2);
+}
+
 /* Service Footer */
 .service-footer {
   padding-top: 8px;
