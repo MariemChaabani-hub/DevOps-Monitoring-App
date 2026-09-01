@@ -22,7 +22,15 @@ const ServicesPanel = ({ server }) => {
   const legacyServiceNames = ['pm2', 'nginx', 'mongodb', 'apache', 'apache2'];
 
   const serverId = server?.server_id || server?.serverId;
-  const detectedServices = server?.services || [];
+  // server.services is normalized backend-side to {name, active_state,
+  // sub_state, description} objects — fall back defensively for a
+  // document not yet refreshed by an updated agent (plain string).
+  const detectedServices = (server?.services || []).map(s =>
+    typeof s === 'string'
+      ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '' }
+      : s
+  );
+  const servicesDetectionFailedAt = server?.services_detection_failed_at;
 
   // Fetch real status (running/stopped) for the server's detected services
   const fetchServiceStatus = async () => {
@@ -103,18 +111,33 @@ const ServicesPanel = ({ server }) => {
     }
   };
 
-  // Get status badge — the backend already returns a ready-to-display
-  // French label (statusInfo.label); only the badge color is decided here.
-  const getStatusBadge = (statusInfo) => {
-    const colorByStatus = {
-      'active': '#10B981',
-      'inactive': '#EF4444',
-      'failed': '#F59E0B',
-      'unknown': '#6B7280'
+  // Get status badge — colored by SubState (running/exited/dead/failed),
+  // not just ActiveState: a one-shot unit reports ActiveState=active with
+  // SubState=exited, which must NOT show green like a real running daemon.
+  // Falls back to the service's own last-known state (from the agent's
+  // detection) when the live /services-status check hasn't answered yet —
+  // never defaults to green.
+  const getStatusBadge = (statusInfo, detectedService) => {
+    const colorBySubState = {
+      running: '#10B981',
+      exited: '#3B82F6',
+      dead: '#EF4444',
+      failed: '#F59E0B',
+      unknown: '#6B7280'
     };
+    const labelBySubState = {
+      running: 'En cours d\'exécution',
+      exited: 'Terminé (ponctuel)',
+      dead: 'Arrêté',
+      failed: 'Échec',
+      unknown: 'Inconnu'
+    };
+    const subState = statusInfo?.subState || detectedService?.sub_state || 'unknown';
+    const isFailed = statusInfo?.status === 'failed' || subState === 'failed';
+    const effectiveSubState = isFailed ? 'failed' : subState;
     return {
-      text: statusInfo?.label || 'Inconnu',
-      color: colorByStatus[statusInfo?.status] || colorByStatus.unknown
+      text: statusInfo?.subStateLabel || labelBySubState[effectiveSubState] || 'Inconnu',
+      color: colorBySubState[effectiveSubState] || colorBySubState.unknown
     };
   };
 
@@ -165,11 +188,19 @@ const ServicesPanel = ({ server }) => {
       )}
 
       {/* Services Grid */}
+      {servicesDetectionFailedAt && (
+        <div className="action-alert error">
+          <span className="alert-message">
+            Détection des services indisponible depuis le {new Date(servicesDetectionFailedAt).toLocaleString()} — la liste ci-dessous peut être obsolète.
+          </span>
+        </div>
+      )}
       {detectedServices.length > 0 && (
         <div className="services-grid">
-          {detectedServices.map((serviceName) => {
+          {detectedServices.map((detectedService) => {
+            const serviceName = detectedService.name;
             const statusInfo = statusMap[serviceName];
-            const statusBadge = getStatusBadge(statusInfo);
+            const statusBadge = getStatusBadge(statusInfo, detectedService);
 
             return (
               <div key={serviceName} className="service-card">

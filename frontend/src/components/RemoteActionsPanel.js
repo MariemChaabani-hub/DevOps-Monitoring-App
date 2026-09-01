@@ -62,14 +62,46 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     };
   };
 
+  // Real status label per sub-state, used when the live /services-status
+  // check hasn't answered yet and we fall back to the last state the agent
+  // reported. 'running' is the only state that should ever read as green —
+  // an 'active' service that is actually SubState=exited (a one-shot unit
+  // that already finished) must NOT show as if it were running.
+  const SUB_STATE_META = {
+    running: { className: 'running', label: 'En cours d\'exécution' },
+    exited: { className: 'exited', label: 'Terminé (ponctuel)' },
+    dead: { className: 'inactive', label: 'Arrêté' },
+    failed: { className: 'failed', label: 'Échec' },
+    unknown: { className: 'unknown', label: 'Inconnu' }
+  };
+
+  // Combines the live per-action verification (servicesStatus, from
+  // /services-status) with the service's last-known state from the agent's
+  // own detection, live check taking priority. Never defaults to "running".
+  const getServiceBadge = (service) => {
+    const live = servicesStatus[service.name];
+    const status = live?.status || service.active_state || 'unknown';
+    const subState = live?.subState || service.sub_state || 'unknown';
+    if (status === 'failed' || subState === 'failed') return SUB_STATE_META.failed;
+    return SUB_STATE_META[subState] || SUB_STATE_META.unknown;
+  };
+
   // Serveur actuellement sélectionné (objet complet, pour lire ses services détectés)
   const selectedServerObj = servers.find(
     (s) => (s.server_id || s.serverId) === selectedServer
   );
-  const allServiceNames = selectedServerObj?.services || [];
-  const visibleServiceNames = showAllServices
-    ? allServiceNames
-    : allServiceNames.slice(0, 4);
+  // server.services is normalized backend-side to {name, active_state,
+  // sub_state, description} objects — but a document not yet refreshed by
+  // a new-format agent, or an agent that was never updated, can still
+  // hand us a plain string. Normalize defensively here too.
+  const allServices = (selectedServerObj?.services || []).map(s =>
+    typeof s === 'string'
+      ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '' }
+      : s
+  );
+  const allServiceNames = allServices.map(s => s.name);
+  const visibleServices = showAllServices ? allServices : allServices.slice(0, 4);
+  const servicesDetectionFailedAt = selectedServerObj?.services_detection_failed_at;
 
   // Fetch services status for selected server
   const fetchServicesStatus = async (serverId = selectedServer) => {
@@ -164,6 +196,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           message: result.message,
           verifiedStatus: result.verified_status || null,
           verifiedStatusLabel: result.verified_status_label || null,
+          verifiedSubStateLabel: result.verified_sub_state_label || null,
           commandOutput: result.command_output || null,
           details: result
         });
@@ -303,6 +336,12 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           {/* Services Status */}
           <div className="services-status-section">
             <h3>Statut des Services ({allServiceNames.length})</h3>
+            {servicesDetectionFailedAt && (
+              <p className="services-detection-warning">
+                Détection des services indisponible depuis le {formatTimestamp(servicesDetectionFailedAt)}
+                {' '}— la liste ci-dessous peut être obsolète.
+              </p>
+            )}
             {allServiceNames.length === 0 ? (
               <p className="no-services-message">
                 Aucun service détecté pour ce serveur pour le moment.
@@ -310,28 +349,27 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
             ) : (
               <>
                 <div className="services-grid">
-                  {visibleServiceNames.map((serviceName) => {
+                  {visibleServices.map((detectedService) => {
+                    const serviceName = detectedService.name;
                     const service = getServiceMeta(serviceName);
-                    const status = servicesStatus[serviceName];
+                    const badge = getServiceBadge(detectedService);
+                    const live = servicesStatus[serviceName];
                     return (
                       <div key={serviceName} className="service-card">
                         <div className="service-header">
                           <span className="service-icon">{service.icon}</span>
                           <span className="service-name">{service.name}</span>
                           <span
-                            className={`status-badge ${status?.status || 'unknown'}`}
-                            title={status?.raw || ''}
+                            className={`status-badge ${badge.className}`}
+                            title={live?.raw || ''}
                           >
-                            {status?.label || 'Inconnu'}
+                            {badge.label}
                           </span>
                         </div>
                         <div className="service-details">
-                          <p className="service-description">{service.description}</p>
-                          {status && (
-                            <p className="service-uptime">
-                              Disponibilité : {status.uptime || 'Indisponible'}
-                            </p>
-                          )}
+                          <p className="service-description">
+                            {service.description || detectedService.description}
+                          </p>
                         </div>
                         <div className="service-action-buttons">
                           <button
@@ -431,7 +469,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                 </span>
                 {actionResult.verifiedStatus && (
                   <span className={`verified-status-badge ${actionResult.verifiedStatus}`}>
-                    Vérifié: {actionResult.verifiedStatusLabel || 'Inconnu'}
+                    Vérifié: {actionResult.verifiedSubStateLabel || actionResult.verifiedStatusLabel || 'Inconnu'}
                   </span>
                 )}
               </div>

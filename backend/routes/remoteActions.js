@@ -117,9 +117,23 @@ const STATUS_LABELS_FR = {
   unknown: 'Inconnu'
 };
 
-const buildStatusResult = (status, raw) => ({
+// SubState is what actually tells "running" apart from "active but not
+// doing anything anymore" — a one-shot unit reports ActiveState=active
+// with SubState=exited, which `systemctl is-active` alone reports as
+// plain "active", indistinguishable from a real running daemon.
+const SUB_STATE_LABELS_FR = {
+  running: 'En cours d\'exécution',
+  exited: 'Terminé (ponctuel)',
+  dead: 'Arrêté',
+  failed: 'Échec',
+  unknown: 'Inconnu'
+};
+
+const buildStatusResult = (status, raw, subState = 'unknown') => ({
   status,
   label: STATUS_LABELS_FR[status] || STATUS_LABELS_FR.unknown,
+  subState,
+  subStateLabel: SUB_STATE_LABELS_FR[subState] || SUB_STATE_LABELS_FR.unknown,
   raw
 });
 
@@ -148,31 +162,37 @@ const verifyServiceStatus = async (serviceName, server) => {
           status = 'inactive';
         }
       }
-      return buildStatusResult(status, result.stdout || result.stderr);
+      const subState = status === 'active' ? 'running' : status === 'inactive' ? 'dead' : 'unknown';
+      return buildStatusResult(status, result.stdout || result.stderr, subState);
     } catch (err) {
       return buildStatusResult('unknown', (err.payload && err.payload.error) || err.message || 'verification failed');
     }
   }
 
-  // `systemctl is-active` prints exactly one of: active, activating,
-  // deactivating, inactive, failed, unknown — to stdout, regardless of
-  // its (non-zero for anything but "active") exit code. Only the three
-  // states the caller asked for get their own label; anything else
-  // (including the transitional activating/deactivating states) is
-  // reported as 'unknown' rather than silently folded into 'inactive'.
+  // `systemctl show --property=ActiveState --property=SubState --value`
+  // prints two lines — ActiveState then SubState, in the order requested
+  // — regardless of exit code, so one SSH round-trip gets both. ActiveState
+  // alone (what `is-active` reports) says "active" for a one-shot unit
+  // that already finished (SubState=exited) just as it would for a real
+  // running daemon (SubState=running) — SubState is what tells them apart.
   //
-  // No `sudo` here: `is-active` only reads state over D-Bus and doesn't
-  // need root, unlike restart/stop/start. Running it under sudo on a host
-  // where sudo isn't configured NOPASSWD for this exact command (or has
-  // no TTY to prompt for a password) makes the command fail outright —
-  // stdout comes back empty and this falls through to 'unknown', which is
+  // No `sudo` here: `show` only reads state over D-Bus and doesn't need
+  // root, unlike restart/stop/start. Running it under sudo on a host where
+  // sudo isn't configured NOPASSWD for this exact command (or has no TTY
+  // to prompt for a password) makes the command fail outright — stdout
+  // comes back empty and this falls through to 'unknown', which is
   // exactly the "always Inconnu" symptom this fixes.
   try {
     const resolvedName = SERVICE_NAME_ALIASES[serviceName] || serviceName;
-    const result = await execSshRaw(server, `systemctl is-active ${resolvedName}`);
-    const rawStatus = (result.stdout || '').trim().toLowerCase();
-    const status = ['active', 'inactive', 'failed'].includes(rawStatus) ? rawStatus : 'unknown';
-    return buildStatusResult(status, result.stdout || result.stderr);
+    const result = await execSshRaw(
+      server,
+      `systemctl show ${resolvedName} --property=ActiveState --property=SubState --value`
+    );
+    const lines = (result.stdout || '').trim().split('\n').map(l => l.trim().toLowerCase());
+    const [rawActiveState, rawSubState] = lines;
+    const status = ['active', 'inactive', 'failed'].includes(rawActiveState) ? rawActiveState : 'unknown';
+    const subState = ['running', 'exited', 'dead', 'failed'].includes(rawSubState) ? rawSubState : 'unknown';
+    return buildStatusResult(status, result.stdout || result.stderr, subState);
   } catch (err) {
     return buildStatusResult('unknown', (err.payload && err.payload.error) || err.message || 'verification failed');
   }
@@ -300,6 +320,8 @@ const handleServiceAction = (action) => async (req, res) => {
         server_id,
         verified_status: verifiedStatus.status,
         verified_status_label: verifiedStatus.label,
+        verified_sub_state: verifiedStatus.subState,
+        verified_sub_state_label: verifiedStatus.subStateLabel,
         command_output: execResult.stdout,
         timestamp: new Date()
       };
@@ -574,7 +596,12 @@ router.get('/:server_id/services-status',
       // as active on this server, plus PM2 (special-cased since it's a
       // process manager rather than a systemd unit, so it's never part
       // of the agent's systemctl-based detection).
-      const detectedNames = Array.isArray(server.services) ? server.services : [];
+      // server.services holds {name, active_state, sub_state, description}
+      // objects (normalized at ingestion — see server.js); only the name
+      // is needed here since we re-verify status live over SSH anyway.
+      const detectedNames = Array.isArray(server.services)
+        ? server.services.map(s => (typeof s === 'string' ? s : s && s.name)).filter(Boolean)
+        : [];
       const serviceNames = detectedNames.includes('pm2') ? detectedNames : ['pm2', ...detectedNames];
       const servicesStatus = {};
 
@@ -583,6 +610,8 @@ router.get('/:server_id/services-status',
         servicesStatus[svcName] = {
           status: verified.status,
           label: verified.label,
+          subState: verified.subState,
+          subStateLabel: verified.subStateLabel,
           raw: verified.raw
         };
       }

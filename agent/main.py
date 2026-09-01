@@ -231,6 +231,8 @@ class MonitoringAgent:
             )
             self.collection_count += 1
             logger.debug(f"[OK] Collected {len(metrics)} fields")
+            if metrics.get('services') is None:
+                logger.warning("[WARN] Service detection unavailable this cycle (see collector logs above)")
             return metrics
         
         except Exception as e:

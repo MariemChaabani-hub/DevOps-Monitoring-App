@@ -43,6 +43,30 @@ const servicesRoutes = require('./routes/services');
 const authRoutes = require('./routes/auth');
 const { verifyToken } = require('./middleware/auth');
 
+// Normalizes the agent's detected-services payload into a stable shape,
+// accepting both the legacy format (array of plain unit-name strings,
+// still sent by agents that haven't been updated) and the current one
+// (array of {name, active_state, sub_state, description} objects).
+// Entries with no usable name are dropped.
+const normalizeServices = (rawServices) => {
+  return rawServices
+    .map(entry => {
+      if (typeof entry === 'string') {
+        return { name: entry, active_state: 'unknown', sub_state: 'unknown', description: '' };
+      }
+      if (entry && typeof entry === 'object' && entry.name) {
+        return {
+          name: entry.name,
+          active_state: entry.active_state || 'unknown',
+          sub_state: entry.sub_state || 'unknown',
+          description: entry.description || ''
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+};
+
 // Initialize Express
 const app = express();
 const server = http.createServer(app);
@@ -237,11 +261,22 @@ app.post('/metrics', async (req, res) => {
       disk_percent: metric.disk_percent
     };
     // Detected services list sent by the agent (systemctl-based detection).
-    // Only overwrite when the agent actually sent a non-empty array, so a
-    // transient detection failure (agent sends []) doesn't wipe out the
-    // last known-good list.
-    if (Array.isArray(metric.services) && metric.services.length > 0) {
-      server.services = metric.services;
+    // Two agent generations coexist in the field:
+    //   - updated agent: `services` is an array of {name, active_state,
+    //     sub_state, description} objects, or explicitly `null` when
+    //     detection failed this cycle (systemctl missing/timed out/etc).
+    //   - older agent: `services` is always an array of plain name
+    //     strings, and silently becomes [] on its own detection failures
+    //     — it cannot tell us "failed" apart from "found nothing", so we
+    //     only overwrite the last known-good list when that array is
+    //     non-empty, same as before this change.
+    if (Array.isArray(metric.services)) {
+      if (metric.services.length > 0) {
+        server.services = normalizeServices(metric.services);
+        server.services_detection_failed_at = null;
+      }
+    } else if (metric.services === null) {
+      server.services_detection_failed_at = new Date();
     }
     await server.save();
 

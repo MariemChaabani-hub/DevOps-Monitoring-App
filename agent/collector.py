@@ -3,10 +3,13 @@ System metrics collector module.
 Collects system information using psutil and returns as JSON.
 """
 import json
+import logging
 import subprocess
 import psutil
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class SystemCollector:
@@ -41,37 +44,66 @@ class SystemCollector:
         }
     
     @staticmethod
-    def detect_active_services() -> List[str]:
+    def detect_services() -> Optional[List[Dict[str, str]]]:
         """
-        Detect all active systemd services on this host.
+        Detect all systemd service units on this host, active or not.
 
         Returns:
-            List of active service names (without the '.service' suffix).
-            Returns an empty list on non-systemd hosts or if detection
-            fails for any reason — this must never crash metric collection.
+            A list of dicts, one per unit: {name, active_state, sub_state,
+            description}. `active_state` is systemd's ActiveState (active/
+            inactive/failed/...) and `sub_state` its SubState (running/
+            exited/dead/failed/...) — a service can be ActiveState=active
+            while SubState=exited (a one-shot unit that already finished),
+            which is NOT "running".
+
+            Returns None — never an empty list — when detection itself
+            failed (systemctl missing, non-systemd host, timeout, non-zero
+            exit code), so callers can tell "nothing to report" apart from
+            "couldn't check". Never raises; failures are logged.
         """
         try:
             result = subprocess.run(
-                ['systemctl', 'list-units', '--type=service', '--state=active', '--no-pager', '--plain'],
+                ['systemctl', 'list-units', '--type=service', '--all',
+                 '--no-pager', '--plain', '--no-legend'],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
             if result.returncode != 0:
-                return []
+                logger.warning(
+                    "systemctl list-units exited with code %s: %s",
+                    result.returncode, result.stderr.strip()
+                )
+                return None
 
             services = []
             for line in result.stdout.splitlines():
                 line = line.strip()
-                if not line or line.startswith('UNIT') or line.startswith('*'):
+                if not line:
                     continue
-                unit = line.split()[0]
-                if unit.endswith('.service'):
-                    services.append(unit[:-len('.service')])
+                # Columns: UNIT LOAD ACTIVE SUB DESCRIPTION (--no-legend
+                # drops the header/footer, but the description itself may
+                # contain spaces, hence the maxsplit of 4).
+                parts = line.split(None, 4)
+                if len(parts) < 4:
+                    continue
+                unit, _load_state, active_state, sub_state = parts[:4]
+                if not unit.endswith('.service'):
+                    continue
+                services.append({
+                    'name': unit[:-len('.service')],
+                    'active_state': active_state,
+                    'sub_state': sub_state,
+                    'description': parts[4] if len(parts) > 4 else '',
+                })
             return services
 
-        except (subprocess.SubprocessError, OSError, FileNotFoundError):
-            return []
+        except subprocess.TimeoutExpired as e:
+            logger.warning("systemctl list-units timed out: %s", e)
+            return None
+        except (subprocess.SubprocessError, OSError, FileNotFoundError) as e:
+            logger.warning("systemctl list-units failed: %s", e)
+            return None
 
     @staticmethod
     def get_uptime() -> Dict[str, Any]:
@@ -107,7 +139,7 @@ class SystemCollector:
             'disk_percent': SystemCollector.get_disk_percent(),
             'network_io': SystemCollector.get_network_io(),
             'uptime': SystemCollector.get_uptime(),
-            'services': SystemCollector.detect_active_services(),
+            'services': SystemCollector.detect_services(),
         }
 
         # Server identification: always included as keys (the backend

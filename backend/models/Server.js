@@ -52,9 +52,23 @@ const ServerSchema = new mongoose.Schema({
       default: 0
     }
   },
+  // Services detected by the agent's systemctl-based scan, normalized to
+  // {name, active_state, sub_state, description} by the /metrics ingestion
+  // handler. Stored as Mixed (not a strict sub-schema) so a document
+  // written by an older agent (plain string array) or one written before
+  // this rollout never fails Mongoose casting on read.
   services: {
-    type: [String],
+    type: [mongoose.Schema.Types.Mixed],
     default: []
+  },
+  // Set when the agent's most recent metrics payload explicitly signaled
+  // that service detection failed this cycle (systemctl unavailable,
+  // timed out, etc.) — lets the UI show "detection unavailable" instead
+  // of silently showing an empty or stale list. Cleared on the next
+  // successful detection.
+  services_detection_failed_at: {
+    type: Date,
+    default: null
   },
   created_at: {
     type: Date,
