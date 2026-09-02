@@ -11,6 +11,7 @@ const BackupService = require('../services/backupService');
 const BackupSocketService = require('../services/backupSocketService');
 const BackupAlertService = require('../services/backupAlertService');
 const EmailService = require('../services/emailService');
+const { verifyToken } = require('../middleware/auth');
 
 // GET /api/backups
 // Returns all backups with optional filters and pagination
@@ -633,8 +634,10 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/backups/test/trigger
-// Manual endpoint for testing - triggers backup immediately
-router.post('/test/trigger', async (req, res) => {
+// Manual endpoint for testing - triggers backup immediately.
+// Protected: it forces a real mongodump against production on demand —
+// previously reachable by anyone who knew the URL, no token required.
+router.post('/test/trigger', verifyToken, async (req, res) => {
   try {
     const BackupCronService = require('../services/backupCronService');
     

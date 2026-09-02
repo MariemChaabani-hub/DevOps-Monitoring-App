@@ -22,14 +22,9 @@ spec:
         - secretRef:
             name: monitoring-secret
         volumeMounts:
-        - name: docker-sock
-          mountPath: /var/run/docker.sock
         - name: backups
           mountPath: /app/backups
       volumes:
-      - name: docker-sock
-        hostPath:
-          path: /var/run/docker.sock
       - name: backups
         hostPath:
           path: /home/debian/DevOps-Monitoring-App/backups

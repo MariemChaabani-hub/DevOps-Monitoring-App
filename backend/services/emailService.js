@@ -409,8 +409,17 @@ class EmailService {
 
   /**
    * Send a backup completion notification email after EVERY daily backup
-   * run (both SUCCESS and FAILED), unlike sendBackupAlertEmail() above
-   * which only emails for CRITICAL failures/late backups.
+   * run (both SUCCESS and FAILED) — the single email per backup event; the
+   * separate CRITICAL alert email that used to fire alongside this one for
+   * a FAILED backup was removed from BackupAlertService.checkBackupAndAlert
+   * specifically to avoid two emails for the same event.
+   *
+   * `previousSize`/`previousDuration` are optional — the caller looks up
+   * the last successful backup for the same server and passes its size/
+   * duration so this can show a day-over-day comparison. Omit them (or
+   * pass a non-positive/missing value) and the email just shows today's
+   * numbers with no comparison — there's no way to divide by a previous
+   * size of 0, and a first-ever backup has no previous one at all.
    */
   async sendBackupCompletionEmail(data) {
     try {
@@ -422,14 +431,36 @@ class EmailService {
         duration,
         timestamp,
         adminEmail,
-        errorMessage
+        errorMessage,
+        previousSize,
+        previousDuration
       } = data;
 
       const isSuccess = status === 'OK';
       const timeStr = new Date(timestamp).toLocaleString('fr-FR');
+      const dateStr = new Date(timestamp).toLocaleDateString('fr-FR');
       const displayName = serverName || serverId;
-      const statusLabel = isSuccess ? 'Succès' : 'Échec';
+      const statusLabel = isSuccess ? 'OK' : 'ÉCHEC';
       const headerColor = isSuccess ? '#2e7d32' : '#d32f2f';
+
+      // Comparison only makes sense on a genuine success, against a real
+      // previous value — a previous size of 0 (or none at all, e.g. the
+      // server's first backup) can't produce a meaningful percentage.
+      const formatDelta = (current, previous) => {
+        if (typeof previous !== 'number' || previous <= 0) return null;
+        const deltaPct = ((current - previous) / previous) * 100;
+        const sign = deltaPct >= 0 ? '+' : '';
+        return `${sign}${deltaPct.toFixed(1)}%`;
+      };
+      const sizeDelta = isSuccess ? formatDelta(size, previousSize) : null;
+      const durationDelta = isSuccess ? formatDelta(duration, previousDuration) : null;
+
+      const sizeCell = sizeDelta
+        ? `${size} MB <span style="color: #888; font-weight: 400;">(hier : ${previousSize} MB, ${sizeDelta})</span>`
+        : `${size} MB`;
+      const durationCell = durationDelta
+        ? `${duration}s <span style="color: #888; font-weight: 400;">(hier : ${previousDuration}s, ${durationDelta})</span>`
+        : `${duration}s`;
 
       // If not configured, log to console instead
       if (!this.isConfigured) {
@@ -445,7 +476,7 @@ class EmailService {
       const mailOptions = {
         from: this.fromAddress,
         to: adminEmail,
-        subject: `[Sauvegarde — ${statusLabel}] ${displayName}`,
+        subject: `[SAUVEGARDE ${statusLabel}] ${displayName} — ${dateStr}`,
         attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
@@ -463,11 +494,11 @@ class EmailService {
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">Taille</td>
-                  <td style="padding: 8px 0;">${size} MB</td>
+                  <td style="padding: 8px 0;">${sizeCell}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">Durée</td>
-                  <td style="padding: 8px 0;">${duration}s</td>
+                  <td style="padding: 8px 0;">${durationCell}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">Horodatage</td>

@@ -10,7 +10,6 @@
 
 const Alert = require('../models/Alert');
 const Server = require('../models/Server');
-const EmailService = require('./emailService');
 
 class BackupAlertService {
   /**
@@ -115,28 +114,13 @@ class BackupAlertService {
         `[BackupAlert] ✓ Created ${severity} alert for ${serverId}: ${message}`
       );
 
-      // Send email notification for CRITICAL backup failures
-      if (severity === 'CRITICAL') {
-        const emailResult = await EmailService.sendBackupAlertEmail({
-          serverId,
-          serverName: server && server.name,
-          type: alertType,
-          severity: severity,
-          status: status,
-          duration: backup.duration,
-          size: backup.size,
-          date: backup.date,
-          message: message,
-          timestamp: new Date(),
-          adminEmail
-        });
-
-        console.log(`[BackupAlert] Email notification sent: ${JSON.stringify(emailResult)}`);
-      } else {
-        console.log(
-          `[BackupAlert] Alert logged (${severity}): ${message}`
-        );
-      }
+      // No email here — this function only keeps the Alert record (for the
+      // dashboard/audit trail) up to date. The single email per backup is
+      // sent by EmailService.sendBackupCompletionEmail, called once by
+      // backupCronService.js right after this function returns. Sending
+      // one here too used to mean a FAILED backup produced two separate
+      // emails for the same event.
+      console.log(`[BackupAlert] Alert logged (${severity}): ${message}`);
 
       return alertDoc;
     } catch (error) {

@@ -68,7 +68,8 @@ class BackupCronService {
       const isTestServer = serverId.includes('test') || serverId.includes('dashboard-server') || serverId.includes('critical-server');
       
       let status, duration, size, filename = null;
-      
+      let backupError = null;
+
       if (!isTestServer) {
         console.log(`[Backup Cron] Executing real database backup for ${serverId}...`);
         const result = await BackupService.performRealDatabaseBackup(serverId);
@@ -76,6 +77,7 @@ class BackupCronService {
         duration = result.duration;
         size = result.size;
         filename = result.filename;
+        backupError = result.error || null;
       } else {
         // Randomly determine if backup succeeds (80% success rate)
         const isSuccess = Math.random() > 0.2;
@@ -98,8 +100,8 @@ class BackupCronService {
       // Save to database
       await backup.save();
 
-      // Check backup status and trigger alerts if needed (only emails for
-      // CRITICAL failures/late backups)
+      // Records/updates the Alert for the dashboard (no email — see
+      // sendBackupCompletionEmail below, the single email for this event).
       try {
         await BackupAlertService.checkBackupAndAlert(backup, server);
       } catch (error) {
@@ -107,9 +109,30 @@ class BackupCronService {
       }
 
       // Send a completion notification email for THIS backup regardless of
-      // status (SUCCESS or FAILED), as required for the daily midnight report.
+      // status (SUCCESS or FAILED), as required for the daily midnight
+      // report — the single email per backup (see checkBackupAndAlert
+      // above, which no longer sends one of its own for the same event).
       try {
         const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+
+        // Last successful backup strictly before today, for the
+        // day-over-day size/duration comparison — excluded by _id too in
+        // case this cron run's own backup already has an earlier-seeming
+        // date (clock skew, retried run).
+        let previousBackup = null;
+        try {
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          previousBackup = await Backup.findOne({
+            serverId: server.server_id,
+            status: 'OK',
+            date: { $lt: startOfToday },
+            _id: { $ne: backup._id }
+          }).sort({ date: -1 });
+        } catch (error) {
+          console.error('[Backup Cron] Error looking up previous backup for comparison:', error);
+        }
+
         const emailResult = await EmailService.sendBackupCompletionEmail({
           serverId: server.server_id,
           serverName: server.name,
@@ -118,7 +141,9 @@ class BackupCronService {
           duration: backup.duration,
           timestamp: backup.date,
           adminEmail,
-          errorMessage: backup.status === 'FAILED' ? 'Backup process did not complete successfully' : null
+          errorMessage: backup.status === 'FAILED' ? (backupError || 'Backup process did not complete successfully') : null,
+          previousSize: previousBackup ? previousBackup.size : null,
+          previousDuration: previousBackup ? previousBackup.duration : null
         });
         console.log(`[Backup Cron] Completion email result for ${server.server_id}:`, emailResult);
       } catch (error) {

@@ -439,22 +439,35 @@ function calculateHealthScore(statusBreakdown, total) {
   return Math.round(score);
 }
 
+const BACKUP_DB_NAME = 'monitoring';
+// Collections that can never legitimately be empty in a running instance —
+// a dump missing either of these, or finding them empty, is a dump of the
+// wrong database (or a broken connection), not a real backup. This is
+// exactly the check that was missing for the two months a leftover local
+// "mongodb" container quietly got dumped instead of Atlas: every dump
+// "succeeded" and contained nothing but an empty admin.system.version.
+const REQUIRED_NONEMPTY_COLLECTIONS = ['servers', 'metrics'];
+const MIN_DUMP_SIZE_BYTES = 5 * 1024; // blunt backstop alongside the per-collection checks
+const BACKUP_RETENTION_COUNT = parseInt(process.env.BACKUP_RETENTION_COUNT, 10) || 7;
+
 /**
- * Perform a real MongoDB database backup
- * Runs mongodump inside the mongodb Docker container
- * Writes the gzipped archive file to /app/backups/
- * 
+ * Perform a real MongoDB database backup via `mongodump --uri`, against
+ * whatever MONGODB_URI actually points to (MongoDB Atlas in production).
+ * A prior version ran `docker exec mongodb mongodump` first — dumping
+ * whatever local container happened to be named "mongodb" on the VPS's
+ * Docker daemon, never Atlas. That's gone: this is the only path now, and
+ * its output is validated (see validateDump) before ever being reported
+ * as a success, since an exit code of 0 alone was exactly what made the
+ * two months of empty dumps look fine.
+ *
  * @param {string} serverId - The server ID (e.g. 'default-server')
- * @returns {Promise<Object>} - Result of the backup operation { status: 'OK'|'FAILED', size: Number, duration: Number, filename: String|null }
+ * @returns {Promise<Object>} - { status: 'OK'|'FAILED', size: Number, duration: Number, filename: String|null, error?: String }
  */
 async function performRealDatabaseBackup(serverId) {
   const startTime = Date.now();
   console.log(`[Backup Service] Starting real database backup for ${serverId}...`);
-  
-  // Define backup directory and filename
+
   const backupDir = '/app/backups';
-  
-  // Ensure the directory exists
   if (!fs.existsSync(backupDir)) {
     try {
       fs.mkdirSync(backupDir, { recursive: true });
@@ -462,164 +475,164 @@ async function performRealDatabaseBackup(serverId) {
       console.error(`[Backup Service] Error creating backup directory ${backupDir}:`, mkdirError);
     }
   }
-  
+
   const now = new Date();
   const dateStr = now.toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-  const filename = `backup-${serverId}-${dateStr}.gz`;
-  const filepath = path.join(backupDir, filename);
-  
-  return new Promise((resolve) => {
-    const fileStream = fs.createWriteStream(filepath);
-    
-    // Command: docker exec mongodb mongodump --archive --gzip
-    // This dumps all databases inside the mongodb container to stdout
-    console.log(`[Backup Service] Running: docker exec mongodb mongodump --archive --gzip`);
-    const child = spawn('docker', ['exec', 'mongodb', 'mongodump', '--archive', '--gzip']);
-    
-    child.stdout.pipe(fileStream);
-    
+  const dirname = `backup-${serverId}-${dateStr}`;
+  const outDir = path.join(backupDir, dirname);
+
+  // Dumped as a directory (--out), not a single --archive --gzip stream —
+  // that's what makes it possible to check the actual content below
+  // (one .bson file per collection) without a second tool to unpack an
+  // opaque archive first.
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/pfe-monitoring';
+
+  const result = await new Promise((resolve) => {
+    console.log(`[Backup Service] Running: mongodump --uri <redacted> --db=${BACKUP_DB_NAME} --out=${outDir}`);
+    const child = spawn('mongodump', ['--uri', uri, '--db', BACKUP_DB_NAME, '--out', outDir]);
+
     let stderrData = '';
     child.stderr.on('data', (data) => {
       stderrData += data.toString();
     });
-    
+
     child.on('close', (code) => {
-      const duration = Math.round((Date.now() - startTime) / 1000); // duration in seconds
-      
-      if (code === 0) {
-        // Success! Get actual file size
-        try {
-          const stats = fs.statSync(filepath);
-          const sizeInMB = parseFloat((stats.size / (1024 * 1024)).toFixed(2));
-          console.log(`[Backup Service] Real database backup completed successfully. File: ${filename}, Size: ${sizeInMB}MB, Duration: ${duration}s`);
-          resolve({
-            status: 'OK',
-            size: sizeInMB,
-            duration: duration,
-            filename: filename,
-            filepath: filepath
-          });
-        } catch (statError) {
-          console.error(`[Backup Service] Error reading backup file stats:`, statError);
-          resolve({
-            status: 'OK',
-            size: 0,
-            duration: duration,
-            filename: filename,
-            filepath: filepath
-          });
-        }
-      } else {
-        // Failed
-        console.error(`[Backup Service] docker exec mongodump failed with exit code ${code}`);
+      const duration = Math.round((Date.now() - startTime) / 1000);
+
+      if (code !== 0) {
+        console.error(`[Backup Service] mongodump exited with code ${code}`);
         console.error(`[Backup Service] stderr: ${stderrData}`);
-        
-        // Clean up empty or corrupted file if it exists
-        if (fs.existsSync(filepath)) {
-          try {
-            fs.unlinkSync(filepath);
-          } catch (unlinkError) {
-            console.error(`[Backup Service] Error deleting failed backup file:`, unlinkError);
-          }
+        if (fs.existsSync(outDir)) {
+          try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
         }
-        
-        // Fallback: try local mongodump if docker isn't available
-        tryLocalMongodump(serverId, filepath, startTime)
-          .then(resolve)
-          .catch((localError) => {
-            console.error(`[Backup Service] Local backup fallback failed:`, localError.message);
-            resolve({
-              status: 'FAILED',
-              size: 0,
-              duration: duration,
-              filename: null,
-              error: `Docker error: ${stderrData.trim() || 'Exit code ' + code}. Local error: ${localError.message}`
-            });
-          });
+        resolve({
+          status: 'FAILED',
+          size: 0,
+          duration,
+          filename: null,
+          error: `mongodump exited with code ${code}: ${stderrData.trim() || 'no stderr output'}`
+        });
+        return;
       }
+
+      // Exit code 0 is not proof of a real backup by itself — verify what
+      // actually landed on disk before trusting it.
+      const validation = validateDump(outDir);
+      if (!validation.valid) {
+        console.error(`[Backup Service] Dump validation failed: ${validation.reason}`);
+        resolve({
+          status: 'FAILED',
+          size: 0,
+          duration,
+          filename: null,
+          error: `Dump créé mais validation échouée : ${validation.reason}`
+        });
+        return;
+      }
+
+      const sizeInMB = parseFloat((validation.totalBytes / (1024 * 1024)).toFixed(2));
+      console.log(`[Backup Service] Backup validated OK. Dir: ${dirname}, Size: ${sizeInMB}MB, Duration: ${duration}s`);
+      resolve({
+        status: 'OK',
+        size: sizeInMB,
+        duration,
+        filename: dirname,
+        filepath: outDir
+      });
     });
-    
+
     child.on('error', (err) => {
       const duration = Math.round((Date.now() - startTime) / 1000);
-      console.error(`[Backup Service] Failed to start backup process:`, err);
-      
-      // Clean up file stream
-      fileStream.end();
-      if (fs.existsSync(filepath)) {
-        try {
-          fs.unlinkSync(filepath);
-        } catch (unlinkError) {
-          console.error(`[Backup Service] Error deleting failed backup file:`, unlinkError);
-        }
+      console.error('[Backup Service] Failed to start mongodump:', err);
+      if (fs.existsSync(outDir)) {
+        try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
       }
-      
-      // Try local fallback
-      tryLocalMongodump(serverId, filepath, startTime)
-        .then(resolve)
-        .catch((localError) => {
-          resolve({
-            status: 'FAILED',
-            size: 0,
-            duration: duration,
-            filename: null,
-            error: `Process start error: ${err.message}. Local error: ${localError.message}`
-          });
-        });
+      resolve({
+        status: 'FAILED',
+        size: 0,
+        duration,
+        filename: null,
+        error: `Impossible de démarrer mongodump : ${err.message}`
+      });
     });
   });
+
+  if (result.status === 'OK') {
+    pruneOldBackupDirs(backupDir, serverId, BACKUP_RETENTION_COUNT);
+  }
+
+  return result;
 }
 
 /**
- * Fallback to local mongodump if docker exec fails
+ * Checks that a dump directory actually contains the real database rather
+ * than just trusting mongodump's exit code. Returns
+ * { valid, reason, totalBytes }.
  */
-function tryLocalMongodump(serverId, filepath, startTime) {
-  return new Promise((resolve, reject) => {
-    console.log(`[Backup Service] Attempting local mongodump fallback...`);
-    const fileStream = fs.createWriteStream(filepath);
-    
-    const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/pfe-monitoring';
-    const child = spawn('mongodump', ['--uri', uri, '--archive', '--gzip']);
-    
-    child.stdout.pipe(fileStream);
-    
-    child.on('close', (code) => {
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      if (code === 0) {
-        try {
-          const stats = fs.statSync(filepath);
-          const sizeInMB = parseFloat((stats.size / (1024 * 1024)).toFixed(2));
-          console.log(`[Backup Service] Local backup fallback completed successfully. Size: ${sizeInMB}MB`);
-          resolve({
-            status: 'OK',
-            size: sizeInMB,
-            duration: duration,
-            filename: path.basename(filepath),
-            filepath: filepath
-          });
-        } catch (e) {
-          resolve({
-            status: 'OK',
-            size: 0,
-            duration: duration,
-            filename: path.basename(filepath),
-            filepath: filepath
-          });
-        }
-      } else {
-        if (fs.existsSync(filepath)) {
-          try { fs.unlinkSync(filepath); } catch (e) {}
-        }
-        reject(new Error(`mongodump failed with exit code ${code}`));
-      }
-    });
-    
-    child.on('error', (err) => {
-      if (fs.existsSync(filepath)) {
-        try { fs.unlinkSync(filepath); } catch (e) {}
-      }
-      reject(err);
-    });
-  });
+function validateDump(outDir) {
+  const dbDir = path.join(outDir, BACKUP_DB_NAME);
+
+  if (!fs.existsSync(dbDir)) {
+    return { valid: false, reason: `répertoire "${BACKUP_DB_NAME}" absent du dump`, totalBytes: 0 };
+  }
+
+  for (const collection of REQUIRED_NONEMPTY_COLLECTIONS) {
+    const bsonPath = path.join(dbDir, `${collection}.bson`);
+    if (!fs.existsSync(bsonPath)) {
+      return { valid: false, reason: `collection "${collection}" absente du dump`, totalBytes: 0 };
+    }
+    if (fs.statSync(bsonPath).size === 0) {
+      return { valid: false, reason: `collection "${collection}" vide dans le dump`, totalBytes: 0 };
+    }
+  }
+
+  const totalBytes = getDirectorySize(outDir);
+  if (totalBytes < MIN_DUMP_SIZE_BYTES) {
+    return {
+      valid: false,
+      reason: `taille totale du dump (${totalBytes} octets) sous le seuil minimal (${MIN_DUMP_SIZE_BYTES} octets)`,
+      totalBytes
+    };
+  }
+
+  return { valid: true, reason: null, totalBytes };
+}
+
+function getDirectorySize(dirPath) {
+  let total = 0;
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+    const entryPath = path.join(dirPath, entry.name);
+    total += entry.isDirectory() ? getDirectorySize(entryPath) : fs.statSync(entryPath).size;
+  }
+  return total;
+}
+
+/**
+ * Keeps only the `keepCount` most recent backup directories for a server
+ * on disk, deleting older ones. Dumping as an uncompressed directory
+ * (needed to validate content directly, see performRealDatabaseBackup)
+ * uses noticeably more space than the old single gzipped archive — this
+ * is what keeps that bounded. Configurable via BACKUP_RETENTION_COUNT,
+ * defaults to 7. Only runs after a validated success, and only prunes
+ * files on disk — the Backup documents in MongoDB (dashboard history) are
+ * untouched.
+ */
+function pruneOldBackupDirs(backupDir, serverId, keepCount) {
+  try {
+    const prefix = `backup-${serverId}-`;
+    const entries = fs.readdirSync(backupDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith(prefix))
+      .sort((a, b) => b.name.localeCompare(a.name)); // ISO-like timestamp in the name sorts chronologically
+
+    const toDelete = entries.slice(keepCount);
+    for (const entry of toDelete) {
+      const entryPath = path.join(backupDir, entry.name);
+      fs.rmSync(entryPath, { recursive: true, force: true });
+      console.log(`[Backup Service] Pruned old backup: ${entry.name}`);
+    }
+  } catch (error) {
+    console.error('[Backup Service] Error pruning old backups:', error);
+  }
 }
 
 module.exports = {

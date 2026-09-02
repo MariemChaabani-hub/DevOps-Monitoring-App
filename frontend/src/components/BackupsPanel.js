@@ -116,7 +116,11 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
    * Format file size
    */
   const formatSize = (sizeInMB) => {
-    if (!sizeInMB) return 'Indisponible';
+    // A genuine 0 MB (e.g. a real backup that failed before writing any
+    // data) is a real value, not missing data — only null/undefined mean
+    // "we don't actually know". `!sizeInMB` was treating both the same
+    // way, hiding a 0-byte failed backup behind "Indisponible".
+    if (sizeInMB === null || sizeInMB === undefined) return 'Indisponible';
     if (sizeInMB >= 1024) {
       return (sizeInMB / 1024).toFixed(2) + ' GB';
     }
@@ -127,7 +131,7 @@ const BackupsPanel = ({ servers = [], selectedServerId = null, onClearFilter = n
    * Format duration in seconds
    */
   const formatDuration = (seconds) => {
-    if (!seconds) return 'Indisponible';
+    if (seconds === null || seconds === undefined) return 'Indisponible';
     if (seconds < 60) {
       return seconds + 's';
     }
