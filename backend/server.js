@@ -264,6 +264,9 @@ app.post('/metrics', async (req, res) => {
       ram_percent: metric.ram_percent,
       disk_percent: metric.disk_percent
     };
+    if (metric.collection_interval) {
+      server.collection_interval = metric.collection_interval;
+    }
     // Detected services list sent by the agent (systemctl-based detection).
     // Two agent generations coexist in the field:
     //   - updated agent: `services` is an array of {name, active_state,

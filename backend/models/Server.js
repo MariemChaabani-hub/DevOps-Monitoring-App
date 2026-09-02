@@ -77,6 +77,13 @@ const ServerSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Seconds between this agent's metric collection cycles, as it reports
+  // itself — used to size the OFFLINE-detection threshold to this agent's
+  // actual cadence instead of one hardcoded value for every agent.
+  collection_interval: {
+    type: Number,
+    default: null
+  },
   created_at: {
     type: Date,
     default: Date.now

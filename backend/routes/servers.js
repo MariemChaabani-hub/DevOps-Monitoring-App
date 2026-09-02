@@ -71,10 +71,10 @@ router.get('/*server_id/alerts', async (req, res) => {
 
     const Alert = require('../models/Alert');
     const alerts = await Alert.find({
-      server_id,
+      serverId: server_id,
       status
     })
-      .sort({ created_at: -1 })
+      .sort({ timestamp: -1 })
       .limit(50)
       .exec();
 

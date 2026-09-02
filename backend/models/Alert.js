@@ -57,10 +57,31 @@ const AlertSchema = new mongoose.Schema({
   emailSentAt: {
     type: Date,
     default: null
+  },
+  // Set when an admin acknowledges the alert (status -> ACKNOWLEDGED).
+  // Previously the bulk-acknowledge route wrote acknowledged_at/
+  // acknowledged_by — snake_case fields that don't exist on this schema —
+  // silently dropped under strict:true, same bug family as resolved_at.
+  acknowledgedAt: {
+    type: Date,
+    default: null
+  },
+  acknowledgedBy: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true,
-  collection: 'alerts'
+  collection: 'alerts',
+  // Throw instead of silently dropping a write to an unknown field name
+  // (document saves/updates) or silently ignoring an unknown filter key
+  // (queries) — this is the third bug of this exact shape found in this
+  // collection alone (resolved_at, server_id/created_at, and the
+  // acknowledged_at/acknowledged_by above); a loud error at the call site
+  // is far cheaper to fix than a query that silently returns nothing or a
+  // write that silently loses data.
+  strict: 'throw',
+  strictQuery: 'throw'
 });
 
 // Index for efficient lookups

@@ -249,11 +249,11 @@ const AlertsPanel = ({ alerts = [], onAcknowledge, onResolve, loading = false, o
                         {new Date(alert.timestamp).toLocaleString()}
                       </p>
                     </div>
-                    {alert.acknowledged_at && (
+                    {alert.acknowledgedAt && (
                       <div>
                         <p className={`${colors.text} opacity-75`}>Prise en compte :</p>
                         <p className={`${colors.text} opacity-60`}>
-                          {new Date(alert.acknowledged_at).toLocaleString()}
+                          {new Date(alert.acknowledgedAt).toLocaleString()}
                         </p>
                       </div>
                     )}

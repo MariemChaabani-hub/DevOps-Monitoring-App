@@ -16,15 +16,11 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
   const ram = latestMetric.ram_percent || 0;
   const disk = latestMetric.disk_percent || 0;
 
-  // Determine status based on CPU or if server is offline
-  let status = 'OK';
-  if (cpu === 0 && ram === 0 && disk === 0) {
-    status = 'OFFLINE'; // Serveur arrêté
-  } else if (cpu > 90) {
-    status = 'CRITICAL';
-  } else if (cpu > 70) {
-    status = 'WARNING';
-  }
+  // Status comes from the backend (StatusService.calculateStatus, evaluated
+  // over CPU, RAM *and* disk against the real thresholds) — never
+  // recomputed here. A local CPU-only recalculation previously showed "OK"
+  // for a server at 95% disk usage as long as its CPU was low.
+  const status = latestMetric.status || 'OK';
 
   // Calculate progress bar colors
   const getCpuColor = (value) => {

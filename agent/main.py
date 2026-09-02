@@ -231,6 +231,11 @@ class MonitoringAgent:
                 location=self.server_location
             )
             self.collection_count += 1
+            # So the backend can size its OFFLINE-detection threshold to
+            # this agent's actual cadence instead of a single hardcoded
+            # value — a 30s threshold against a 5-minute interval declares
+            # every agent permanently offline.
+            metrics['collection_interval'] = self.collection_interval
             logger.debug(f"[OK] Collected {len(metrics)} fields")
             if metrics.get('services') is None:
                 logger.warning("[WARN] Service detection unavailable this cycle (see collector logs above)")

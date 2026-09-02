@@ -4,6 +4,7 @@
 
 const Alert = require('../models/Alert');
 const Server = require('../models/Server');
+const Metric = require('../models/Metric');
 const EmailService = require('./emailService');
 
 class AlertService {
@@ -179,7 +180,9 @@ class AlertService {
       return await Alert.findByIdAndUpdate(
         alertId,
         {
-          status: 'ACKNOWLEDGED'
+          status: 'ACKNOWLEDGED',
+          acknowledgedAt: new Date(),
+          acknowledgedBy
         },
         { new: true }
       );
@@ -190,35 +193,84 @@ class AlertService {
   }
 
   /**
-   * Check for agent offline (no metrics received in X seconds)
+   * Check for agent offline (no metrics received recently).
+   *
+   * The threshold is sized per server from the interval that agent itself
+   * reports (server.collection_interval, set from metric.collection_interval
+   * — see server.js's /metrics handler), with a margin, rather than one
+   * hardcoded value for every agent: a fixed 30s threshold against agents
+   * collecting every 5 minutes declared every one of them permanently
+   * offline, since 30s always elapses well before the next real metric.
    */
   static async checkAgentConnectivity() {
     try {
-      const OFFLINE_THRESHOLD = 30000; // 30 seconds
+      // Used only for a server whose agent hasn't reported its own
+      // interval yet (older agent, or no metric received at all so far) —
+      // matches the interval the agent's config.json currently ships with
+      // in this fleet, not the 5s figure documented elsewhere as a
+      // lighter-weight target.
+      const DEFAULT_COLLECTION_INTERVAL_SECONDS = 300;
+      const OFFLINE_MARGIN_MULTIPLIER = 2.5;
       const now = Date.now();
 
       const servers = await Server.find({ is_active: true });
 
       for (const server of servers) {
-        const lastMetricTime = server.last_metric_time 
-          ? server.last_metric_time.getTime() 
-          : 0;
+        const intervalSeconds = server.collection_interval || DEFAULT_COLLECTION_INTERVAL_SECONDS;
+        const offlineThresholdMs = intervalSeconds * OFFLINE_MARGIN_MULTIPLIER * 1000;
 
-        if (now - lastMetricTime > OFFLINE_THRESHOLD) {
+        const lastMetricTime = server.last_metric_time
+          ? server.last_metric_time.getTime()
+          : 0;
+        const elapsedMs = now - lastMetricTime;
+
+        if (elapsedMs > offlineThresholdMs) {
           // Server is offline
           if (server.status !== 'OFFLINE') {
             server.status = 'OFFLINE';
             await server.save();
 
-            // Create alert
+            const offlineSeconds = Math.round(elapsedMs / 1000);
+
+            // Dashboard cards read Metric.status (see ServerCard.js), not
+            // Server.status — with no new metric arriving while the agent
+            // is down, the card would otherwise keep showing whatever
+            // status its last real metric had, forever. Insert a synthetic
+            // OFFLINE metric, exactly like the manual shutdown action
+            // already does (remoteActions.js), so the dashboard reflects
+            // this the same way it reflects a metrics-based status.
+            try {
+              await new Metric({
+                server_id: server.server_id,
+                server_name: server.name,
+                cpu_percent: 0,
+                ram_percent: 0,
+                disk_percent: 0,
+                network_in: 0,
+                network_out: 0,
+                uptime: 0,
+                status: 'OFFLINE',
+                location: server.location || 'Unknown',
+                timestamp: new Date()
+              }).save();
+            } catch (metricError) {
+              console.error('[AlertService] Error creating OFFLINE metric:', metricError);
+            }
+
+            // serverId here must be server.server_id (the app-level id used
+            // everywhere else — servers.js, dashboard filters, resolution
+            // by /metrics), not server._id — a prior version used the
+            // Mongo ObjectId here, which meant these alerts could never be
+            // resolved through the normal serverId-based flow and were
+            // effectively invisible outside a raw, unfiltered query.
             await this.createOrUpdateAlert({
-              serverId: server._id.toString(),
+              serverId: server.server_id,
               type: 'CRITICAL',
               severity: 'CRITICAL',
               metric: 'agent_connectivity',
-              threshold: 30,
-              value: Math.round((now - lastMetricTime) / 1000),
-              message: `Agent hors ligne depuis ${Math.round((now - lastMetricTime) / 1000)} secondes`
+              threshold: intervalSeconds * OFFLINE_MARGIN_MULTIPLIER,
+              value: offlineSeconds,
+              message: `Agent hors ligne depuis ${offlineSeconds} secondes`
             }, server);
           }
         }

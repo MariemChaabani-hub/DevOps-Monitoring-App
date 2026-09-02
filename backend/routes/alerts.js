@@ -80,7 +80,7 @@ router.put('/:alert_id/resolve', async (req, res) => {
       alert_id,
       {
         status: 'RESOLVED',
-        resolved_at: new Date()
+        resolvedAt: new Date()
       },
       { new: true }
     );
@@ -114,10 +114,10 @@ router.get('/stats/summary', async (req, res) => {
       if (alert.severity === 'CRITICAL') stats.critical_count++;
       if (alert.severity === 'WARNING') stats.warning_count++;
 
-      if (!stats.by_server[alert.server_id]) {
-        stats.by_server[alert.server_id] = 0;
+      if (!stats.by_server[alert.serverId]) {
+        stats.by_server[alert.serverId] = 0;
       }
-      stats.by_server[alert.server_id]++;
+      stats.by_server[alert.serverId]++;
     }
 
     const acknowledged = await Alert.find({ status: 'ACKNOWLEDGED' });
@@ -143,8 +143,8 @@ router.post('/bulk/acknowledge', async (req, res) => {
       { _id: { $in: alert_ids } },
       {
         status: 'ACKNOWLEDGED',
-        acknowledged_at: new Date(),
-        acknowledged_by
+        acknowledgedAt: new Date(),
+        acknowledgedBy: acknowledged_by
       }
     );
 

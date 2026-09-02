@@ -105,13 +105,31 @@ class EmailService {
 
       // Metric-specific wording (this used to be hardcoded to "CPU" no
       // matter which metric actually triggered the alert, which produced
-      // misleading "CPU OVERLOAD" emails for RAM/Disk alerts).
+      // misleading "CPU OVERLOAD" emails for RAM/Disk alerts — and, worse,
+      // for agent_connectivity alerts: a "39 secondes hors ligne" alert
+      // rendered as "Utilisation CPU à 39%", pointing the admin at the
+      // wrong problem entirely).
       const METRIC_INFO = {
-        cpu_percent: { label: 'CPU', resourceName: 'ressources CPU' },
-        ram_percent: { label: 'RAM', resourceName: 'ressources RAM' },
-        disk_percent: { label: 'Disque', resourceName: 'espace disque' }
+        cpu_percent: { label: 'CPU', resourceName: 'ressources CPU', unit: '%', valueLabel: 'Utilisation CPU' },
+        ram_percent: { label: 'RAM', resourceName: 'ressources RAM', unit: '%', valueLabel: 'Utilisation RAM' },
+        disk_percent: { label: 'Disque', resourceName: 'espace disque', unit: '%', valueLabel: 'Utilisation disque' },
+        agent_connectivity: { label: 'Connectivité', resourceName: 'la connexion de l\'agent', unit: 's', valueLabel: 'Durée hors ligne' },
+        backup_status: { label: 'Sauvegarde', resourceName: 'l\'état de la sauvegarde', unit: '', valueLabel: 'État' }
       };
-      const metricInfo = METRIC_INFO[metric] || METRIC_INFO.cpu_percent;
+      // No silent fallback to CPU for an unmapped metric — a mislabeled
+      // alert is worse than an ugly one, it sends the admin to fix the
+      // wrong thing. Log it so a genuinely new metric type gets noticed
+      // and added above, instead of quietly mislabeled forever.
+      let metricInfo = METRIC_INFO[metric];
+      if (!metricInfo) {
+        console.warn(`[Email] Métrique inconnue "${metric}" reçue par sendAlertEmail — libellé générique utilisé (pas de repli silencieux sur "CPU").`);
+        metricInfo = {
+          label: metric || 'Métrique inconnue',
+          resourceName: `la métrique "${metric}"`,
+          unit: '',
+          valueLabel: metric || 'Valeur'
+        };
+      }
 
       const isCritical = type === 'CRITICAL';
       const SEVERITY_INFO = isCritical
@@ -139,7 +157,7 @@ class EmailService {
         console.log(`[Email] ${SEVERITY_INFO.severityLabel} Alert - DEMO MODE (real email disabled):`);
         console.log(`  To: ${adminEmail}`);
         console.log(`  Server: ${displayName}`);
-        console.log(`  Metric: ${metric} = ${value}% (threshold: ${threshold}%)`);
+        console.log(`  Metric: ${metric} = ${value}${metricInfo.unit} (threshold: ${threshold}${metricInfo.unit})`);
         console.log(`  Time: ${timeStr}`);
         return { success: true, mode: 'demo', type };
       }
@@ -151,7 +169,7 @@ class EmailService {
         attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
-            ${this._header(SEVERITY_INFO.color, SEVERITY_INFO.headerTitle, `${metricInfo.label} à ${value}% — seuil dépassé`)}
+            ${this._header(SEVERITY_INFO.color, SEVERITY_INFO.headerTitle, `${metricInfo.label} à ${value}${metricInfo.unit} — seuil dépassé`)}
 
             <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
               <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
@@ -160,12 +178,12 @@ class EmailService {
                   <td style="padding: 8px 0; font-weight: 600;">${displayName}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px 0; color: #777;">Utilisation ${metricInfo.label}</td>
-                  <td style="padding: 8px 0; font-weight: 600; color: ${SEVERITY_INFO.color};">${value}%</td>
+                  <td style="padding: 8px 0; color: #777;">${metricInfo.valueLabel}</td>
+                  <td style="padding: 8px 0; font-weight: 600; color: ${SEVERITY_INFO.color};">${value}${metricInfo.unit}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">${SEVERITY_INFO.thresholdLabel}</td>
-                  <td style="padding: 8px 0;">${threshold}%</td>
+                  <td style="padding: 8px 0;">${threshold}${metricInfo.unit}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">Date</td>
