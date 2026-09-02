@@ -1,7 +1,7 @@
 {
  "server": {
     "id": "default-server",
-    "name": "Monitoring Agent",
+    "name": "default-server",
     "location": "Local PC"
   },
   "api": {

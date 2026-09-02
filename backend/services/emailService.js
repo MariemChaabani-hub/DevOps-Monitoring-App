@@ -1,11 +1,22 @@
 /**
  * Email Notification Service
- * Sends CRITICAL alert email notifications via nodemailer (Gmail SMTP)
+ * Sends alert/notification emails via one of two transports, chosen
+ * automatically at startup:
+ *   1. Resend HTTP API (RESEND_API_KEY set) — HTTPS on port 443, works from
+ *      hosts where outbound SMTP (25/465/587) is blocked (e.g. this app's
+ *      OVH VPS, confirmed via direct port tests: 1777 "Connection timeout"
+ *      failures in 48h with SMTP).
+ *   2. nodemailer / Gmail SMTP (EMAIL_USER + EMAIL_PASS set) — kept for
+ *      environments where outbound SMTP isn't blocked.
+ * Falls back to DEMO MODE (logs to console only) if neither is configured.
  *
  * Configuration:
- *   - EMAIL_USER: Gmail address (e.g., user@gmail.com)
- *   - EMAIL_PASS: Gmail App Password (16 character password from Google Account)
- *   - Runs in DEMO MODE if credentials not configured
+ *   - RESEND_API_KEY: Resend API key — when set, takes priority over SMTP
+ *   - RESEND_FROM: sender address for Resend (default: onboarding@resend.dev,
+ *     Resend's no-verification-required test address — it can only send to
+ *     the Resend account's own email, which is enough for a single admin)
+ *   - EMAIL_USER / EMAIL_PASS: Gmail address + App Password, used only when
+ *     RESEND_API_KEY is not set
  */
 
 const nodemailer = require('nodemailer');
@@ -14,15 +25,24 @@ const path = require('path');
 
 const LOGO_PATH = path.join(__dirname, '..', '..', 'frontend', 'public', 'logo-clediss.jpg');
 const LOGO_CID = 'clediss-logo';
+const RESEND_API_URL = 'https://api.resend.com/emails';
+const DEFAULT_RESEND_FROM = 'onboarding@resend.dev';
 
 class EmailService {
   constructor() {
-    // Initialize transporter with Gmail SMTP
-    // For Gmail: must use App Password, NOT regular account password
-    // See: https://myaccount.google.com/apppasswords
-    this.isConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+    this.resendApiKey = process.env.RESEND_API_KEY || null;
 
-    if (this.isConfigured) {
+    if (this.resendApiKey) {
+      this.mode = 'resend';
+      this.isConfigured = true;
+      this.fromAddress = process.env.RESEND_FROM || DEFAULT_RESEND_FROM;
+      console.log(`[Email] Resend API mode ENABLED (sending from ${this.fromAddress})`);
+    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      this.mode = 'smtp';
+      this.isConfigured = true;
+      this.fromAddress = process.env.EMAIL_USER;
+      // For Gmail: must use App Password, NOT regular account password
+      // See: https://myaccount.google.com/apppasswords
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -30,11 +50,80 @@ class EmailService {
           pass: process.env.EMAIL_PASS
         }
       });
-      console.log(`[Email] Real email mode ENABLED (sending from ${process.env.EMAIL_USER})`);
+      console.log(`[Email] Real email mode ENABLED (SMTP, sending from ${this.fromAddress})`);
     } else {
+      this.mode = 'demo';
+      this.isConfigured = false;
       this.transporter = null;
-      console.log(`[Email] Demo mode - email credentials not configured in .env`);
+      console.log(`[Email] Demo mode - no email transport configured (set RESEND_API_KEY or EMAIL_USER/EMAIL_PASS)`);
     }
+  }
+
+  /**
+   * Single send entry point used by every method below instead of calling
+   * a transport directly — keeps transport selection in one place, so
+   * every email (alert, backup, test, audit) automatically follows
+   * whichever mode the constructor picked. Returns { messageId } like
+   * nodemailer's sendMail(), regardless of which transport actually sent it.
+   */
+  async _sendMail(mailOptions) {
+    if (this.mode === 'resend') {
+      return this._sendViaResend(mailOptions);
+    }
+    return this.transporter.sendMail(mailOptions);
+  }
+
+  /**
+   * Sends via the Resend HTTP API. Translates nodemailer-style
+   * mailOptions (the shape every method below already builds) into
+   * Resend's payload, including attachments — {filename, path, cid} (the
+   * shape _logoAttachment() returns) becomes base64 content plus
+   * content_id, so the existing `cid:clediss-logo` reference in the HTML
+   * templates keeps working unchanged.
+   */
+  async _sendViaResend(mailOptions) {
+    const payload = {
+      from: mailOptions.from || this.fromAddress,
+      to: Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to],
+      subject: mailOptions.subject,
+      html: mailOptions.html
+    };
+
+    if (mailOptions.attachments && mailOptions.attachments.length > 0) {
+      payload.attachments = mailOptions.attachments.map((att) => {
+        const content = att.path
+          ? fs.readFileSync(att.path).toString('base64')
+          : att.content;
+        const resendAttachment = { filename: att.filename, content };
+        if (att.cid) {
+          resendAttachment.content_id = att.cid;
+        }
+        return resendAttachment;
+      });
+    }
+
+    const response = await fetch(RESEND_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.resendApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    // A non-2xx must never fail silently — log the response body (Resend
+    // returns a JSON error with a specific reason: bad API key, unverified
+    // sender, rate limit, etc.) so a broken send is visible in the logs
+    // instead of just... not showing up in the inbox.
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '(unreadable response body)');
+      console.error(`[Email] ✗ Resend API returned ${response.status} ${response.statusText}`);
+      console.error(`  Response body: ${errorBody}`);
+      throw new Error(`Resend API error ${response.status}: ${errorBody}`);
+    }
+
+    const responseBody = await response.json();
+    return { messageId: responseBody.id };
   }
 
   /**
@@ -163,7 +252,7 @@ class EmailService {
       }
 
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: this.fromAddress,
         to: adminEmail,
         subject: `${SEVERITY_INFO.emoji} ${SEVERITY_INFO.subjectTag} ${metricInfo.label} — ${displayName}`,
         attachments: this._logoAttachment(),
@@ -201,7 +290,7 @@ class EmailService {
         `
       };
 
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await this._sendMail(mailOptions);
       console.log(`[Email] ✓ ${SEVERITY_INFO.severityLabel} alert email sent successfully`);
       console.log(`  To: ${adminEmail} | Server: ${displayName} | Message ID: ${info.messageId}`);
       return { success: true, mode: 'real', type, messageId: info.messageId };
@@ -258,7 +347,7 @@ class EmailService {
       const statusText = isLate ? 'manquante ou en retard' : 'échouée';
 
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: this.fromAddress,
         to: adminEmail,
         subject: `🚨 [CRITIQUE] Sauvegarde ${statusText} — ${displayName}`,
         attachments: this._logoAttachment(),
@@ -305,7 +394,7 @@ class EmailService {
         `
       };
 
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await this._sendMail(mailOptions);
       console.log(`[Email] ✓ CRITICAL backup alert email sent successfully`);
       console.log(`  To: ${adminEmail} | Server: ${displayName} | Status: ${statusText} | Message ID: ${info.messageId}`);
       return { success: true, mode: 'real', severity: 'CRITICAL', messageId: info.messageId };
@@ -354,7 +443,7 @@ class EmailService {
       }
 
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: this.fromAddress,
         to: adminEmail,
         subject: `[Sauvegarde — ${statusLabel}] ${displayName}`,
         attachments: this._logoAttachment(),
@@ -404,7 +493,7 @@ class EmailService {
         `
       };
 
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await this._sendMail(mailOptions);
       console.log(`[Email] ✓ Backup completion email sent successfully`);
       console.log(`  To: ${adminEmail} | Server: ${displayName} | Status: ${statusLabel} | Message ID: ${info.messageId}`);
       return { success: true, mode: 'real', status: statusLabel, messageId: info.messageId };
@@ -417,17 +506,17 @@ class EmailService {
   }
 
   /**
-   * Send test email to verify Gmail SMTP configuration
+   * Send test email to verify the active email transport (Resend or SMTP)
    */
   async sendTestEmail(testEmail) {
     try {
       if (!this.isConfigured) {
-        console.warn('[Email] Cannot send test email - EMAIL_USER and EMAIL_PASS not configured in .env');
-        return { success: false, error: 'Email credentials not configured' };
+        console.warn('[Email] Cannot send test email - neither RESEND_API_KEY nor EMAIL_USER/EMAIL_PASS is configured in .env');
+        return { success: false, error: 'Email transport not configured' };
       }
 
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: this.fromAddress,
         to: testEmail,
         subject: 'CLEDISS Monitor — Email de Test',
         attachments: this._logoAttachment(),
@@ -442,7 +531,7 @@ class EmailService {
               <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 16px;">
                 <tr>
                   <td style="padding: 8px 0; color: #777; width: 40%;">Adresse d'envoi</td>
-                  <td style="padding: 8px 0;">${process.env.EMAIL_USER}</td>
+                  <td style="padding: 8px 0;">${this.fromAddress}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #777;">Horodatage</td>
@@ -454,7 +543,7 @@ class EmailService {
         `
       };
 
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await this._sendMail(mailOptions);
       console.log(`[Email] ✓ Test email sent successfully to ${testEmail}`);
       console.log(`  Message ID: ${info.messageId}`);
       return { success: true, messageId: info.messageId };
@@ -503,7 +592,7 @@ class EmailService {
       }
 
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: this.fromAddress,
         to: admin_email,
         subject: `🔐 [AUDIT] ${action} — ${displayName}`,
         attachments: this._logoAttachment(),
@@ -555,7 +644,7 @@ class EmailService {
         `
       };
 
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await this._sendMail(mailOptions);
       console.log(`[Email] ✓ Audit notification email sent successfully`);
       console.log(`  To: ${admin_email} | Action: ${action} | Result: ${result} | Message ID: ${info.messageId}`);
       return { success: true, mode: 'real', type: 'AUDIT', messageId: info.messageId };
