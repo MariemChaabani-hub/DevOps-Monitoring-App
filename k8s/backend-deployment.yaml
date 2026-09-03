@@ -16,6 +16,7 @@ spec:
       containers:
       - name: backend
         image: mariemchaabani/monitoring-backend:43
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
         envFrom:
@@ -40,5 +41,5 @@ spec:
   ports:
   - port: 3000
     targetPort: 3000
-  nodePort: 30300
+    nodePort: 30300
   type: NodePort
