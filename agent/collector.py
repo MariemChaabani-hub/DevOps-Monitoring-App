@@ -6,7 +6,7 @@ import json
 import logging
 import subprocess
 import psutil
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # detection behavior, payload shape) — sent with every metrics payload so a
 # server running a stale agent is visible from the dashboard instead of
 # looking like a detection bug (see collect()/AGENT_VERSION usage below).
-AGENT_VERSION = "1.3.1"
+AGENT_VERSION = "1.3.2"
 
 # Unit-name prefixes that are always host/OS infrastructure, never an
 # application Clediss cares about monitoring individually. Broad on
@@ -157,7 +157,14 @@ class SystemCollector:
             'uptime_seconds': uptime_seconds,
             'uptime_hours': uptime_hours,
             'uptime_days': uptime_days,
-            'boot_time': datetime.fromtimestamp(psutil.boot_time()).isoformat(),
+            # tz=timezone.utc: without it, this is a naive local-time string
+            # with no offset — the backend's Date parser then interprets it
+            # per its OWN host timezone, not the agent's. A metric sent by
+            # an agent in UTC+2 and ingested by a backend process running in
+            # UTC (or vice versa) ends up shifted by the difference, which
+            # can push a fresh metric outside the dashboard's "last 60
+            # minutes" window.
+            'boot_time': datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc).isoformat(),
         }
     
     @staticmethod
@@ -174,7 +181,11 @@ class SystemCollector:
             Dictionary with all collected metrics
         """
         metrics = {
-            'timestamp': datetime.now().isoformat(),
+            # tz=timezone.utc for the same reason as boot_time below: an
+            # offset-less timestamp is interpreted per the *backend's* local
+            # timezone on ingestion, not the agent's, which is wrong
+            # whenever the two differ.
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'cpu_percent': SystemCollector.get_cpu_percent(),
             'ram_percent': SystemCollector.get_ram_percent(),
             'disk_percent': SystemCollector.get_disk_percent(),
