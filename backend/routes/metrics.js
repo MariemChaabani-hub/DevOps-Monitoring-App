@@ -12,10 +12,21 @@ const Server = require('../models/Server');
 // Returns latest metric from each server
 router.get('/latest', async (req, res) => {
   try {
-    // Get the latest metric for each server using aggregation
+    // Get the latest metric for each server using aggregation.
+    // Ordered by createdAt (server-assigned insertion time), not the
+    // agent-supplied `timestamp` — an agent's clock can be skewed or
+    // wrong (see the timezone bug fixed earlier), and a synthetic metric
+    // written by a remote action (e.g. the OFFLINE metric from /shutdown)
+    // is timestamped by the backend itself. If a stale/skewed agent
+    // timestamp sorted after that synthetic metric's timestamp, the real,
+    // newer metric would never overtake it here, leaving the dashboard
+    // stuck showing the synthetic status forever. createdAt is always
+    // monotonically increasing regardless of what any agent's clock says,
+    // so the most recently *received* metric — real or synthetic — always
+    // wins, which is what "latest" should mean for display purposes.
     const latestMetrics = await Metric.aggregate([
       {
-        $sort: { timestamp: -1 }
+        $sort: { createdAt: -1 }
       },
       {
         $group: {
@@ -154,8 +165,10 @@ router.get('/server/:serverId/latest', async (req, res) => {
   try {
     const { serverId } = req.params;
 
+    // Sorted by createdAt, not the agent-supplied timestamp — see the
+    // comment on GET /latest above for why.
     const latestMetric = await Metric.findOne({ server_id: serverId })
-      .sort({ timestamp: -1 })
+      .sort({ createdAt: -1 })
       .exec();
 
     if (!latestMetric) {

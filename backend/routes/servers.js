@@ -16,8 +16,11 @@ router.get('/', async (req, res) => {
 
     const serversWithStatus = await Promise.all(
       servers.map(async (server) => {
+        // Sorted by createdAt (server-side receipt order), not the
+        // agent-supplied timestamp — see the matching comment in
+        // routes/metrics.js's GET /latest for why.
         const latestMetric = await Metric.findOne({ server_id: server.server_id })
-          .sort({ timestamp: -1 })
+          .sort({ createdAt: -1 })
           .exec();
 
         return {
@@ -99,7 +102,7 @@ router.get('/*server_id', async (req, res) => {
     }
 
     const latestMetric = await Metric.findOne({ server_id })
-      .sort({ timestamp: -1 })
+      .sort({ createdAt: -1 })
       .exec();
 
     res.json({

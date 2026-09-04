@@ -471,9 +471,22 @@ router.post('/:server_id/restart',
         // Exécuter la commande de redémarrage
         const result = await ssh.execCommand(`sleep ${delay} && sudo reboot`);
 
-        console.log(`[Remote Action] Commande reboot envoyée - stdout: ${result.stdout}, stderr: ${result.stderr}`);
+        console.log(`[Remote Action] Commande reboot envoyée - stdout: ${result.stdout}, stderr: ${result.stderr}, code: ${result.code}`);
 
         await ssh.dispose();
+
+        // `reboot` returns control (exit code) before the machine actually
+        // goes down, so a non-zero code here is a real, checkable signal
+        // that the command was rejected (sudo denied, bad syntax, etc.) —
+        // not just noise to log and ignore.
+        if (result.code !== 0) {
+          const failResult = {
+            success: false,
+            error: `La commande de redémarrage a échoué (code ${result.code}): ${result.stderr || result.stdout || 'aucune sortie'}`
+          };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(500).json(failResult);
+        }
 
         // Créer des métriques OK pour refléter le redémarrage du serveur
         try {
@@ -567,57 +580,118 @@ router.post('/:server_id/shutdown',
         return res.status(404).json({ error: 'Serveur non trouvé' });
       }
 
-      console.log(`[Remote Action] Arrêt du serveur ${server_id}`);
-      console.log(`[Remote Action] Raison: ${reason}`);
-
-      const result = {
-        success: true,
-        message: `Serveur ${server.name} arrêté avec succès`,
-        server_id: server_id,
-        server_name: server.name,
-        reason: reason,
-        delay_seconds: delay,
-        timestamp: new Date()
-      };
-
-      // Créer des métriques OFFLINE pour refléter l'arrêt du serveur
-      try {
-        const offlineMetric = new Metric({
-          server_id: server_id,
-          server_name: server.name,
-          cpu_percent: 0.0,        // CPU à zéro = serveur arrêté
-          ram_percent: 0.0,        // RAM à zéro
-          disk_percent: 0.0,        // Disk à zéro
-          network_in: 0.0,        // Network à zéro
-          network_out: 0.0,
-          uptime: 0,               // Uptime à zéro
-          timestamp: new Date(),
-          status: 'OFFLINE',       // État OFFLINE
-          location: server.location || 'Unknown'
+      // Same requirement as /restart — no SSH credentials, no action.
+      if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
+        return res.status(400).json({
+          error: 'Informations SSH incomplètes',
+          message: 'Le serveur doit avoir ip_address, ssh_username et ssh_password configurés',
+          missing_fields: {
+            ip_address: !server.ip_address,
+            ssh_username: !server.ssh_username,
+            ssh_password: !server.ssh_password
+          }
         });
-
-        await offlineMetric.save();
-
-        // Mettre à jour le statut du serveur
-        server.status = 'OFFLINE';
-        server.is_active = false;
-        server.current_metrics = {
-          cpu_percent: 0.0,
-          ram_percent: 0.0,
-          disk_percent: 0.0
-        };
-        server.last_metric_time = new Date();
-        await server.save();
-
-        console.log(`[Remote Action] Métriques OFFLINE créées pour ${server_id}`);
-      } catch (metricError) {
-        console.error('[Remote Action] Erreur création métriques OFFLINE:', metricError);
       }
 
-      // Logger l'action
-      await logAuditAction(req.auditData, result);
+      console.log(`[Remote Action] Arrêt du serveur ${server_id} via SSH`);
+      console.log(`[Remote Action] Raison: ${reason}`);
 
-      res.json(result);
+      // Once the machine is actually off, nothing can confirm that over
+      // SSH anymore — "verified" here can only mean the SSH connection
+      // succeeded and the shutdown command was accepted (exit code) before
+      // the link goes down, not that the machine is confirmed off
+      // afterward. That's the ceiling of what's checkable for this action.
+      const ssh = new NodeSSH();
+
+      try {
+        await ssh.connect({
+          host: server.ip_address,
+          username: server.ssh_username,
+          password: server.ssh_password,
+          port: server.ssh_port || 22
+        });
+
+        console.log(`[Remote Action] Connexion SSH établie avec ${server.ip_address}`);
+
+        // Like `reboot`, `shutdown -h now` hands off and returns an exit
+        // code before the machine actually halts, over the still-live SSH
+        // session — so this is a real, checkable result, not a guess.
+        const sshResult = await ssh.execCommand(`sleep ${delay} && sudo shutdown -h now`);
+        console.log(`[Remote Action] Commande shutdown envoyée - stdout: ${sshResult.stdout}, stderr: ${sshResult.stderr}, code: ${sshResult.code}`);
+
+        await ssh.dispose();
+
+        if (sshResult.code !== 0) {
+          const failResult = {
+            success: false,
+            error: `La commande d'arrêt a échoué (code ${sshResult.code}): ${sshResult.stderr || sshResult.stdout || 'aucune sortie'}`
+          };
+          await logAuditAction(req.auditData, failResult);
+          return res.status(500).json(failResult);
+        }
+
+        const result = {
+          success: true,
+          message: `Serveur ${server.name} arrêté avec succès`,
+          server_id: server_id,
+          server_name: server.name,
+          reason: reason,
+          delay_seconds: delay,
+          timestamp: new Date()
+        };
+
+        // Only now — after a verified exit code 0 — reflect OFFLINE. If the
+        // machine doesn't actually go down (or comes back up), the next
+        // real metric it sends corrects this automatically (see
+        // routes/metrics.js's GET /latest: "latest" is picked by receipt
+        // order, not by the agent's own clock, so a genuine new metric
+        // always overtakes this synthetic one).
+        try {
+          const offlineMetric = new Metric({
+            server_id: server_id,
+            server_name: server.name,
+            cpu_percent: 0.0,
+            ram_percent: 0.0,
+            disk_percent: 0.0,
+            network_in: 0.0,
+            network_out: 0.0,
+            uptime: 0,
+            timestamp: new Date(),
+            status: 'OFFLINE',
+            location: server.location || 'Unknown'
+          });
+
+          await offlineMetric.save();
+
+          server.status = 'OFFLINE';
+          server.is_active = false;
+          server.current_metrics = {
+            cpu_percent: 0.0,
+            ram_percent: 0.0,
+            disk_percent: 0.0
+          };
+          server.last_metric_time = new Date();
+          await server.save();
+
+          console.log(`[Remote Action] Métriques OFFLINE créées pour ${server_id}`);
+        } catch (metricError) {
+          console.error('[Remote Action] Erreur création métriques OFFLINE:', metricError);
+        }
+
+        await logAuditAction(req.auditData, result);
+        res.json(result);
+
+      } catch (sshError) {
+        console.error('[Remote Action] Erreur SSH lors de l\'arrêt:', sshError);
+        const auditResult = {
+          success: false,
+          error: `Erreur SSH: ${sshError.message}`
+        };
+        await logAuditAction(req.auditData, auditResult);
+        res.status(500).json({
+          error: `Impossible d'arrêter le serveur via SSH: ${sshError.message}`
+        });
+      }
 
     } catch (error) {
       console.error('[Remote Action] Erreur lors de l\'arrêt du serveur:', error);

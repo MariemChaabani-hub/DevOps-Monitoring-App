@@ -259,6 +259,12 @@ app.post('/metrics', async (req, res) => {
     // Update server's last metric time
     server.last_metric_time = new Date();
     server.status = statusResult.status;
+    // A real metric is definitive proof the agent is alive — reset
+    // is_active unconditionally, so a shutdown that didn't actually work
+    // (or a server coming back up) doesn't stay permanently excluded from
+    // GET /api/servers and checkAgentConnectivity, both filtered on this
+    // flag. Only /shutdown ever sets it false; this is what corrects it.
+    server.is_active = true;
     server.current_metrics = {
       cpu_percent: metric.cpu_percent,
       ram_percent: metric.ram_percent,
