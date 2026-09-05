@@ -51,18 +51,24 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation(); // Empêcher la sélection du serveur
+                if (status === 'OFFLINE') return;
                 onRemoteActions(server.serverId);
               }}
+              disabled={status === 'OFFLINE'}
               className={`px-3 py-1 text-white text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                status === 'CRITICAL' 
-                  ? 'bg-red-600 hover:bg-red-700' 
+                status === 'OFFLINE'
+                  ? 'bg-gray-700 opacity-50 cursor-not-allowed'
+                  : status === 'CRITICAL'
+                  ? 'bg-red-600 hover:bg-red-700'
                   : status === 'WARNING'
                   ? 'bg-yellow-600 hover:bg-yellow-700'
-                  : status === 'OFFLINE'
-                  ? 'bg-gray-600 hover:bg-gray-700'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
-              title={`Actions à distance - Serveur ${status}`}
+              title={
+                status === 'OFFLINE'
+                  ? 'Serveur hors ligne — SSH injoignable tant qu\'aucune métrique n\'est reçue'
+                  : `Actions à distance - Serveur ${status}`
+              }
             >
               Actions
             </button>

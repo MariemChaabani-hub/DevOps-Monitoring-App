@@ -7,7 +7,7 @@ import React from 'react';
 import RemoteActionsPanel from './RemoteActionsPanel';
 import './RemoteActionsModal.css';
 
-const RemoteActionsModal = ({ isOpen, onClose, selectedServerId, servers = [] }) => {
+const RemoteActionsModal = ({ isOpen, onClose, selectedServerId, servers = [], onServerActionSuccess }) => {
   if (!isOpen) return null;
 
   // Filtrer les serveurs pour trouver celui sélectionné
@@ -41,9 +41,10 @@ const RemoteActionsModal = ({ isOpen, onClose, selectedServerId, servers = [] })
 
         {/* Modal Content */}
         <div className="modal-content">
-          <RemoteActionsPanel 
-            servers={servers} 
+          <RemoteActionsPanel
+            servers={servers}
             preselectedServerId={selectedServerId}
+            onServerActionSuccess={onServerActionSuccess}
           />
         </div>
 

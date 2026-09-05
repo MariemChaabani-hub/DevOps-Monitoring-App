@@ -346,6 +346,7 @@ const Dashboard = () => {
         onClose={closeRemoteActionsModal}
         selectedServerId={remoteActionsServerId}
         servers={latestMetrics}
+        onServerActionSuccess={fetchLatestMetrics}
       />
 
       {/* Alert History Modal */}

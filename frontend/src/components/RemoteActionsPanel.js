@@ -23,7 +23,7 @@ const QUICK_FILTERS = [
 // quick filter, so filtering down to fewer than this never shows a button.
 const SERVICES_PAGE_SIZE = 6;
 
-const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
+const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerActionSuccess }) => {
   const [selectedServer, setSelectedServer] = useState('');
   // State granulaire: clé = "serviceName_action" (ex: "pm2_restart", "nginx_stop")
   const [actionStates, setActionStates] = useState({});
@@ -114,6 +114,13 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   const selectedServerObj = servers.find(
     (s) => (s.server_id || s.serverId) === selectedServer
   );
+  // Every action here goes over SSH to the server's own IP — when it's
+  // genuinely OFFLINE (agent not sending, confirmed by the backend, not
+  // just a stale UI state) that connection can only fail or hang. Disabled
+  // rather than left clickable-but-doomed; re-enabled automatically as
+  // soon as a real metric flips the status back (same `servers` prop that
+  // already drives the rest of this panel).
+  const isServerOffline = selectedServerObj?.status === 'OFFLINE';
   // server.services is normalized backend-side to {name, active_state,
   // sub_state, description, is_system} objects — but a document not yet
   // refreshed by a new-format agent, or an agent that was never updated,
@@ -265,6 +272,17 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
         await fetchServicesStatus(currentServer);
         await fetchAuditLogs(currentServer);
 
+        // Server-level actions (restart/shutdown) change server.status /
+        // write a synthetic Metric in the same request that already
+        // returned — the dashboard card behind this modal reads its own
+        // `servers` state (components/Dashboard.js's latestMetrics), which
+        // has no way to know that happened. Tell the parent to refetch
+        // right away instead of leaving the card stale until the next
+        // manual "Actualiser" click.
+        if (serviceName === 'server' && onServerActionSuccess) {
+          onServerActionSuccess();
+        }
+
         // Automatically refresh service status every 3s for 15s (5 times total)
         let checkCount = 0;
         statusIntervalRef.current = setInterval(async () => {
@@ -372,7 +390,13 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
   // Effect: Fetch services status when server changes
   useEffect(() => {
     if (selectedServer) {
-      fetchServicesStatus(selectedServer);
+      // Skip the SSH-backed status check entirely for a server already
+      // known OFFLINE — it would just hang until each per-service SSH
+      // connection times out, for a result (nothing reachable) that's
+      // already known up front.
+      if (!isServerOffline) {
+        fetchServicesStatus(selectedServer);
+      }
       fetchAuditLogs(selectedServer);
       setShowSystemServices(false);
       setQuickFilter('all');
@@ -427,9 +451,9 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
     // 403).
     const statusKnown = !!live;
     const criticality = getServiceCriticality(serviceName);
-    const canStop = statusKnown && criticality === 'none';
-    const canRestart = statusKnown && criticality !== 'locked';
-    const canStart = statusKnown && getEffectiveSubState(detectedService) !== 'running';
+    const canStop = !isServerOffline && statusKnown && criticality === 'none';
+    const canRestart = !isServerOffline && statusKnown && criticality !== 'locked';
+    const canStart = !isServerOffline && statusKnown && getEffectiveSubState(detectedService) !== 'running';
 
     return (
       <div key={serviceName} className="service-card">
@@ -448,7 +472,10 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           </p>
         </div>
         <div className="service-action-buttons">
-          {!statusKnown && (
+          {isServerOffline && (
+            <span className="service-loading-note">Serveur hors ligne</span>
+          )}
+          {!isServerOffline && !statusKnown && (
             <span className="service-loading-note">Chargement...</span>
           )}
           {canStart && (
@@ -579,6 +606,11 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
           {/* Server Actions */}
           <div className="server-actions-section">
             <h3>Actions sur le Serveur</h3>
+            {isServerOffline && (
+              <p className="services-detection-warning">
+                Serveur hors ligne — SSH nécessite que la machine soit déjà démarrée. Redémarrez-la manuellement pour retrouver les actions à distance.
+              </p>
+            )}
             <div className="server-actions-grid">
               <div className="server-action-card">
                 <h4>Redémarrage du Serveur</h4>
@@ -590,8 +622,9 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                     'restart',
                     { delay: 30 }
                   )}
-                  disabled={isActionLoading('server', 'restart')}
+                  disabled={isServerOffline || isActionLoading('server', 'restart')}
                   className="action-btn restart-server-btn"
+                  title={isServerOffline ? 'Serveur hors ligne — SSH injoignable' : undefined}
                 >
                   {isActionLoading('server', 'restart') ? 'Redémarrage du serveur...' : 'Redémarrer le Serveur'}
                 </button>
@@ -607,8 +640,9 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '' }) => {
                     'shutdown',
                     { delay: 60, reason: 'Maintenance planifiée' }
                   )}
-                  disabled={isActionLoading('server', 'shutdown')}
+                  disabled={isServerOffline || isActionLoading('server', 'shutdown')}
                   className="action-btn shutdown-btn"
+                  title={isServerOffline ? 'Serveur hors ligne — SSH injoignable' : undefined}
                 >
                   {isActionLoading('server', 'shutdown') ? 'Arrêt du serveur...' : 'Arrêter le Serveur'}
                 </button>

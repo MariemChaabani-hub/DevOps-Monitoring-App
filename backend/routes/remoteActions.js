@@ -613,15 +613,29 @@ router.post('/:server_id/shutdown',
 
         console.log(`[Remote Action] Connexion SSH établie avec ${server.ip_address}`);
 
-        // Like `reboot`, `shutdown -h now` hands off and returns an exit
-        // code before the machine actually halts, over the still-live SSH
-        // session — so this is a real, checkable result, not a guess.
+        // `shutdown -h now` normally hands off and returns an exit code
+        // before the machine actually halts, like `reboot` — but unlike a
+        // reboot, the machine going down for good can also kill the SSH
+        // session before that exit status makes it back, since there's no
+        // "session survives the sleep, dies only once true" a moment
+        // later. node-ssh resolves (never rejects) in that case, with
+        // code: null — a real, non-null exit code (1, 127, ...) means the
+        // remote shell ran and reported a genuine failure with nothing
+        // interrupting the connection; code: null means the session was
+        // cut immediately after the command was accepted, which is
+        // exactly what a real shutdown looks like from here. Treated as a
+        // probable success, not a failure — see the plan discussed above.
         const sshResult = await ssh.execCommand(`sleep ${delay} && sudo shutdown -h now`);
         console.log(`[Remote Action] Commande shutdown envoyée - stdout: ${sshResult.stdout}, stderr: ${sshResult.stderr}, code: ${sshResult.code}`);
 
-        await ssh.dispose();
+        try {
+          await ssh.dispose();
+        } catch (disposeError) {
+          // Expected when the session already died with the machine —
+          // not a reason to treat the action as failed.
+        }
 
-        if (sshResult.code !== 0) {
+        if (sshResult.code !== 0 && sshResult.code !== null) {
           const failResult = {
             success: false,
             error: `La commande d'arrêt a échoué (code ${sshResult.code}): ${sshResult.stderr || sshResult.stdout || 'aucune sortie'}`
@@ -630,9 +644,13 @@ router.post('/:server_id/shutdown',
           return res.status(500).json(failResult);
         }
 
+        const confirmed = sshResult.code === 0;
         const result = {
           success: true,
-          message: `Serveur ${server.name} arrêté avec succès`,
+          confirmed,
+          message: confirmed
+            ? `Serveur ${server.name} arrêté avec succès`
+            : `Serveur ${server.name} arrêté avec succès (connexion perdue après envoi — non confirmé explicitement)`,
           server_id: server_id,
           server_name: server.name,
           reason: reason,
@@ -640,8 +658,9 @@ router.post('/:server_id/shutdown',
           timestamp: new Date()
         };
 
-        // Only now — after a verified exit code 0 — reflect OFFLINE. If the
-        // machine doesn't actually go down (or comes back up), the next
+        // Only now — after a confirmed or probable success — reflect
+        // OFFLINE. If the machine doesn't actually go down (or comes back
+        // up), the next
         // real metric it sends corrects this automatically (see
         // routes/metrics.js's GET /latest: "latest" is picked by receipt
         // order, not by the agent's own clock, so a genuine new metric

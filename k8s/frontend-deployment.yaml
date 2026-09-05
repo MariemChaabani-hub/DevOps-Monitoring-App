@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: mariemchaabani/monitoring-frontend:43
+        image: mariemchaabani/monitoring-frontend:44
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
