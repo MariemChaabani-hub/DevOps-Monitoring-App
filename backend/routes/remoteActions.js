@@ -770,18 +770,155 @@ router.get('/:server_id/services-status',
       const serviceNames = detectedNames.includes('pm2') ? detectedNames : ['pm2', ...detectedNames];
       const servicesStatus = {};
 
-      for (const svcName of serviceNames) {
-        const verified = await verifyServiceStatus(svcName, server);
-        const criticality = getServiceCriticality(svcName);
-        servicesStatus[svcName] = {
-          status: verified.status,
-          label: verified.label,
-          subState: verified.subState,
-          subStateLabel: verified.subStateLabel,
-          raw: verified.raw,
-          criticality,
-          requiresConfirmation: criticality === 'restart_only'
-        };
+      // One SSH connection and one or two commands for the whole server,
+      // not one connection per service — the previous version called
+      // verifyServiceStatus() (connect + execCommand + dispose) in a
+      // sequential loop, so a host with 140+ detected services paid a full
+      // SSH handshake, 140+ times, one after another, before the modal
+      // could show a single button. That's what "prend beaucoup de temps"
+      // was: dozens of seconds of avoidable connection setup, not slow
+      // commands.
+      if (!server.ip_address || !server.ssh_username || !server.ssh_password) {
+        for (const svcName of serviceNames) {
+          const verified = buildStatusResult('unknown', 'Informations SSH incomplètes');
+          const criticality = getServiceCriticality(svcName);
+          servicesStatus[svcName] = {
+            status: verified.status,
+            label: verified.label,
+            subState: verified.subState,
+            subStateLabel: verified.subStateLabel,
+            raw: verified.raw,
+            criticality,
+            requiresConfirmation: criticality === 'restart_only'
+          };
+        }
+        return res.json({
+          server_id: server_id,
+          server_name: server.name,
+          services: servicesStatus,
+          timestamp: new Date()
+        });
+      }
+
+      const ssh = new NodeSSH();
+      try {
+        try {
+          await ssh.connect({
+            host: server.ip_address,
+            username: server.ssh_username,
+            password: server.ssh_password,
+            port: server.ssh_port || 22
+          });
+        } catch (connectError) {
+          // Same graceful degradation as before this change: a server
+          // that's briefly unreachable still gets a normal response with
+          // every service marked "unknown" and the real error visible in
+          // `raw`, rather than a bare 500 with no per-service detail.
+          for (const svcName of serviceNames) {
+            const verified = buildStatusResult('unknown', `Connexion SSH échouée : ${connectError.message}`);
+            const criticality = getServiceCriticality(svcName);
+            servicesStatus[svcName] = {
+              status: verified.status,
+              label: verified.label,
+              subState: verified.subState,
+              subStateLabel: verified.subStateLabel,
+              raw: verified.raw,
+              criticality,
+              requiresConfirmation: criticality === 'restart_only'
+            };
+          }
+          return res.json({
+            server_id: server_id,
+            server_name: server.name,
+            services: servicesStatus,
+            timestamp: new Date()
+          });
+        }
+
+        // PM2 isn't a systemd unit — checked separately via `pm2 jlist`,
+        // same parsing as before, just over the shared connection.
+        if (serviceNames.includes('pm2')) {
+          let pm2Verified;
+          try {
+            const result = await ssh.execCommand('pm2 jlist');
+            let status = 'unknown';
+            try {
+              const processes = JSON.parse(result.stdout);
+              if (Array.isArray(processes)) {
+                status = processes.some(p => p.pm2_env && p.pm2_env.status === 'online') ? 'active' : 'inactive';
+              }
+            } catch (jsonErr) {
+              if (result.stdout.includes('"status":"online"') || result.stdout.includes("'status': 'online'")) {
+                status = 'active';
+              } else if (result.code === 0) {
+                status = 'inactive';
+              }
+            }
+            const subState = status === 'active' ? 'running' : status === 'inactive' ? 'dead' : 'unknown';
+            pm2Verified = buildStatusResult(status, result.stdout || result.stderr, subState);
+          } catch (err) {
+            pm2Verified = buildStatusResult('unknown', err.message || 'verification failed');
+          }
+          const criticality = getServiceCriticality('pm2');
+          servicesStatus.pm2 = {
+            status: pm2Verified.status,
+            label: pm2Verified.label,
+            subState: pm2Verified.subState,
+            subStateLabel: pm2Verified.subStateLabel,
+            raw: pm2Verified.raw,
+            criticality,
+            requiresConfirmation: criticality === 'restart_only'
+          };
+        }
+
+        // Everything else in one `systemctl show` call for every unit at
+        // once — systemd answers this from its own already-loaded state
+        // (no per-unit network round-trip on the target), so batching
+        // dozens of units together is still a single, fast local query.
+        // Without --value, output is grouped as Property=Value pairs per
+        // unit, separated by a blank line, in the same order the unit
+        // names were given — that's what makes it possible to map each
+        // block back to the service it belongs to.
+        const nonPm2Names = serviceNames.filter((n) => n !== 'pm2');
+        if (nonPm2Names.length > 0) {
+          const resolvedNames = nonPm2Names.map((n) => SERVICE_NAME_ALIASES[n] || n);
+          const result = await ssh.execCommand(
+            `systemctl show ${resolvedNames.join(' ')} --property=ActiveState --property=SubState`
+          );
+          const blocks = (result.stdout || '').split(/\n\s*\n/);
+
+          nonPm2Names.forEach((svcName, i) => {
+            const block = blocks[i] || '';
+            const props = {};
+            block.split('\n').forEach((line) => {
+              const eq = line.indexOf('=');
+              if (eq === -1) return;
+              props[line.slice(0, eq).trim()] = line.slice(eq + 1).trim().toLowerCase();
+            });
+            const rawActiveState = props.ActiveState || '';
+            const rawSubState = props.SubState || '';
+            const status = ['active', 'inactive', 'failed'].includes(rawActiveState) ? rawActiveState : 'unknown';
+            const subState = ['running', 'exited', 'dead', 'failed'].includes(rawSubState) ? rawSubState : 'unknown';
+            const verified = buildStatusResult(status, block, subState);
+            const criticality = getServiceCriticality(svcName);
+            servicesStatus[svcName] = {
+              status: verified.status,
+              label: verified.label,
+              subState: verified.subState,
+              subStateLabel: verified.subStateLabel,
+              raw: verified.raw,
+              criticality,
+              requiresConfirmation: criticality === 'restart_only'
+            };
+          });
+        }
+      } finally {
+        try {
+          await ssh.dispose();
+        } catch (disposeError) {
+          // Connection may already be gone if the host became unreachable
+          // mid-check — nothing left to clean up in that case.
+        }
       }
 
       res.json({
