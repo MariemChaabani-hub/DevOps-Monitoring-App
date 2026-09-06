@@ -78,7 +78,10 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   };
 
   const formatSize = (sizeInMB) => {
-    if (!sizeInMB) return 'Indisponible';
+    // A genuine 0 MB (failed backup, nothing written) is a real value —
+    // only null/undefined mean the data is actually missing. Same fix as
+    // BackupsPanel.js; this modal had the old bug independently.
+    if (sizeInMB === null || sizeInMB === undefined) return 'Indisponible';
     if (sizeInMB >= 1024) {
       return (sizeInMB / 1024).toFixed(2) + ' GB';
     }
@@ -86,7 +89,7 @@ const BackupHistoryModal = ({ isOpen, onClose, serverId, serverName }) => {
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return 'Indisponible';
+    if (seconds === null || seconds === undefined) return 'Indisponible';
     if (seconds < 60) {
       return seconds + 's';
     }

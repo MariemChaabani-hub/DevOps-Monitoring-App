@@ -75,7 +75,9 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
   };
 
   const formatSize = (sizeInMB) => {
-    if (!sizeInMB) return 'Indisponible';
+    // Same fix as BackupsPanel.js/BackupHistoryModal.js — a genuine 0 MB
+    // (failed backup) is a real value, only null/undefined mean missing.
+    if (sizeInMB === null || sizeInMB === undefined) return 'Indisponible';
     if (sizeInMB >= 1024) {
       return (sizeInMB / 1024).toFixed(2) + ' GB';
     }
@@ -83,7 +85,7 @@ const BackupHistory = ({ serverId, serverName, onClose }) => {
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return 'Indisponible';
+    if (seconds === null || seconds === undefined) return 'Indisponible';
     if (seconds < 60) {
       return seconds + 's';
     }
