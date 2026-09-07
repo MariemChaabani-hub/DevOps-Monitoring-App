@@ -109,7 +109,10 @@ const buildServiceActionCommand = (serviceName, action) => {
 // 'locked': stop AND restart forbidden outright. systemd-journald/dbus/
 // systemd-logind/polkit are core OS plumbing; monitoring-agent is this
 // very agent — stopping it makes the server vanish from the dashboard
-// with no way left to restart it from the app.
+// with no way left to restart it from the app. k3s is the most critical
+// of all: it's the Kubernetes engine running backend/frontend/mongodb
+// themselves on the OVH VPS — stopping it takes down this entire
+// application at once, not just the one server being managed.
 //
 // 'restart_only': stop forbidden, restart allowed but only with an
 // explicit confirmation (see CONFIRMABLE_ACTION below) — ssh/sshd and the
@@ -117,7 +120,7 @@ const buildServiceActionCommand = (serviceName, action) => {
 // change) but a stop can cut off access to the machine entirely.
 // ============================================================
 const LOCKED_SERVICES = new Set([
-  'systemd-journald', 'dbus', 'systemd-logind', 'polkit', 'monitoring-agent'
+  'systemd-journald', 'dbus', 'systemd-logind', 'polkit', 'monitoring-agent', 'k3s'
 ]);
 
 const RESTART_ONLY_SERVICES = new Set([
