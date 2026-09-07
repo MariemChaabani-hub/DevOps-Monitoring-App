@@ -11,6 +11,8 @@ const BackupAlertService = require('./backupAlertService');
 const BackupService = require('./backupService');
 const EmailService = require('./emailService');
 
+const { GLOBAL_CONFIG_SERVER_ID } = BackupService;
+
 class BackupCronService {
   /**
    * Initialize the backup cron job
@@ -42,10 +44,23 @@ class BackupCronService {
 
       console.log(`[Backup Cron] Processing ${servers.length} servers`);
 
-      // Process backup for each server
-      const backupResults = await Promise.all(
-        servers.map(server => this.simulateServerBackup(server))
-      );
+      // users/thresholds have no server ownership — backed up once here,
+      // not duplicated inside every server's own backup. Routed through
+      // simulateServerBackup like any other server so it gets the exact
+      // same Backup document / alert / completion email handling; a
+      // synthetic id is enough since nothing about that path actually
+      // requires a real Server document (see the isGlobalConfig branch
+      // inside simulateServerBackup).
+      const globalConfigServer = {
+        server_id: GLOBAL_CONFIG_SERVER_ID,
+        name: 'Configuration globale (utilisateurs, seuils)'
+      };
+
+      // Process backup for each server, plus the global config backup
+      const backupResults = await Promise.all([
+        ...servers.map(server => this.simulateServerBackup(server)),
+        this.simulateServerBackup(globalConfigServer)
+      ]);
 
       // Count results
       const successful = backupResults.filter(r => r.status === 'OK').length;
@@ -65,12 +80,22 @@ class BackupCronService {
   static async simulateServerBackup(server) {
     try {
       const serverId = server.server_id;
-      const isTestServer = serverId.includes('test') || serverId.includes('dashboard-server') || serverId.includes('critical-server');
-      
+      const isGlobalConfig = serverId === GLOBAL_CONFIG_SERVER_ID;
+      const isTestServer = !isGlobalConfig && (
+        serverId.includes('test') || serverId.includes('dashboard-server') || serverId.includes('critical-server')
+      );
+
       let status, duration, size, filename = null;
       let backupError = null;
 
-      if (!isTestServer) {
+      if (isGlobalConfig) {
+        const result = await BackupService.performGlobalConfigBackup();
+        status = result.status;
+        duration = result.duration;
+        size = result.size;
+        filename = result.filename;
+        backupError = result.error || null;
+      } else if (!isTestServer) {
         console.log(`[Backup Cron] Executing real database backup for ${serverId}...`);
         const result = await BackupService.performRealDatabaseBackup(serverId);
         status = result.status;

@@ -440,25 +440,88 @@ function calculateHealthScore(statusBreakdown, total) {
 }
 
 const BACKUP_DB_NAME = 'monitoring';
-// Collections that can never legitimately be empty in a running instance —
-// a dump missing either of these, or finding them empty, is a dump of the
-// wrong database (or a broken connection), not a real backup. This is
-// exactly the check that was missing for the two months a leftover local
-// "mongodb" container quietly got dumped instead of Atlas: every dump
-// "succeeded" and contained nothing but an empty admin.system.version.
+
+// Per-server collections — dumped filtered to just that server's own
+// documents. mongodump's --query only applies to a single --collection at
+// a time (no way to filter several collections differently in one call),
+// so a per-server backup is several mongodump invocations, not one. The
+// filter field is NOT the same across collections — confirmed by reading
+// each schema directly rather than assumed, since this project has real
+// history of server_id/serverId mismatches (see Alert.js vs Metric.js).
+const PER_SERVER_COLLECTIONS = [
+  { name: 'servers', field: 'server_id' },
+  { name: 'metrics', field: 'server_id' },
+  { name: 'alerts', field: 'serverId' },
+  { name: 'backups', field: 'serverId' },
+  { name: 'services', field: 'server_id' },
+  { name: 'auditlogs', field: 'server_id' }
+];
+
+// Collections with no per-server ownership — dumping them from inside
+// every server's own backup would just produce identical copies 3+ times
+// over, the exact duplication problem this rewrite exists to fix. Backed
+// up once per night instead, independently (see performGlobalConfigBackup).
+const GLOBAL_COLLECTIONS = ['users', 'thresholds'];
+const GLOBAL_CONFIG_SERVER_ID = 'global-config';
+
+// Collections that can never legitimately be empty for an actively
+// monitored server — a dump missing either of these, or finding them
+// empty, is a dump of the wrong database (or a broken connection), not a
+// real backup. This is exactly the check that was missing for the two
+// months a leftover local "mongodb" container quietly got dumped instead
+// of Atlas: every dump "succeeded" and contained nothing but an empty
+// admin.system.version. No fixed total-size floor alongside this anymore —
+// a per-server dump legitimately varies a lot in size (a server added
+// yesterday vs. one tracked for months), so a byte-count threshold would
+// either reject a small-but-real server or let through nothing useful;
+// "the collections that must have data, do" is the actual signal.
 const REQUIRED_NONEMPTY_COLLECTIONS = ['servers', 'metrics'];
-const MIN_DUMP_SIZE_BYTES = 5 * 1024; // blunt backstop alongside the per-collection checks
+
 const BACKUP_RETENTION_COUNT = parseInt(process.env.BACKUP_RETENTION_COUNT, 10) || 7;
 
+function ensureBackupDir(backupDir) {
+  if (!fs.existsSync(backupDir)) {
+    try {
+      fs.mkdirSync(backupDir, { recursive: true });
+    } catch (mkdirError) {
+      console.error(`[Backup Service] Error creating backup directory ${backupDir}:`, mkdirError);
+    }
+  }
+}
+
+function timestampSuffix() {
+  return new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
+}
+
+// Runs one mongodump invocation and resolves (never rejects) with its
+// outcome — used for both the per-collection per-server calls and the
+// global config dump, so both share the same "trust nothing but a real
+// exit code" handling.
+function runMongodumpOnce(args) {
+  return new Promise((resolve) => {
+    const child = spawn('mongodump', args);
+    let stderrData = '';
+    child.stderr.on('data', (data) => {
+      stderrData += data.toString();
+    });
+    child.on('close', (code) => resolve({ code, stderr: stderrData }));
+    child.on('error', (err) => resolve({ code: null, stderr: err.message }));
+  });
+}
+
 /**
- * Perform a real MongoDB database backup via `mongodump --uri`, against
- * whatever MONGODB_URI actually points to (MongoDB Atlas in production).
+ * Perform a real, per-server MongoDB backup via `mongodump --uri`, against
+ * whatever MONGODB_URI actually points to (MongoDB Atlas in production) —
+ * filtered so each server's dump contains only documents that belong to
+ * it, not a full copy of every server's data three times over.
+ *
  * A prior version ran `docker exec mongodb mongodump` first — dumping
  * whatever local container happened to be named "mongodb" on the VPS's
- * Docker daemon, never Atlas. That's gone: this is the only path now, and
- * its output is validated (see validateDump) before ever being reported
- * as a success, since an exit code of 0 alone was exactly what made the
- * two months of empty dumps look fine.
+ * Docker daemon, never Atlas. Before that filtering fix, it also dumped
+ * the entire database unfiltered for every server. Both are gone: this is
+ * the only path now, and its output is validated (see validateDump)
+ * before ever being reported as a success, since an exit code of 0 alone
+ * was exactly what made the two months of empty dumps look fine.
  *
  * @param {string} serverId - The server ID (e.g. 'default-server')
  * @returns {Promise<Object>} - { status: 'OK'|'FAILED', size: Number, duration: Number, filename: String|null, error?: String }
@@ -468,104 +531,121 @@ async function performRealDatabaseBackup(serverId) {
   console.log(`[Backup Service] Starting real database backup for ${serverId}...`);
 
   const backupDir = '/app/backups';
-  if (!fs.existsSync(backupDir)) {
-    try {
-      fs.mkdirSync(backupDir, { recursive: true });
-    } catch (mkdirError) {
-      console.error(`[Backup Service] Error creating backup directory ${backupDir}:`, mkdirError);
+  ensureBackupDir(backupDir);
+
+  const dirname = `backup-${serverId}-${timestampSuffix()}`;
+  const outDir = path.join(backupDir, dirname);
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/pfe-monitoring';
+
+  let mongodumpError = null;
+  for (const { name, field } of PER_SERVER_COLLECTIONS) {
+    const query = JSON.stringify({ [field]: serverId });
+    console.log(`[Backup Service] Running: mongodump --uri <redacted> --db=${BACKUP_DB_NAME} --collection=${name} --query=<filtered on ${field}> --out=${outDir}`);
+    const { code, stderr } = await runMongodumpOnce([
+      '--uri', uri,
+      '--db', BACKUP_DB_NAME,
+      '--collection', name,
+      '--query', query,
+      '--out', outDir
+    ]);
+    if (code !== 0) {
+      mongodumpError = `mongodump (${name}) exited with code ${code}: ${stderr.trim() || 'no stderr output'}`;
+      console.error(`[Backup Service] ${mongodumpError}`);
+      break; // a failure here is systemic (auth, binary, network) — the
+              // remaining collections would fail identically, no point
+              // running them just to log the same error five more times.
     }
   }
 
-  const now = new Date();
-  const dateStr = now.toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-  const dirname = `backup-${serverId}-${dateStr}`;
-  const outDir = path.join(backupDir, dirname);
+  const duration = Math.round((Date.now() - startTime) / 1000);
 
-  // Dumped as a directory (--out), not a single --archive --gzip stream —
-  // that's what makes it possible to check the actual content below
-  // (one .bson file per collection) without a second tool to unpack an
-  // opaque archive first.
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/pfe-monitoring';
-
-  const result = await new Promise((resolve) => {
-    console.log(`[Backup Service] Running: mongodump --uri <redacted> --db=${BACKUP_DB_NAME} --out=${outDir}`);
-    const child = spawn('mongodump', ['--uri', uri, '--db', BACKUP_DB_NAME, '--out', outDir]);
-
-    let stderrData = '';
-    child.stderr.on('data', (data) => {
-      stderrData += data.toString();
-    });
-
-    child.on('close', (code) => {
-      const duration = Math.round((Date.now() - startTime) / 1000);
-
-      if (code !== 0) {
-        console.error(`[Backup Service] mongodump exited with code ${code}`);
-        console.error(`[Backup Service] stderr: ${stderrData}`);
-        if (fs.existsSync(outDir)) {
-          try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
-        }
-        resolve({
-          status: 'FAILED',
-          size: 0,
-          duration,
-          filename: null,
-          error: `mongodump exited with code ${code}: ${stderrData.trim() || 'no stderr output'}`
-        });
-        return;
-      }
-
-      // Exit code 0 is not proof of a real backup by itself — verify what
-      // actually landed on disk before trusting it.
-      const validation = validateDump(outDir);
-      if (!validation.valid) {
-        console.error(`[Backup Service] Dump validation failed: ${validation.reason}`);
-        resolve({
-          status: 'FAILED',
-          size: 0,
-          duration,
-          filename: null,
-          error: `Dump créé mais validation échouée : ${validation.reason}`
-        });
-        return;
-      }
-
-      const sizeInMB = parseFloat((validation.totalBytes / (1024 * 1024)).toFixed(2));
-      console.log(`[Backup Service] Backup validated OK. Dir: ${dirname}, Size: ${sizeInMB}MB, Duration: ${duration}s`);
-      resolve({
-        status: 'OK',
-        size: sizeInMB,
-        duration,
-        filename: dirname,
-        filepath: outDir
-      });
-    });
-
-    child.on('error', (err) => {
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      console.error('[Backup Service] Failed to start mongodump:', err);
-      if (fs.existsSync(outDir)) {
-        try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
-      }
-      resolve({
-        status: 'FAILED',
-        size: 0,
-        duration,
-        filename: null,
-        error: `Impossible de démarrer mongodump : ${err.message}`
-      });
-    });
-  });
-
-  if (result.status === 'OK') {
-    pruneOldBackupDirs(backupDir, serverId, BACKUP_RETENTION_COUNT);
+  if (mongodumpError) {
+    if (fs.existsSync(outDir)) {
+      try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
+    }
+    return { status: 'FAILED', size: 0, duration, filename: null, error: mongodumpError };
   }
 
-  return result;
+  // Exit code 0 is not proof of a real backup by itself — verify what
+  // actually landed on disk before trusting it.
+  const validation = validateDump(outDir);
+  if (!validation.valid) {
+    console.error(`[Backup Service] Dump validation failed: ${validation.reason}`);
+    return {
+      status: 'FAILED',
+      size: 0,
+      duration,
+      filename: null,
+      error: `Dump créé mais validation échouée : ${validation.reason}`
+    };
+  }
+
+  const sizeInMB = parseFloat((validation.totalBytes / (1024 * 1024)).toFixed(2));
+  console.log(`[Backup Service] Backup validated OK. Dir: ${dirname}, Size: ${sizeInMB}MB, Duration: ${duration}s`);
+  pruneOldBackupDirs(backupDir, serverId, BACKUP_RETENTION_COUNT);
+  return { status: 'OK', size: sizeInMB, duration, filename: dirname, filepath: outDir };
 }
 
 /**
- * Checks that a dump directory actually contains the real database rather
+ * Backs up the collections with no per-server ownership (users,
+ * thresholds) once per night, in full, independently of the per-server
+ * loop above. Recorded as its own Backup document (serverId:
+ * GLOBAL_CONFIG_SERVER_ID) so a failure here goes through the exact same
+ * alert/email path as any other backup — global config nobody looks at
+ * day-to-day is exactly the kind of thing that goes silently stale
+ * otherwise, and this project has already paid for one "silent failure"
+ * lesson this week.
+ *
+ * @returns {Promise<Object>} - same shape as performRealDatabaseBackup
+ */
+async function performGlobalConfigBackup() {
+  const startTime = Date.now();
+  console.log('[Backup Service] Starting global config backup (users, thresholds)...');
+
+  const backupDir = '/app/backups';
+  ensureBackupDir(backupDir);
+
+  const dirname = `backup-${GLOBAL_CONFIG_SERVER_ID}-${timestampSuffix()}`;
+  const outDir = path.join(backupDir, dirname);
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/pfe-monitoring';
+
+  let mongodumpError = null;
+  for (const name of GLOBAL_COLLECTIONS) {
+    const { code, stderr } = await runMongodumpOnce([
+      '--uri', uri,
+      '--db', BACKUP_DB_NAME,
+      '--collection', name,
+      '--out', outDir
+    ]);
+    if (code !== 0) {
+      mongodumpError = `mongodump (${name}) exited with code ${code}: ${stderr.trim() || 'no stderr output'}`;
+      console.error(`[Backup Service] ${mongodumpError}`);
+      break;
+    }
+  }
+
+  const duration = Math.round((Date.now() - startTime) / 1000);
+
+  if (mongodumpError) {
+    if (fs.existsSync(outDir)) {
+      try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
+    }
+    return { status: 'FAILED', size: 0, duration, filename: null, error: mongodumpError };
+  }
+
+  // No REQUIRED_NONEMPTY_COLLECTIONS-style check here — `users` legitimately
+  // has just the one seeded admin account and `thresholds` a handful of
+  // rows; "mongodump exited 0 for both collections" is validation enough
+  // for a much smaller, much less critical dataset than the per-server one.
+  const totalBytes = getDirectorySize(outDir);
+  const sizeInMB = parseFloat((totalBytes / (1024 * 1024)).toFixed(2));
+  console.log(`[Backup Service] Global config backup OK. Dir: ${dirname}, Size: ${sizeInMB}MB, Duration: ${duration}s`);
+  pruneOldBackupDirs(backupDir, GLOBAL_CONFIG_SERVER_ID, BACKUP_RETENTION_COUNT);
+  return { status: 'OK', size: sizeInMB, duration, filename: dirname, filepath: outDir };
+}
+
+/**
+ * Checks that a dump directory actually contains the expected data rather
  * than just trusting mongodump's exit code. Returns
  * { valid, reason, totalBytes }.
  */
@@ -586,16 +666,7 @@ function validateDump(outDir) {
     }
   }
 
-  const totalBytes = getDirectorySize(outDir);
-  if (totalBytes < MIN_DUMP_SIZE_BYTES) {
-    return {
-      valid: false,
-      reason: `taille totale du dump (${totalBytes} octets) sous le seuil minimal (${MIN_DUMP_SIZE_BYTES} octets)`,
-      totalBytes
-    };
-  }
-
-  return { valid: true, reason: null, totalBytes };
+  return { valid: true, reason: null, totalBytes: getDirectorySize(outDir) };
 }
 
 function getDirectorySize(dirPath) {
@@ -638,6 +709,8 @@ function pruneOldBackupDirs(backupDir, serverId, keepCount) {
 module.exports = {
   simulateBackup,
   performRealDatabaseBackup,
+  performGlobalConfigBackup,
+  GLOBAL_CONFIG_SERVER_ID,
   checkBackupStatusAndCreateAlert,
   runDailyBackupCheck,
   calculateBackupIndicators
