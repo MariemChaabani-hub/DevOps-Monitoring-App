@@ -10,8 +10,16 @@ import {
 
 import Card from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
-import { Theme } from '@/constants/theme';
+import { Theme, getSubStateColor, getSubStateLabel } from '@/constants/theme';
 import { apiService } from '@/services/apiService';
+
+type DetectedService = {
+  name: string;
+  active_state?: string;
+  sub_state?: string;
+  description?: string;
+  is_system?: boolean;
+};
 
 export default function RemoteActionsScreen() {
   const [servers, setServers] = useState<any[]>([]);
@@ -22,7 +30,22 @@ export default function RemoteActionsScreen() {
   const burstTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const selectedServer = servers.find((s) => s.server_id === selectedServerId);
-  const detectedServices: string[] = selectedServer?.services || [];
+  // server.services is normalized backend-side to {name, active_state,
+  // sub_state, description, is_system} objects — but a document not yet
+  // refreshed by a new-format agent, or an agent that was never updated,
+  // can still hand us a plain string. Normalize defensively here too, same
+  // as the web RemoteActionsPanel.
+  const detectedServices: DetectedService[] = (selectedServer?.services || []).map((s: any) =>
+    typeof s === 'string' ? { name: s, active_state: 'unknown', sub_state: 'unknown', description: '' } : s
+  );
+
+  // Combines the live per-service check (servicesStatus, from
+  // /services-status) with the service's last-known state from the agent's
+  // own detection, live check taking priority — same as the web panel.
+  const getEffectiveSubState = (service: DetectedService) => {
+    const live = servicesStatus[service.name];
+    return live?.subState || service.sub_state || 'unknown';
+  };
 
   useEffect(() => {
     apiService
@@ -65,13 +88,15 @@ export default function RemoteActionsScreen() {
     );
   };
 
-  const runServiceAction = async (action: 'restart' | 'stop', serviceName: string) => {
+  const runServiceAction = async (action: 'restart' | 'stop', serviceName: string, confirm = false) => {
     if (!selectedServerId) return;
     const key = `${serviceName}_${action}`;
     setBusyKey(key);
     try {
-      const fn = action === 'restart' ? apiService.restartService : apiService.stopService;
-      const result = await fn(selectedServerId, serviceName);
+      const result =
+        action === 'restart'
+          ? await apiService.restartService(selectedServerId, serviceName, confirm)
+          : await apiService.stopService(selectedServerId, serviceName);
       Alert.alert('Succès', result.message);
       fetchStatus(selectedServerId);
       scheduleStatusBurst(selectedServerId);
@@ -80,6 +105,27 @@ export default function RemoteActionsScreen() {
     } finally {
       setBusyKey(null);
     }
+  };
+
+  // Entry point for every service action button. A restart on a
+  // 'restart_only' service (ssh, network stack...) needs an explicit
+  // confirmation first — actual enforcement happens server-side
+  // (remoteActions.js requires confirm:true in the body), this is just the
+  // UI step that produces it. Same rule as the web panel.
+  const handleServiceAction = (action: 'restart' | 'stop', service: DetectedService) => {
+    const criticality = servicesStatus[service.name]?.criticality || 'none';
+    if (criticality === 'restart_only' && action === 'restart') {
+      Alert.alert(
+        'Confirmation requise',
+        `Redémarrer ${service.name} sur ${selectedServer?.name || selectedServerId} ? Cette action peut interrompre l'accès au serveur.`,
+        [
+          { text: 'Annuler', style: 'cancel' },
+          { text: 'Confirmer', style: 'destructive', onPress: () => runServiceAction('restart', service.name, true) },
+        ]
+      );
+      return;
+    }
+    runServiceAction(action, service.name);
   };
 
   const handleRebootServer = () => {
@@ -158,35 +204,65 @@ export default function RemoteActionsScreen() {
               </Text>
             )}
 
-            {detectedServices.map((serviceName) => {
-              const status = servicesStatus[serviceName];
+            {detectedServices.map((service) => {
+              const serviceName = service.name;
+              const live = servicesStatus[serviceName];
+              // Criticality is only known once /services-status has
+              // answered for this exact service — until then, show no
+              // action buttons at all rather than defaulting to "allowed"
+              // (could flash an enabled Arrêter on a locked service like
+              // k3s/monitoring-agent) or disabled-but-visible (invites a
+              // tap the backend then rejects with an unexplained error).
+              // Same rule as the web panel.
+              const statusKnown = !!live;
+              const criticality = live?.criticality || 'none';
+              const canStop = statusKnown && criticality === 'none';
+              const canRestart = statusKnown && criticality !== 'locked';
+
+              const subState = getEffectiveSubState(service);
+              const subStateLabel = live?.subStateLabel || getSubStateLabel(subState);
+              const subStateColor = getSubStateColor(subState);
+
               const restartKey = `${serviceName}_restart`;
               const stopKey = `${serviceName}_stop`;
               return (
                 <Card key={serviceName} style={styles.serviceCard}>
                   <View style={styles.serviceHeader}>
                     <Text style={styles.serviceName}>{serviceName}</Text>
-                    <StatusBadge status={status?.status} label={status?.label} />
+                    <StatusBadge label={subStateLabel} color={subStateColor} />
                   </View>
+                  {!!service.description && (
+                    <Text style={styles.serviceDescription}>{service.description}</Text>
+                  )}
                   <View style={styles.serviceActions}>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.restartButton, busyKey === restartKey && styles.disabledButton]}
-                      onPress={() => runServiceAction('restart', serviceName)}
-                      disabled={busyKey === restartKey}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {busyKey === restartKey ? '...' : 'Redémarrer'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.stopButton, busyKey === stopKey && styles.disabledButton]}
-                      onPress={() => runServiceAction('stop', serviceName)}
-                      disabled={busyKey === stopKey}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {busyKey === stopKey ? '...' : 'Arrêter'}
-                      </Text>
-                    </TouchableOpacity>
+                    {!statusKnown && (
+                      <Text style={styles.serviceLoadingText}>Chargement...</Text>
+                    )}
+                    {statusKnown && !canStop && !canRestart && (
+                      <Text style={styles.serviceLoadingText}>Service protégé</Text>
+                    )}
+                    {canRestart && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.restartButton, busyKey === restartKey && styles.disabledButton]}
+                        onPress={() => handleServiceAction('restart', service)}
+                        disabled={busyKey === restartKey}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {busyKey === restartKey ? '...' : 'Redémarrer'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    {canStop && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.stopButton, busyKey === stopKey && styles.disabledButton]}
+                        onPress={() => handleServiceAction('stop', service)}
+                        disabled={busyKey === stopKey}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {busyKey === stopKey ? '...' : 'Arrêter'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </Card>
               );
@@ -291,6 +367,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: Theme.colors.textPrimary,
+  },
+  serviceDescription: {
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+    marginBottom: Theme.spacing.sm,
+  },
+  serviceLoadingText: {
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+    fontStyle: 'italic',
   },
   serviceActions: {
     flexDirection: 'row',

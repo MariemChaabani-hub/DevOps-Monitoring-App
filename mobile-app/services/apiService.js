@@ -79,8 +79,14 @@ export const apiService = {
 
   // Remote actions / services (dual-auth)
   getServicesStatus: (serverId) => api.get(`/remote-actions/${serverId}/services-status`),
-  restartService: (serverId, serviceName) =>
-    api.post(`/remote-actions/${serverId}/restart-service`, { service_name: serviceName }),
+  // `confirm` must be true for a 'restart_only' service (ssh, network...) —
+  // the backend rejects the request with "confirmation requise" otherwise,
+  // regardless of what the UI already asked the user. See remote-actions.tsx.
+  restartService: (serverId, serviceName, confirm) =>
+    api.post(`/remote-actions/${serverId}/restart-service`, {
+      service_name: serviceName,
+      ...(confirm ? { confirm: true } : {}),
+    }),
   stopService: (serverId, serviceName) =>
     api.post(`/remote-actions/${serverId}/stop-service`, { service_name: serviceName }),
   restartServer: (serverId, delay = 30) =>

@@ -225,11 +225,37 @@ class AlertService {
         const elapsedMs = now - lastMetricTime;
 
         if (elapsedMs > offlineThresholdMs) {
-          // Server is offline
-          if (server.status !== 'OFFLINE') {
-            server.status = 'OFFLINE';
-            await server.save();
+          // This list was fetched once at the top of the function, and a
+          // real /metrics POST for this exact server can land — and fully
+          // update it — at any point while this loop is still working
+          // through other servers' alert/email side effects. Writing
+          // `status: 'OFFLINE'` from the snapshot taken above would clobber
+          // that concurrent update: Mongoose's save() only sends the paths
+          // actually modified on this in-memory copy, i.e. `status` alone,
+          // silently reverting a status a fresher request had just set
+          // correctly, while leaving last_metric_time (never touched here)
+          // pointing at the fresh metric — exactly the "OFFLINE status,
+          // recent last_metric_time" contradiction this fixes.
+          //
+          // findOneAndUpdate with the staleness condition baked into the
+          // filter re-evaluates that condition atomically, at the instant
+          // of the write, against the database's current state — not the
+          // snapshot from when this tick started. If a metric arrived in
+          // the meantime, last_metric_time in the filter no longer matches
+          // and this simply updates 0 documents.
+          const staleBefore = new Date(now - offlineThresholdMs);
+          const updatedServer = await Server.findOneAndUpdate(
+            {
+              _id: server._id,
+              is_active: true,
+              status: { $ne: 'OFFLINE' },
+              last_metric_time: { $lt: staleBefore }
+            },
+            { $set: { status: 'OFFLINE' } },
+            { new: true }
+          );
 
+          if (updatedServer) {
             const offlineSeconds = Math.round(elapsedMs / 1000);
 
             // Dashboard cards read Metric.status (see ServerCard.js), not

@@ -31,7 +31,7 @@ export declare const apiService: {
   acknowledgeAlert: (alertId: string, acknowledgedBy: string) => Promise<any>;
 
   getServicesStatus: (serverId: string) => Promise<any>;
-  restartService: (serverId: string, serviceName: string) => Promise<any>;
+  restartService: (serverId: string, serviceName: string, confirm?: boolean) => Promise<any>;
   stopService: (serverId: string, serviceName: string) => Promise<any>;
   restartServer: (serverId: string, delay?: number) => Promise<any>;
 };

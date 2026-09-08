@@ -246,6 +246,20 @@ app.post('/metrics', async (req, res) => {
       });
       await server.save();
       console.log(`[Backend] New server registered: ${serverId}`);
+    } else {
+      // name/location used to be set only once, at creation — if an
+      // agent's config.json was renamed later (e.g. "Monitoring Agent" ->
+      // "default-server"), the old value stayed stuck in the DB forever,
+      // since nothing on subsequent metrics ever refreshed it. Only
+      // overwrite when the agent actually sent a real value, so an agent
+      // that omits server_name/location on some payload doesn't blank out
+      // a good one.
+      if (metric.server_name && server.name !== metric.server_name) {
+        server.name = metric.server_name;
+      }
+      if (metric.location && server.location !== metric.location) {
+        server.location = metric.location;
+      }
     }
 
     // Calculate status

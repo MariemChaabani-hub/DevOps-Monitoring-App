@@ -4,13 +4,16 @@ import { Theme, getStatusColor, getStatusLabel } from '../constants/theme';
 
 /**
  * Small colored status pill. Used by Dashboard (server status), Server
- * Detail (header status) and Alerts (severity). `status` is one of
- * OK/WARNING/CRITICAL/OFFLINE for server status, or a raw severity string
- * (WARNING/CRITICAL) for alerts — both resolve through the same
- * Theme.status color map.
+ * Detail (header status), Alerts (severity), and remote-actions (service
+ * sub-state). `status` is one of OK/WARNING/CRITICAL/OFFLINE for server
+ * status, or a raw severity string (WARNING/CRITICAL) for alerts — both
+ * resolve through Theme.status. `color` is an explicit override for
+ * callers keyed on a different color domain (e.g. service SubState via
+ * getSubStateColor) that Theme.status doesn't cover — when provided, it
+ * takes priority over the status-derived color.
  */
-const StatusBadge = ({ status, label = null }) => {
-  const color = getStatusColor(status);
+const StatusBadge = ({ status, label = null, color: colorOverride = null }) => {
+  const color = colorOverride || getStatusColor(status);
   return (
     <View style={[styles.badge, { backgroundColor: `${color}26`, borderColor: `${color}66` }]}>
       <View style={[styles.dot, { backgroundColor: color }]} />

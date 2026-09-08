@@ -45,6 +45,33 @@ export const getStatusLabel = (status: string): string =>
   STATUS_LABELS_FR[status] || 'Inconnu';
 
 /**
+ * Colors/labels for a systemd service's SubState — a different axis from
+ * server status above (OK/WARNING/CRITICAL/OFFLINE). A unit can be
+ * ActiveState=active while SubState=exited (a one-shot unit that already
+ * finished, not actually running) — SubState is what tells that apart from
+ * a real running daemon, so it's what the badge is keyed on, not ActiveState.
+ */
+const SUB_STATE_COLORS: Record<string, string> = {
+  running: '#4CAF50',
+  exited: '#2196F3',
+  dead: '#F44336',
+  failed: '#F44336',
+};
+
+const SUB_STATE_LABELS_FR: Record<string, string> = {
+  running: 'En cours',
+  exited: 'Terminé',
+  dead: 'Arrêté',
+  failed: 'Échec',
+};
+
+export const getSubStateColor = (subState?: string): string =>
+  (subState && SUB_STATE_COLORS[subState]) || Theme.colors.textMuted;
+
+export const getSubStateLabel = (subState?: string): string =>
+  (subState && SUB_STATE_LABELS_FR[subState]) || 'Inconnu';
+
+/**
  * Kept only so the unused Expo-template scaffolding (parallax-scroll-view,
  * collapsible, themed-text/view) still type-checks against Colors.light /
  * Colors.dark — the app itself has a single fixed dark theme and doesn't
