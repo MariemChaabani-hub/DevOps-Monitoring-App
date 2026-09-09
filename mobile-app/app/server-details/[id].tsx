@@ -66,9 +66,19 @@ export default function ServerDetailsScreen() {
     );
   }
 
-  const points = history.slice(-12);
+  // The backend (GET /api/servers/:id/metrics) sorts by timestamp DESC
+  // (newest first), so the 12 most recent points are the first 12, not the
+  // last 12 — slice(-12) on a descending array grabs the OLDEST points once
+  // there are more than 12 in the window. Take the first 12, then reverse
+  // to chronological order for the chart.
+  const points = [...history].slice(0, 12).reverse();
+  // A local dev machine (vm-virtualbox, default-server) only reports while
+  // powered on, unlike an always-on VPS — the 60-minute window can
+  // legitimately contain 0 or 1 point. A single point still renders (as an
+  // isolated dot, no line), so only true emptiness falls back to the
+  // explicit message below instead of the section silently vanishing.
   const chartData =
-    points.length > 1
+    points.length > 0
       ? {
           labels: points.map((_, i) => (i % 3 === 0 ? `${i}` : '')),
           datasets: [
@@ -89,7 +99,15 @@ export default function ServerDetailsScreen() {
             <Text style={styles.serverName}>{server.name}</Text>
             <Text style={styles.serverMeta}>{server.location || 'Emplacement inconnu'}</Text>
           </View>
-          <StatusBadge status={server.status} />
+          {/* server.status is the raw Server-document field, prone to going
+              stale (see the OFFLINE/fresh-metric investigation this week) —
+              latest_metric.status is written fresh on every /metrics POST
+              and never affected by that. Note: this route names the field
+              `latest_metric` while GET /api/servers (the dashboard list)
+              names the equivalent field `last_metric` — inconsistent naming
+              across the two backend routes, known tech debt, not fixed here
+              to avoid reopening backend work this close to the defense. */}
+          <StatusBadge status={server.latest_metric?.status || server.status} />
         </View>
 
         <View style={styles.metricsRow}>
@@ -99,9 +117,18 @@ export default function ServerDetailsScreen() {
         </View>
       </Card>
 
-      {chartData && (
-        <Card style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Historique récent</Text>
+      <Card style={styles.chartCard}>
+        <Text style={styles.chartTitle}>Historique récent</Text>
+        {!chartData ? (
+          // Never hide the section silently — a local dev machine
+          // (vm-virtualbox, default-server) can legitimately have zero
+          // metrics in the last 60 minutes while powered off, and that
+          // must read as "not enough data", not look like a missing feature.
+          <Text style={styles.emptyHistoryText}>
+            Historique insuffisant pour cette période (aucune métrique reçue dans les 60 dernières minutes)
+          </Text>
+        ) : (
+        <>
           <LineChart
             data={chartData}
             width={screenWidth - Theme.spacing.lg * 2 - Theme.spacing.md * 2}
@@ -130,8 +157,9 @@ export default function ServerDetailsScreen() {
               <Text style={styles.legendText}>RAM</Text>
             </View>
           </View>
-        </Card>
-      )}
+        </>
+        )}
+      </Card>
 
       <Card style={styles.infoCard}>
         <Text style={styles.sectionTitle}>Informations</Text>
@@ -206,6 +234,11 @@ const styles = StyleSheet.create({
   },
   chart: {
     borderRadius: Theme.radius.md,
+  },
+  emptyHistoryText: {
+    fontSize: 13,
+    color: Theme.colors.textMuted,
+    paddingVertical: Theme.spacing.md,
   },
   chartLegend: {
     flexDirection: 'row',

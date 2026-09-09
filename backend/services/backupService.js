@@ -12,6 +12,14 @@ const Server = require('../models/Server');
 const Alert = require('../models/Alert');
 const EmailService = require('./emailService');
 
+// Absolute path, not just 'mongodump' — spawn() resolves a bare command
+// name against the child process's own PATH, which isn't guaranteed to
+// include /usr/local/bin (where the Dockerfile installs it) in every
+// context this runs under (pm2-runtime, Kubernetes-injected env vars can
+// all affect it). Confirmed in production: the binary was present and
+// executable, but spawn('mongodump', ...) still failed with ENOENT.
+const MONGODUMP_BIN = '/usr/local/bin/mongodump';
+
 // Helper function to get today's date at midnight
 function getTodayDateRange() {
   const today = new Date();
@@ -499,7 +507,7 @@ function timestampSuffix() {
 // exit code" handling.
 function runMongodumpOnce(args) {
   return new Promise((resolve) => {
-    const child = spawn('mongodump', args);
+    const child = spawn(MONGODUMP_BIN, args);
     let stderrData = '';
     child.stderr.on('data', (data) => {
       stderrData += data.toString();

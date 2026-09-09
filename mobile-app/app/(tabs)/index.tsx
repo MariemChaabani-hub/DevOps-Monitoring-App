@@ -11,12 +11,14 @@ import {
 } from 'react-native';
 
 import Card from '@/components/Card';
+import MetricBar from '@/components/MetricBar';
 import MetricCard from '@/components/MetricCard';
 import StatusBadge from '@/components/StatusBadge';
 import { APP_CONFIG } from '@/config/constants';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { apiService } from '@/services/apiService';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -64,30 +66,30 @@ export default function DashboardScreen() {
     ]);
   };
 
-  const renderServer = ({ item }: { item: any }) => (
-    <TouchableOpacity onPress={() => router.push(`/server-details/${item.server_id}`)}>
-      <Card style={styles.serverCard}>
-        <View style={styles.serverHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.serverName}>{item.name}</Text>
-            <Text style={styles.serverMeta}>{item.location || 'Emplacement inconnu'}</Text>
+  const renderServer = ({ item }: { item: any }) => {
+    const metrics = item.current_metrics || {};
+    return (
+      <TouchableOpacity onPress={() => router.push(`/server-details/${item.server_id}`)}>
+        <Card style={styles.serverCard}>
+          <View style={styles.serverHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.serverName}>{item.name}</Text>
+              <Text style={styles.serverMeta}>{item.location || 'Emplacement inconnu'}</Text>
+            </View>
+            <StatusBadge status={item.last_metric?.status || item.status} />
           </View>
-          <StatusBadge status={item.status} />
-        </View>
-        <View style={styles.metricsRow}>
-          <Text style={styles.metricText}>
-            CPU {item.current_metrics?.cpu_percent?.toFixed(0) ?? '–'}%
+
+          <MetricBar label="CPU" value={metrics.cpu_percent ?? 0} type="cpu" />
+          <MetricBar label="Mémoire" value={metrics.ram_percent ?? 0} type="ram" />
+          <MetricBar label="Disque" value={metrics.disk_percent ?? 0} type="disk" />
+
+          <Text style={styles.updatedAt}>
+            Mis à jour {formatRelativeTime(item.last_metric?.timestamp || item.last_metric_time)}
           </Text>
-          <Text style={styles.metricText}>
-            RAM {item.current_metrics?.ram_percent?.toFixed(0) ?? '–'}%
-          </Text>
-          <Text style={styles.metricText}>
-            Disque {item.current_metrics?.disk_percent?.toFixed(0) ?? '–'}%
-          </Text>
-        </View>
-      </Card>
-    </TouchableOpacity>
-  );
+        </Card>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -206,14 +208,10 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
     marginTop: 2,
   },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: Theme.spacing.md,
-  },
-  metricText: {
-    fontSize: 13,
-    color: Theme.colors.textSecondary,
-    fontWeight: '600',
+  updatedAt: {
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    marginTop: 4,
   },
   emptyContainer: {
     paddingVertical: Theme.spacing.xl,

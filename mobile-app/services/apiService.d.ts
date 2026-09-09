@@ -32,8 +32,12 @@ export declare const apiService: {
 
   getServicesStatus: (serverId: string) => Promise<any>;
   restartService: (serverId: string, serviceName: string, confirm?: boolean) => Promise<any>;
+  startService: (serverId: string, serviceName: string) => Promise<any>;
   stopService: (serverId: string, serviceName: string) => Promise<any>;
   restartServer: (serverId: string, delay?: number) => Promise<any>;
+  shutdownServer: (serverId: string, delay?: number, reason?: string) => Promise<any>;
+
+  getBackupStatus: (serverId: string) => Promise<any>;
 };
 
 export default apiService;

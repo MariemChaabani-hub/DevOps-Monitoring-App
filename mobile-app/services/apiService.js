@@ -87,10 +87,25 @@ export const apiService = {
       service_name: serviceName,
       ...(confirm ? { confirm: true } : {}),
     }),
+  startService: (serverId, serviceName) =>
+    api.post(`/remote-actions/${serverId}/start-service`, { service_name: serviceName }),
   stopService: (serverId, serviceName) =>
     api.post(`/remote-actions/${serverId}/stop-service`, { service_name: serviceName }),
+  // The backend doesn't respond until the remote `sleep <delay> && sudo
+  // reboot/shutdown` finishes over SSH — with delay up to 60s (shutdown's
+  // default) plus SSH connect overhead, the request can legitimately take
+  // 60-80s. The global 10s timeout (fine for reads like getServers) would
+  // abort these client-side long before the backend ever replies, which
+  // surfaces as a generic "Erreur de connexion au serveur" even though the
+  // action is still running server-side. Override per-request instead of
+  // raising the global timeout, which stays tight for reads.
   restartServer: (serverId, delay = 30) =>
-    api.post(`/remote-actions/${serverId}/restart`, { delay }),
+    api.post(`/remote-actions/${serverId}/restart`, { delay }, { timeout: 90000 }),
+  shutdownServer: (serverId, delay = 60, reason = 'Maintenance planifiée') =>
+    api.post(`/remote-actions/${serverId}/shutdown`, { delay, reason }, { timeout: 90000 }),
+
+  // Backups
+  getBackupStatus: (serverId) => api.get(`/backups/latest/${serverId}`),
 };
 
 export default apiService;

@@ -26,17 +26,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="alerts"
-        options={{
-          title: 'Alertes',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="exclamationmark.triangle.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="remote-actions"
         options={{
           title: 'Actions',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gear.badge" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="backups"
+        options={{
+          title: 'Backups',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="externaldrive.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="alerts"
+        options={{
+          title: 'Alertes',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="exclamationmark.triangle.fill" color={color} />,
         }}
       />
     </Tabs>
