@@ -69,6 +69,18 @@ class BackupCronService {
       console.log(
         `[Backup Cron] Backup complete - OK: ${successful}, FAILED: ${failed}`
       );
+
+      // One aggregated email for the whole run, instead of one per server
+      // (see simulateServerBackup — it no longer sends its own).
+      try {
+        const emailResult = await EmailService.sendBackupSummaryEmail({
+          results: backupResults,
+          timestamp: new Date()
+        });
+        console.log('[Backup Cron] Summary email result:', emailResult);
+      } catch (error) {
+        console.error('[Backup Cron] Error sending backup summary email:', error);
+      }
     } catch (error) {
       console.error('[Backup Cron] Error during backup job:', error.message);
     }
@@ -125,54 +137,14 @@ class BackupCronService {
       // Save to database
       await backup.save();
 
-      // Records/updates the Alert for the dashboard (no email — see
-      // sendBackupCompletionEmail below, the single email for this event).
+      // Records/updates the Alert for the dashboard (no email here — the
+      // whole run's results are emailed once as a single summary, see
+      // runDailyBackup's call to EmailService.sendBackupSummaryEmail after
+      // this Promise.all resolves).
       try {
         await BackupAlertService.checkBackupAndAlert(backup, server);
       } catch (error) {
         console.error('[Backup Cron] Error checking backup alerts:', error);
-      }
-
-      // Send a completion notification email for THIS backup regardless of
-      // status (SUCCESS or FAILED), as required for the daily midnight
-      // report — the single email per backup (see checkBackupAndAlert
-      // above, which no longer sends one of its own for the same event).
-      try {
-        const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
-
-        // Last successful backup strictly before today, for the
-        // day-over-day size/duration comparison — excluded by _id too in
-        // case this cron run's own backup already has an earlier-seeming
-        // date (clock skew, retried run).
-        let previousBackup = null;
-        try {
-          const startOfToday = new Date();
-          startOfToday.setHours(0, 0, 0, 0);
-          previousBackup = await Backup.findOne({
-            serverId: server.server_id,
-            status: 'OK',
-            date: { $lt: startOfToday },
-            _id: { $ne: backup._id }
-          }).sort({ date: -1 });
-        } catch (error) {
-          console.error('[Backup Cron] Error looking up previous backup for comparison:', error);
-        }
-
-        const emailResult = await EmailService.sendBackupCompletionEmail({
-          serverId: server.server_id,
-          serverName: server.name,
-          status: backup.status,
-          size: backup.size,
-          duration: backup.duration,
-          timestamp: backup.date,
-          adminEmail,
-          errorMessage: backup.status === 'FAILED' ? (backupError || 'Backup process did not complete successfully') : null,
-          previousSize: previousBackup ? previousBackup.size : null,
-          previousDuration: previousBackup ? previousBackup.duration : null
-        });
-        console.log(`[Backup Cron] Completion email result for ${server.server_id}:`, emailResult);
-      } catch (error) {
-        console.error('[Backup Cron] Error sending backup completion email:', error);
       }
 
       // Emit real-time socket.io event
@@ -192,7 +164,14 @@ class BackupCronService {
         `(Duration: ${duration}s, Size: ${size}MB)`
       );
 
-      return { serverId: server.server_id, status, duration, size };
+      return {
+        serverId: server.server_id,
+        serverName: server.name,
+        status,
+        duration,
+        size,
+        errorMessage: status === 'FAILED' ? (backupError || 'Backup process did not complete successfully') : null
+      };
     } catch (error) {
       console.error(
         `[Backup Cron] Error processing server ${server.server_id}:`,
@@ -214,7 +193,14 @@ class BackupCronService {
         console.error('[Backup Cron] Failed to save error backup:', saveError.message);
       }
 
-      return { serverId: server.server_id, status: 'FAILED', duration: 0, size: 0 };
+      return {
+        serverId: server.server_id,
+        serverName: server.name,
+        status: 'FAILED',
+        duration: 0,
+        size: 0,
+        errorMessage: error.message
+      };
     }
   }
 

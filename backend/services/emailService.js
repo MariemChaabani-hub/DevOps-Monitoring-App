@@ -408,18 +408,12 @@ class EmailService {
   }
 
   /**
-   * Send a backup completion notification email after EVERY daily backup
-   * run (both SUCCESS and FAILED) — the single email per backup event; the
-   * separate CRITICAL alert email that used to fire alongside this one for
-   * a FAILED backup was removed from BackupAlertService.checkBackupAndAlert
-   * specifically to avoid two emails for the same event.
-   *
-   * `previousSize`/`previousDuration` are optional — the caller looks up
-   * the last successful backup for the same server and passes its size/
-   * duration so this can show a day-over-day comparison. Omit them (or
-   * pass a non-positive/missing value) and the email just shows today's
-   * numbers with no comparison — there's no way to divide by a previous
-   * size of 0, and a first-ever backup has no previous one at all.
+   * Send a backup completion notification email for a single backup event
+   * (OK or FAILED) — used by manual/external-triggered backup recording
+   * (routes/backups.js, backupService.js's checkBackupStatusAndCreateAlert),
+   * not by the nightly cron job anymore (see sendBackupSummaryEmail: the
+   * cron now sends one aggregated email after all servers finish, instead
+   * of one of these per server).
    */
   async sendBackupCompletionEmail(data) {
     try {
@@ -431,9 +425,7 @@ class EmailService {
         duration,
         timestamp,
         adminEmail,
-        errorMessage,
-        previousSize,
-        previousDuration
+        errorMessage
       } = data;
 
       const isSuccess = status === 'OK';
@@ -442,25 +434,8 @@ class EmailService {
       const displayName = serverName || serverId;
       const statusLabel = isSuccess ? 'OK' : 'ÉCHEC';
       const headerColor = isSuccess ? '#2e7d32' : '#d32f2f';
-
-      // Comparison only makes sense on a genuine success, against a real
-      // previous value — a previous size of 0 (or none at all, e.g. the
-      // server's first backup) can't produce a meaningful percentage.
-      const formatDelta = (current, previous) => {
-        if (typeof previous !== 'number' || previous <= 0) return null;
-        const deltaPct = ((current - previous) / previous) * 100;
-        const sign = deltaPct >= 0 ? '+' : '';
-        return `${sign}${deltaPct.toFixed(1)}%`;
-      };
-      const sizeDelta = isSuccess ? formatDelta(size, previousSize) : null;
-      const durationDelta = isSuccess ? formatDelta(duration, previousDuration) : null;
-
-      const sizeCell = sizeDelta
-        ? `${size} MB <span style="color: #888; font-weight: 400;">(hier : ${previousSize} MB, ${sizeDelta})</span>`
-        : `${size} MB`;
-      const durationCell = durationDelta
-        ? `${duration}s <span style="color: #888; font-weight: 400;">(hier : ${previousDuration}s, ${durationDelta})</span>`
-        : `${duration}s`;
+      const sizeCell = `${size} MB`;
+      const durationCell = `${duration}s`;
 
       // If not configured, log to console instead
       if (!this.isConfigured) {
@@ -531,6 +506,104 @@ class EmailService {
 
     } catch (error) {
       console.error(`[Email] ✗ FAILED to send backup completion email`);
+      console.error(`  Error: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send ONE aggregated report after the nightly backup cron finishes
+   * processing every server, instead of one sendBackupCompletionEmail per
+   * server (the old behavior — 4 separate emails for 3 servers + the
+   * global config backup, all landing within the same minute).
+   *
+   * `results` is an array of { serverId, serverName, status, size,
+   * duration, errorMessage }, one entry per backup run this cycle, in
+   * whatever order the caller collected them — this sorts failures to the
+   * top itself, so the caller doesn't need to pre-sort.
+   */
+  async sendBackupSummaryEmail({ results, timestamp }) {
+    try {
+      const total = results.length;
+      const failed = results.filter((r) => r.status !== 'OK');
+      const succeeded = results.filter((r) => r.status === 'OK');
+      const allOk = failed.length === 0;
+
+      const dateStr = new Date(timestamp).toLocaleDateString('fr-FR');
+      const timeStr = new Date(timestamp).toLocaleString('fr-FR');
+      const headerColor = allOk ? '#2e7d32' : '#d32f2f';
+      const summaryLine = `${succeeded.length} sauvegarde${succeeded.length > 1 ? 's' : ''} réussie${succeeded.length > 1 ? 's' : ''} sur ${total}`;
+
+      // Failures first (highlighted, with their error message), then
+      // successes — rather than mixed in whatever order the cron's
+      // Promise.all happened to resolve them.
+      const ordered = [...failed, ...succeeded];
+
+      const rows = ordered.map((r) => {
+        const isSuccess = r.status === 'OK';
+        const displayName = r.serverName || r.serverId;
+        const rowColor = isSuccess ? '#2e7d32' : '#d32f2f';
+        const rowBg = isSuccess ? 'transparent' : '#fdecea';
+        return `
+          <tr style="background-color: ${rowBg};">
+            <td style="padding: 8px 10px; font-weight: 600;">${displayName}</td>
+            <td style="padding: 8px 10px; font-weight: 600; color: ${rowColor};">${isSuccess ? 'OK' : 'ÉCHEC'}</td>
+            <td style="padding: 8px 10px;">${r.size} MB</td>
+            <td style="padding: 8px 10px;">${r.duration}s</td>
+          </tr>
+          ${!isSuccess && r.errorMessage ? `
+          <tr style="background-color: ${rowBg};">
+            <td></td>
+            <td colspan="3" style="padding: 0 10px 8px 10px; color: #d32f2f; font-size: 12px;">${r.errorMessage}</td>
+          </tr>
+          ` : ''}
+        `;
+      }).join('');
+
+      // If not configured, log to console instead
+      if (!this.isConfigured) {
+        console.log(`[Email] Backup Summary Notification - DEMO MODE (real email disabled):`);
+        console.log(`  ${summaryLine}`);
+        results.forEach((r) => console.log(`  ${r.serverName || r.serverId}: ${r.status}`));
+        return { success: true, mode: 'demo', summary: summaryLine };
+      }
+
+      const adminEmail = process.env.ADMIN_EMAIL || 'mariemchaabani39@gmail.com';
+      const mailOptions = {
+        from: this.fromAddress,
+        to: adminEmail,
+        subject: `[SAUVEGARDES ${allOk ? 'OK' : 'ÉCHEC'}] Rapport quotidien — ${dateStr}`,
+        attachments: this._logoAttachment(),
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            ${this._header(headerColor, 'Rapport de Sauvegarde Quotidienne', timeStr)}
+
+            <div style="background-color: #fafafa; padding: 20px 24px; border-radius: 0 0 8px 8px; border: 1px solid #eee; border-top: none;">
+              <p style="font-size: 15px; font-weight: 600; color: #333; margin: 0 0 16px 0;">${summaryLine}</p>
+
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 6px 10px; color: #777; font-weight: 600;">Serveur</td>
+                  <td style="padding: 6px 10px; color: #777; font-weight: 600;">Statut</td>
+                  <td style="padding: 6px 10px; color: #777; font-weight: 600;">Taille</td>
+                  <td style="padding: 6px 10px; color: #777; font-weight: 600;">Durée</td>
+                </tr>
+                ${rows}
+              </table>
+
+              ${this._footer()}
+            </div>
+          </div>
+        `
+      };
+
+      const info = await this._sendMail(mailOptions);
+      console.log(`[Email] ✓ Backup summary email sent successfully`);
+      console.log(`  To: ${adminEmail} | ${summaryLine} | Message ID: ${info.messageId}`);
+      return { success: true, mode: 'real', summary: summaryLine, messageId: info.messageId };
+
+    } catch (error) {
+      console.error(`[Email] ✗ FAILED to send backup summary email`);
       console.error(`  Error: ${error.message}`);
       return { success: false, error: error.message };
     }
