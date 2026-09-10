@@ -21,17 +21,15 @@
 
 const nodemailer = require('nodemailer');
 const fs = require('fs');
-const path = require('path');
 
-// Inside backend/ itself, not frontend/public/ — the backend Docker image
-// is built with `backend/` as its context (docker-compose.yml: `build:
-// ./backend`), so a path reaching into ../../frontend never resolves
-// inside the container. It worked when tested against a local `npm start`
-// (whole monorepo on disk), which silently masked that production emails
-// were always sending without the logo (_logoAttachment() fails open —
-// no file found just means no attachment, not an error).
-const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo-clediss.jpg');
-const LOGO_CID = 'clediss-logo';
+// Served by the backend itself (see server.js's GET /logo.jpg) rather than
+// attached inline via cid: — cid support is inconsistent across mail
+// clients (confirmed broken in Gmail web here: attachment visible/
+// downloadable, but not rendered inline, a broken-image icon in its place).
+// A plain <img src> pointing at a public URL works everywhere. Requires
+// PUBLIC_BASE_URL to be set to the backend's externally reachable address
+// in production; falls back to the known OVH NodePort for this deployment.
+const LOGO_URL = `${process.env.PUBLIC_BASE_URL || 'http://141.227.129.194:30300'}/logo.jpg`;
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const DEFAULT_RESEND_FROM = 'onboarding@resend.dev';
 
@@ -83,10 +81,9 @@ class EmailService {
   /**
    * Sends via the Resend HTTP API. Translates nodemailer-style
    * mailOptions (the shape every method below already builds) into
-   * Resend's payload, including attachments — {filename, path, cid} (the
-   * shape _logoAttachment() returns) becomes base64 content plus
-   * content_id, so the existing `cid:clediss-logo` reference in the HTML
-   * templates keeps working unchanged.
+   * Resend's payload, including attachments — {filename, path, cid} becomes
+   * base64 content plus content_id. Unused by the logo now (served via a
+   * public URL, see LOGO_URL), kept generic for any future real attachment.
    */
   async _sendViaResend(mailOptions) {
     const payload = {
@@ -134,22 +131,6 @@ class EmailService {
   }
 
   /**
-   * Attach the Clediss logo (referenced in HTML via cid:clediss-logo).
-   * Returns an empty array if the logo file isn't found, so emails still
-   * send successfully without it.
-   */
-  _logoAttachment() {
-    try {
-      if (fs.existsSync(LOGO_PATH)) {
-        return [{ filename: 'logo-clediss.jpg', path: LOGO_PATH, cid: LOGO_CID }];
-      }
-    } catch (error) {
-      console.warn('[Email] Could not attach logo:', error.message);
-    }
-    return [];
-  }
-
-  /**
    * Shared compact header used by every email template.
    */
   _header(color, title, subtitle) {
@@ -164,7 +145,7 @@ class EmailService {
             <p style="margin: 2px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.9);">${subtitle}</p>
           </td>
           <td width="1" style="padding: 18px 24px 18px 0; vertical-align: middle; text-align: right; white-space: nowrap;">
-            <img src="cid:${LOGO_CID}" alt="Clediss" style="height: 40px; width: auto; border-radius: 4px; background: white; padding: 2px; display: block;" />
+            <img src="${LOGO_URL}" alt="Clediss" style="height: 40px; width: auto; border-radius: 4px; background: white; padding: 2px; display: block;" />
           </td>
         </tr>
       </table>`;
@@ -262,7 +243,6 @@ class EmailService {
         from: this.fromAddress,
         to: adminEmail,
         subject: `${SEVERITY_INFO.emoji} ${SEVERITY_INFO.subjectTag} ${metricInfo.label} — ${displayName}`,
-        attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
             ${this._header(SEVERITY_INFO.color, SEVERITY_INFO.headerTitle, `${metricInfo.label} à ${value}${metricInfo.unit} — seuil dépassé`)}
@@ -357,7 +337,6 @@ class EmailService {
         from: this.fromAddress,
         to: adminEmail,
         subject: `🚨 [CRITIQUE] Sauvegarde ${statusText} — ${displayName}`,
-        attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
             ${this._header(headerColor, 'Alerte Critique — Sauvegarde', `Sauvegarde ${statusText}`)}
@@ -459,7 +438,6 @@ class EmailService {
         from: this.fromAddress,
         to: adminEmail,
         subject: `[SAUVEGARDE ${statusLabel}] ${displayName} — ${dateStr}`,
-        attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
             ${this._header(headerColor, 'Rapport de Sauvegarde Quotidienne', displayName)}
@@ -580,7 +558,6 @@ class EmailService {
         from: this.fromAddress,
         to: adminEmail,
         subject: `[SAUVEGARDES ${allOk ? 'OK' : 'ÉCHEC'}] Rapport quotidien — ${dateStr}`,
-        attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             ${this._header(headerColor, 'Rapport de Sauvegarde Quotidienne', timeStr)}
@@ -630,7 +607,6 @@ class EmailService {
         from: this.fromAddress,
         to: testEmail,
         subject: 'CLEDISS Monitor — Email de Test',
-        attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
             ${this._header('#1565c0', 'Test de Configuration', 'CLEDISS Monitor')}
@@ -706,7 +682,6 @@ class EmailService {
         from: this.fromAddress,
         to: admin_email,
         subject: `🔐 [AUDIT] ${action} — ${displayName}`,
-        attachments: this._logoAttachment(),
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
             ${this._header('#2e7d32', 'Journal d\'Audit', 'Action à distance effectuée')}

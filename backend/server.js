@@ -15,6 +15,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
 const { Server: SocketIO } = require('socket.io');
@@ -194,6 +195,15 @@ function broadcastUpdate(data) {
     }
   });
 }
+
+// Serves the Clediss logo as a public URL for email templates —
+// cid: inline attachments render inconsistently across mail clients
+// (confirmed: Gmail web showed a broken-image icon, logo only visible as
+// a downloadable attachment). A plain <img src> pointing here works
+// everywhere. See services/emailService.js's LOGO_URL.
+app.get('/logo.jpg', (req, res) => {
+  res.sendFile(path.join(__dirname, 'assets', 'logo-clediss.jpg'));
+});
 
 // Health check
 app.get('/', async (req, res) => {
