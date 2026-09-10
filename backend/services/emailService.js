@@ -23,7 +23,14 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 
-const LOGO_PATH = path.join(__dirname, '..', '..', 'frontend', 'public', 'logo-clediss.jpg');
+// Inside backend/ itself, not frontend/public/ — the backend Docker image
+// is built with `backend/` as its context (docker-compose.yml: `build:
+// ./backend`), so a path reaching into ../../frontend never resolves
+// inside the container. It worked when tested against a local `npm start`
+// (whole monorepo on disk), which silently masked that production emails
+// were always sending without the logo (_logoAttachment() fails open —
+// no file found just means no attachment, not an error).
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo-clediss.jpg');
 const LOGO_CID = 'clediss-logo';
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const DEFAULT_RESEND_FROM = 'onboarding@resend.dev';
