@@ -13,6 +13,7 @@ import {
 import Card from '@/components/Card';
 import MetricBar from '@/components/MetricBar';
 import MetricCard from '@/components/MetricCard';
+import SearchBar from '@/components/SearchBar';
 import StatusBadge from '@/components/StatusBadge';
 import { APP_CONFIG } from '@/config/constants';
 import { Theme } from '@/constants/theme';
@@ -27,7 +28,12 @@ export default function DashboardScreen() {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
   const isFetchingRef = useRef(false);
+
+  const filteredServers = servers.filter((s) =>
+    (s.name || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   const fetchData = useCallback(async () => {
     if (isFetchingRef.current) return;
@@ -103,8 +109,10 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
+      <SearchBar value={search} onChangeText={setSearch} placeholder="Rechercher un serveur..." style={styles.searchBar} />
+
       <FlatList
-        data={servers}
+        data={filteredServers}
         keyExtractor={(item) => item.server_id || item._id}
         renderItem={renderServer}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.colors.accent} />}
@@ -179,6 +187,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Theme.colors.textSecondary,
     fontWeight: '600',
+  },
+  searchBar: {
+    marginHorizontal: Theme.spacing.lg,
+    marginBottom: Theme.spacing.sm,
   },
   listContent: {
     paddingHorizontal: Theme.spacing.lg,

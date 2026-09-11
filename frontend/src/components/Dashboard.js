@@ -26,6 +26,7 @@ const Dashboard = () => {
   const [remoteActionsServerId, setRemoteActionsServerId] = useState(null);
   const [showAlertHistory, setShowAlertHistory] = useState(false);
   const [showThresholdSettings, setShowThresholdSettings] = useState(false);
+  const [serverSearch, setServerSearch] = useState('');
 
   const API_BASE = '';
 
@@ -228,9 +229,24 @@ const Dashboard = () => {
           <>
             {/* Server Cards Grid */}
             <div className="mb-12">
-              <h2 className="text-2xl font-bold text-white mb-6">Vue d'ensemble des Serveurs</h2>
+              <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+                <h2 className="text-2xl font-bold text-white">Vue d'ensemble des Serveurs</h2>
+                <input
+                  type="text"
+                  value={serverSearch}
+                  onChange={(e) => setServerSearch(e.target.value)}
+                  placeholder="Rechercher un serveur..."
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {latestMetrics.map((metric) => {
+                {latestMetrics
+                  .filter((metric) =>
+                    (metric.server_name || metric.serverId || '')
+                      .toLowerCase()
+                      .includes(serverSearch.toLowerCase())
+                  )
+                  .map((metric) => {
                   const serverId = metric.serverId;
                   // Wrap single metric in array for ServerCard compatibility
                   const metricsArray = [metric];

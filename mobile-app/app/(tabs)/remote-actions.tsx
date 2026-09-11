@@ -10,6 +10,7 @@ import {
 
 import AlertModal, { AlertButton } from '@/components/AlertModal';
 import Card from '@/components/Card';
+import SearchBar from '@/components/SearchBar';
 import StatusBadge from '@/components/StatusBadge';
 import { Theme, getSubStateColor, getSubStateLabel } from '@/constants/theme';
 import { apiService } from '@/services/apiService';
@@ -45,6 +46,11 @@ export default function RemoteActionsScreen() {
   const [quickFilter, setQuickFilter] = useState<'all' | 'active' | 'stopped' | 'failed'>('all');
   const [visibleCount, setVisibleCount] = useState(SERVICES_PAGE_SIZE);
   const [alertConfig, setAlertConfig] = useState<{ title: string; message?: string; buttons: AlertButton[] } | null>(null);
+  // Server list search (level 1) and service search (level 2) are
+  // independent — selecting a server doesn't carry the server search text
+  // into the service list, and vice versa.
+  const [serverSearch, setServerSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
   const burstTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Alert.alert() replacement (see AlertModal.tsx) — react-native-web
@@ -87,7 +93,18 @@ export default function RemoteActionsScreen() {
     return true;
   };
 
-  const filteredServices = detectedServices.filter(matchesQuickFilter).sort(bySubStateRank);
+  const matchesServiceSearch = (service: DetectedService) =>
+    service.name.toLowerCase().includes(serviceSearch.toLowerCase());
+
+  // Both filters apply together (AND), not one instead of the other.
+  const filteredServices = detectedServices
+    .filter(matchesQuickFilter)
+    .filter(matchesServiceSearch)
+    .sort(bySubStateRank);
+
+  const filteredServers = servers.filter((s) =>
+    (s.name || '').toLowerCase().includes(serverSearch.toLowerCase())
+  );
 
   const fetchServers = useCallback(() => {
     apiService
@@ -112,6 +129,7 @@ export default function RemoteActionsScreen() {
   useEffect(() => {
     setServicesStatus({});
     setQuickFilter('all');
+    setServiceSearch('');
     setVisibleCount(SERVICES_PAGE_SIZE);
     // Skip the SSH-backed status check entirely for a server already known
     // OFFLINE — it would just hang until each per-service SSH connection
@@ -124,12 +142,13 @@ export default function RemoteActionsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedServerId, fetchStatus]);
 
-  // Changing the filter should restart pagination — otherwise a filtered
-  // list shorter than the current page would just show everything anyway,
-  // and switching back to "Tous" could land mid-list instead of at the top.
+  // Changing the filter (category or text) should restart pagination —
+  // otherwise a filtered list shorter than the current page would just
+  // show everything anyway, and switching back to "Tous" could land
+  // mid-list instead of at the top.
   useEffect(() => {
     setVisibleCount(SERVICES_PAGE_SIZE);
-  }, [quickFilter]);
+  }, [quickFilter, serviceSearch]);
 
   // After an action, a service takes a few seconds to actually change
   // state — a short burst of re-checks (like the web panel) is more useful
@@ -325,6 +344,13 @@ export default function RemoteActionsScreen() {
           })}
         </ScrollView>
 
+        <SearchBar
+          value={serviceSearch}
+          onChangeText={setServiceSearch}
+          placeholder="Rechercher un service..."
+          style={styles.serviceSearchBar}
+        />
+
         {filteredServices.length === 0 ? (
           <Text style={styles.emptyText}>Aucun service ne correspond à ce filtre.</Text>
         ) : (
@@ -348,9 +374,10 @@ export default function RemoteActionsScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Actions à distance</Text>
         </View>
+        <SearchBar value={serverSearch} onChangeText={setServerSearch} placeholder="Rechercher un serveur..." style={styles.searchBar} />
         <ScrollView contentContainerStyle={styles.content}>
           {servers.length === 0 && <Text style={styles.emptyText}>Aucun serveur disponible</Text>}
-          {servers.map((server) => (
+          {filteredServers.map((server) => (
             <TouchableOpacity key={server.server_id} onPress={() => setSelectedServerId(server.server_id)}>
               <Card style={styles.serverCard}>
                 <View style={{ flex: 1 }}>
@@ -461,6 +488,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Theme.colors.textPrimary,
   },
+  searchBar: {
+    marginHorizontal: Theme.spacing.lg,
+    marginBottom: Theme.spacing.sm,
+  },
   content: {
     paddingHorizontal: Theme.spacing.lg,
     paddingBottom: Theme.spacing.xl,
@@ -549,10 +580,13 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexGrow: 0,
-    marginBottom: Theme.spacing.md,
+    marginBottom: Theme.spacing.sm,
   },
   filterContent: {
     gap: Theme.spacing.sm,
+  },
+  serviceSearchBar: {
+    marginBottom: Theme.spacing.md,
   },
   filterChip: {
     paddingVertical: 6,

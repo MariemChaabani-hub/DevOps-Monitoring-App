@@ -33,6 +33,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
   const [actionResult, setActionResult] = useState(null);
   const [showSystemServices, setShowSystemServices] = useState(false);
   const [quickFilter, setQuickFilter] = useState('all');
+  const [serviceSearch, setServiceSearch] = useState('');
   // Independent "voir plus" state per zone — expanding Applicatifs must
   // not expand Système, and vice versa.
   const [expandedZones, setExpandedZones] = useState({ failed: false, applicative: false, system: false });
@@ -110,6 +111,10 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
     return true;
   };
 
+  // Local-only filter, combined with matchesQuickFilter (AND, not either/or).
+  const matchesServiceSearch = (service) =>
+    service.name.toLowerCase().includes(serviceSearch.toLowerCase());
+
   // Serveur actuellement sélectionné (objet complet, pour lire ses services détectés)
   const selectedServerObj = servers.find(
     (s) => (s.server_id || s.serverId) === selectedServer
@@ -147,14 +152,16 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
     return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
   };
 
-  const failedServices = allServices.filter(s => getEffectiveSubState(s) === 'failed').filter(matchesQuickFilter);
+  const failedServices = allServices.filter(s => getEffectiveSubState(s) === 'failed').filter(matchesQuickFilter).filter(matchesServiceSearch);
   const applicativeServices = allServices
     .filter(s => !s.is_system && getEffectiveSubState(s) !== 'failed')
     .filter(matchesQuickFilter)
+    .filter(matchesServiceSearch)
     .sort(byRunningFirst);
   const systemServices = allServices
     .filter(s => s.is_system && getEffectiveSubState(s) !== 'failed')
     .filter(matchesQuickFilter)
+    .filter(matchesServiceSearch)
     .sort(byRunningFirst);
 
   // Fetch services status for selected server
@@ -560,16 +567,25 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
               </p>
             ) : (
               <>
-                <div className="quick-filter-bar">
-                  {QUICK_FILTERS.map(f => (
-                    <button
-                      key={f.key}
-                      className={`quick-filter-btn ${quickFilter === f.key ? 'active' : ''}`}
-                      onClick={() => handleQuickFilterChange(f.key)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
+                <div className="services-controls-row">
+                  <div className="quick-filter-bar">
+                    {QUICK_FILTERS.map(f => (
+                      <button
+                        key={f.key}
+                        className={`quick-filter-btn ${quickFilter === f.key ? 'active' : ''}`}
+                        onClick={() => handleQuickFilterChange(f.key)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    placeholder="Rechercher un service..."
+                    className="service-search-input"
+                  />
                 </div>
 
                 {failedServices.length > 0 && (

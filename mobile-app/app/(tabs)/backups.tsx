@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Card from '@/components/Card';
+import SearchBar from '@/components/SearchBar';
 import { Theme } from '@/constants/theme';
 import { apiService } from '@/services/apiService';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
@@ -66,6 +67,11 @@ export default function BackupsScreen() {
   const [backupStatuses, setBackupStatuses] = useState<Record<string, BackupStatus>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filteredServers = servers.filter((s) =>
+    (s.name || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   const fetchData = useCallback(async () => {
     try {
@@ -114,13 +120,15 @@ export default function BackupsScreen() {
         <Text style={styles.title}>Sauvegardes</Text>
       </View>
 
+      <SearchBar value={search} onChangeText={setSearch} placeholder="Rechercher un serveur..." style={styles.searchBar} />
+
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.colors.accent} />}
       >
         {!loading && servers.length === 0 && <Text style={styles.emptyText}>Aucun serveur disponible</Text>}
 
-        {servers.map((server) => {
+        {filteredServers.map((server) => {
           const backupInfo = backupStatuses[server.server_id];
           const latestBackup = backupInfo?.latest_backup;
           const currentStatus = backupInfo?.current_status || 'Missing';
@@ -222,6 +230,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: Theme.colors.textPrimary,
+  },
+  searchBar: {
+    marginHorizontal: Theme.spacing.lg,
+    marginBottom: Theme.spacing.sm,
   },
   content: {
     paddingHorizontal: Theme.spacing.lg,
