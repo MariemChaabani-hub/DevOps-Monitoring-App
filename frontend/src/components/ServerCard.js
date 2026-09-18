@@ -1,11 +1,25 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
 
-const ServerCard = ({ server, metrics, onRemoteActions }) => {
+const ServerCard = ({ server, metrics, onRemoteActions, onConfigure }) => {
   if (!metrics || metrics.length === 0) {
     return (
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-xl font-semibold text-white mb-4">{server.serverId || 'Inconnu'}</h3>
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="text-xl font-semibold text-white">{server.serverId || 'Inconnu'}</h3>
+          {onConfigure && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfigure(server.serverId);
+              }}
+              className="text-gray-400 hover:text-white transition-all text-lg"
+              title="Configurer le serveur"
+            >
+              ⚙️
+            </button>
+          )}
+        </div>
         <p className="text-gray-400">Aucune métrique disponible</p>
       </div>
     );
@@ -47,6 +61,18 @@ const ServerCard = ({ server, metrics, onRemoteActions }) => {
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={status} />
+          {onConfigure && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfigure(server.serverId);
+              }}
+              className="text-gray-400 hover:text-white transition-all text-lg"
+              title="Configurer le serveur"
+            >
+              ⚙️
+            </button>
+          )}
           {onRemoteActions && (
             <button
               onClick={(e) => {

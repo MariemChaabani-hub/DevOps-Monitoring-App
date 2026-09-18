@@ -10,6 +10,7 @@ import NotificationPopup from './NotificationPopup';
 import RemoteActionsModal from './RemoteActionsModal';
 import AlertHistoryModal from './AlertHistoryModal';
 import ThresholdSettingsModal from './ThresholdSettingsModal';
+import ServerConfigModal from './ServerConfigModal';
 
 const Dashboard = () => {
   const [latestMetrics, setLatestMetrics] = useState([]);
@@ -27,23 +28,61 @@ const Dashboard = () => {
   const [showAlertHistory, setShowAlertHistory] = useState(false);
   const [showThresholdSettings, setShowThresholdSettings] = useState(false);
   const [serverSearch, setServerSearch] = useState('');
+  // { isOpen, serverId } — serverId: null means "add new server" mode.
+  const [serverConfigModal, setServerConfigModal] = useState({ isOpen: false, serverId: null });
 
   const API_BASE = '';
 
-  // Fetch latest metrics from all servers (real-time update)
+  // GET /api/servers returns every registered server (including one with
+  // no metrics yet — freshly added via ServerConfigModal, agent not
+  // running against it yet) plus its last_metric (from the Metric
+  // collection, null if none exists). Normalized below into the same
+  // metric-shaped fields the rest of this component (and ServerCard,
+  // RemoteActionsModal, BackupsPanel) already expect from the old
+  // /api/metrics/latest source, so nothing downstream needs to change.
+  const normalizeServerEntry = (server) => {
+    const lm = server.last_metric;
+    return {
+      _id: server._id,
+      serverId: server.server_id,
+      server_id: server.server_id,
+      name: server.name,
+      server_name: server.name,
+      location: server.location,
+      status: (lm && lm.status) || server.status || 'OFFLINE',
+      cpu_percent: (lm && lm.cpu_percent) ?? server.current_metrics?.cpu_percent ?? 0,
+      ram_percent: (lm && lm.ram_percent) ?? server.current_metrics?.ram_percent ?? 0,
+      disk_percent: (lm && lm.disk_percent) ?? server.current_metrics?.disk_percent ?? 0,
+      timestamp: (lm && lm.timestamp) || server.last_metric_time || server.updated_at,
+      network_in: lm && lm.network_in,
+      network_io: lm && lm.network_io,
+      uptime: lm && lm.uptime,
+      uptime_seconds: lm && lm.uptime_seconds,
+      services: server.services || [],
+      services_detection_failed_at: server.services_detection_failed_at,
+      is_active: server.is_active,
+      // ServerCard shows "Aucune métrique disponible" when its metrics
+      // array is empty — that's the signal for "never reported", not a
+      // real zero-value metric.
+      hasMetric: !!lm
+    };
+  };
+
+  // Fetch latest server list (real-time update)
   const fetchLatestMetrics = async () => {
     setIsUpdating(true);
     try {
-      const response = await axios.get(`${API_BASE}/api/metrics/latest`);
-      if (response.data && response.data.data) {
-        setLatestMetrics(response.data.data);
+      const response = await axios.get(`${API_BASE}/api/servers`);
+      if (response.data) {
+        const normalized = response.data.map(normalizeServerEntry);
+        setLatestMetrics(normalized);
         setLastUpdate(new Date());
         setError(null);
-        return response.data.data;
+        return normalized;
       }
     } catch (err) {
-      setError('Échec de la récupération des dernières métriques : ' + err.message);
-      console.error('Error fetching latest metrics:', err);
+      setError('Échec de la récupération des serveurs : ' + err.message);
+      console.error('Error fetching servers:', err);
     } finally {
       setIsUpdating(false);
     }
@@ -122,6 +161,16 @@ const Dashboard = () => {
   const closeRemoteActionsModal = () => {
     setShowRemoteActionsModal(false);
     setRemoteActionsServerId(null);
+  };
+
+  // Open the config modal — either to edit an existing server (serverId
+  // set) or to add a new one (called with no argument from the "+" button).
+  const handleConfigureServer = (serverId = null) => {
+    setServerConfigModal({ isOpen: true, serverId });
+  };
+
+  const closeServerConfigModal = () => {
+    setServerConfigModal({ isOpen: false, serverId: null });
   };
 
   // Initial fetch when component mounts
@@ -223,7 +272,15 @@ const Dashboard = () => {
         ) : latestMetrics.length === 0 ? (
           <div className="bg-gray-800 rounded-lg p-8 text-center border border-gray-700">
             <p className="text-gray-400 mb-4">Aucun serveur trouvé</p>
-            <p className="text-sm text-gray-500">Démarrez un agent pour commencer la surveillance</p>
+            <p className="text-sm text-gray-500 mb-4">
+              Démarrez un agent pour commencer la surveillance, ou ajoutez un serveur manuellement.
+            </p>
+            <button
+              onClick={() => handleConfigureServer()}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all"
+            >
+              + Ajouter un serveur
+            </button>
           </div>
         ) : (
           <>
@@ -231,13 +288,22 @@ const Dashboard = () => {
             <div className="mb-12">
               <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
                 <h2 className="text-2xl font-bold text-white">Vue d'ensemble des Serveurs</h2>
-                <input
-                  type="text"
-                  value={serverSearch}
-                  onChange={(e) => setServerSearch(e.target.value)}
-                  placeholder="Rechercher un serveur..."
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={serverSearch}
+                    onChange={(e) => setServerSearch(e.target.value)}
+                    placeholder="Rechercher un serveur..."
+                    className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => handleConfigureServer()}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap"
+                    title="Ajouter un serveur"
+                  >
+                    + Ajouter un serveur
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {latestMetrics
@@ -248,8 +314,12 @@ const Dashboard = () => {
                   )
                   .map((metric) => {
                   const serverId = metric.serverId;
-                  // Wrap single metric in array for ServerCard compatibility
-                  const metricsArray = [metric];
+                  // Wrap single metric in array for ServerCard compatibility —
+                  // empty when this server has never actually reported (see
+                  // hasMetric in normalizeServerEntry), so ServerCard shows
+                  // its "Aucune métrique disponible" state instead of a fake
+                  // all-zero reading.
+                  const metricsArray = metric.hasMetric ? [metric] : [];
 
                   return (
                     <div
@@ -262,6 +332,7 @@ const Dashboard = () => {
                         server={{ serverId }}
                         metrics={metricsArray}
                         onRemoteActions={handleRemoteActions}
+                        onConfigure={handleConfigureServer}
                       />
                     </div>
                   );
@@ -375,6 +446,14 @@ const Dashboard = () => {
       <ThresholdSettingsModal
         isOpen={showThresholdSettings}
         onClose={() => setShowThresholdSettings(false)}
+      />
+
+      {/* Server Configuration Modal (add/edit/delete + SSH credentials) */}
+      <ServerConfigModal
+        isOpen={serverConfigModal.isOpen}
+        serverId={serverConfigModal.serverId}
+        onClose={closeServerConfigModal}
+        onSaved={fetchLatestMetrics}
       />
     </div>
   );
