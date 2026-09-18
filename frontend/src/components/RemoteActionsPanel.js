@@ -40,6 +40,9 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
   // { serviceName, action, endpoint, payload } of the action pending
   // confirmation, or null. Only used for restart_only + restart.
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
+  // 'restart' | 'shutdown' | null — server-level action awaiting
+  // confirmation, same "are you sure" step the mobile app already has.
+  const [pendingServerAction, setPendingServerAction] = useState(null);
 
   const statusIntervalRef = useRef(null);
 
@@ -339,6 +342,22 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
     setPendingConfirmation(null);
   };
 
+  // Entry point for the two server-level buttons — same confirm-before-act
+  // step the mobile app already has for "Redémarrer"/"Arrêter le serveur".
+  const handleServerActionClick = (actionType) => {
+    setPendingServerAction(actionType);
+  };
+
+  const confirmPendingServerAction = () => {
+    if (!pendingServerAction) return;
+    if (pendingServerAction === 'restart') {
+      executeRemoteAction('server', 'restart', 'restart', { delay: 30 });
+    } else {
+      executeRemoteAction('server', 'shutdown', 'shutdown', { delay: 60, reason: 'Maintenance planifiée' });
+    }
+    setPendingServerAction(null);
+  };
+
   // Format timestamp
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString();
@@ -458,9 +477,13 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
     // 403).
     const statusKnown = !!live;
     const criticality = getServiceCriticality(serviceName);
-    const canStop = !isServerOffline && statusKnown && criticality === 'none';
-    const canRestart = !isServerOffline && statusKnown && criticality !== 'locked';
-    const canStart = !isServerOffline && statusKnown && getEffectiveSubState(detectedService) !== 'running';
+    // Running → Redémarrer/Arrêter only. Stopped (dead/exited/anything
+    // else not running) → Démarrer only. Criticality gating unchanged:
+    // 'locked' still hides everything, 'restart_only' still hides Arrêter.
+    const isRunning = getEffectiveSubState(detectedService) === 'running';
+    const canStop = !isServerOffline && statusKnown && criticality === 'none' && isRunning;
+    const canRestart = !isServerOffline && statusKnown && criticality !== 'locked' && isRunning;
+    const canStart = !isServerOffline && statusKnown && criticality !== 'locked' && !isRunning;
 
     return (
       <div key={serviceName} className="service-card">
@@ -515,7 +538,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
               {isActionLoading(serviceName, 'stop') ? 'Arrêt...' : 'Arrêter'}
             </button>
           )}
-          {statusKnown && !canStop && !canRestart && (
+          {statusKnown && !canStart && !canStop && !canRestart && (
             <span className="service-protected-note">Service protégé</span>
           )}
         </div>
@@ -632,12 +655,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
                 <h4>Redémarrage du Serveur</h4>
                 <p>Redémarrer complètement le serveur (interruption ~2-3 minutes)</p>
                 <button
-                  onClick={() => executeRemoteAction(
-                    'server',
-                    'restart',
-                    'restart',
-                    { delay: 30 }
-                  )}
+                  onClick={() => handleServerActionClick('restart')}
                   disabled={isServerOffline || isActionLoading('server', 'restart')}
                   className="action-btn restart-server-btn"
                   title={isServerOffline ? 'Serveur hors ligne — SSH injoignable' : undefined}
@@ -650,12 +668,7 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
                 <h4>Arrêt du Serveur</h4>
                 <p>Arrêter complètement le serveur (nécessite intervention manuelle)</p>
                 <button
-                  onClick={() => executeRemoteAction(
-                    'server',
-                    'shutdown',
-                    'shutdown',
-                    { delay: 60, reason: 'Maintenance planifiée' }
-                  )}
+                  onClick={() => handleServerActionClick('shutdown')}
                   disabled={isServerOffline || isActionLoading('server', 'shutdown')}
                   className="action-btn shutdown-btn"
                   title={isServerOffline ? 'Serveur hors ligne — SSH injoignable' : undefined}
@@ -772,6 +785,20 @@ const RemoteActionsPanel = ({ servers = [], preselectedServerId = '', onServerAc
         busy={pendingConfirmation ? isActionLoading(pendingConfirmation.serviceName, 'restart') : false}
         onConfirm={confirmPendingAction}
         onCancel={() => setPendingConfirmation(null)}
+      />
+
+      <ConfirmActionModal
+        isOpen={!!pendingServerAction}
+        title={pendingServerAction === 'shutdown' ? 'Arrêter le serveur' : 'Redémarrer le serveur'}
+        message={
+          pendingServerAction === 'shutdown'
+            ? `Le serveur ${selectedServerObj?.name || selectedServer} va s'éteindre complètement. Vous devrez le redémarrer manuellement. Continuer ?`
+            : `${selectedServerObj?.name || selectedServer} va redémarrer (interruption de quelques minutes). Continuer ?`
+        }
+        confirmLabel={pendingServerAction === 'shutdown' ? 'Arrêter' : 'Confirmer'}
+        busy={pendingServerAction ? isActionLoading('server', pendingServerAction) : false}
+        onConfirm={confirmPendingServerAction}
+        onCancel={() => setPendingServerAction(null)}
       />
     </div>
   );
