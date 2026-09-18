@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -10,16 +10,21 @@ import {
   View,
 } from 'react-native';
 
+import AlertModal, { AlertButton } from '@/components/AlertModal';
 import Card from '@/components/Card';
 import MetricBar from '@/components/MetricBar';
 import MetricCard from '@/components/MetricCard';
 import SearchBar from '@/components/SearchBar';
 import StatusBadge from '@/components/StatusBadge';
-import { APP_CONFIG } from '@/config/constants';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { apiService } from '@/services/apiService';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
+
+// Background polling cadence for this screen only — not the shared
+// APP_CONFIG.REFRESH_INTERVAL, which also drives server-details and would
+// change that screen's behavior too if reused here.
+const POLL_INTERVAL_MS = 15000;
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -29,7 +34,25 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [alertConfig, setAlertConfig] = useState<{ title: string; message?: string; buttons: AlertButton[] } | null>(null);
   const isFetchingRef = useRef(false);
+  // Guards every setState below against firing after this screen has
+  // unmounted — fetchData can still be in flight when that happens (screen
+  // navigated away from mid-request, or the interval firing right as the
+  // component unmounts).
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Alert.alert() replacement (see AlertModal.tsx / remote-actions.tsx) —
+  // react-native-web doesn't render Alert.alert at all.
+  const showAlert = (title: string, message?: string, buttons: AlertButton[] = [{ text: 'OK' }]) => {
+    setAlertConfig({ title, message, buttons });
+  };
 
   const filteredServers = servers.filter((s) =>
     (s.name || '').toLowerCase().includes(search.toLowerCase())
@@ -43,20 +66,28 @@ export default function DashboardScreen() {
         apiService.getServers(),
         apiService.getDashboardSummary(),
       ]);
+      // A background poll or pull-to-refresh can resolve after the screen
+      // unmounted — applying it anyway would warn ("state update on an
+      // unmounted component") and serves no one.
+      if (!isMountedRef.current) return;
       setServers(serversData || []);
       setSummary(summaryData);
     } catch (error) {
+      // Network hiccup on a background refresh — keep whatever was last
+      // successfully loaded rather than clearing the screen.
       console.warn('[Dashboard] fetch error', error);
     } finally {
       isFetchingRef.current = false;
-      setLoading(false);
-      setRefreshing(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, APP_CONFIG.REFRESH_INTERVAL);
+    const interval = setInterval(fetchData, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -66,7 +97,7 @@ export default function DashboardScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', [
+    showAlert('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Déconnexion', style: 'destructive', onPress: logout },
     ]);
@@ -96,6 +127,18 @@ export default function DashboardScreen() {
       </TouchableOpacity>
     );
   };
+
+  // Full-screen spinner only on the very first load — loading only ever
+  // goes true→false once (fetchData's finally never sets it back to true),
+  // so background polls and pull-to-refresh never hit this branch again,
+  // avoiding the flicker/scroll-reset a full remount would cause.
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Theme.colors.accent} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -142,12 +185,17 @@ export default function DashboardScreen() {
           ) : null
         }
         ListEmptyComponent={
-          !loading ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Aucun serveur disponible</Text>
-            </View>
-          ) : null
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Aucun serveur disponible</Text>
+          </View>
         }
+      />
+      <AlertModal
+        visible={!!alertConfig}
+        title={alertConfig?.title || ''}
+        message={alertConfig?.message}
+        buttons={alertConfig?.buttons || []}
+        onRequestClose={() => setAlertConfig(null)}
       />
     </View>
   );
@@ -157,6 +205,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Theme.colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',

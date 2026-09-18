@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Dimensions, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 
 import Card from '@/components/Card';
@@ -10,14 +10,17 @@ import { APP_CONFIG } from '@/config/constants';
 import { Theme } from '@/constants/theme';
 import { apiService } from '@/services/apiService';
 
-const { width: screenWidth } = Dimensions.get('window');
-
 export default function ServerDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [server, setServer] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Dimensions.get('window') doesn't reliably match this card's actual
+  // rendered width (confirmed on web: the chart overflowed its card because
+  // the browser window is wider than the app's own layout column) —
+  // measuring the card itself via onLayout is correct on every platform.
+  const [chartCardWidth, setChartCardWidth] = useState(0);
   const isFetchingRef = useRef(false);
 
   const fetchData = useCallback(async () => {
@@ -117,7 +120,10 @@ export default function ServerDetailsScreen() {
         </View>
       </Card>
 
-      <Card style={styles.chartCard}>
+      <Card
+        style={styles.chartCard}
+        onLayout={(e: LayoutChangeEvent) => setChartCardWidth(e.nativeEvent.layout.width)}
+      >
         <Text style={styles.chartTitle}>Historique récent</Text>
         {!chartData ? (
           // Never hide the section silently — a local dev machine
@@ -127,11 +133,11 @@ export default function ServerDetailsScreen() {
           <Text style={styles.emptyHistoryText}>
             Historique insuffisant pour cette période (aucune métrique reçue dans les 60 dernières minutes)
           </Text>
-        ) : (
+        ) : chartCardWidth === 0 ? null : (
         <>
           <LineChart
             data={chartData}
-            width={screenWidth - Theme.spacing.lg * 2 - Theme.spacing.md * 2}
+            width={chartCardWidth - Theme.spacing.md * 2}
             height={200}
             chartConfig={{
               backgroundColor: Theme.colors.surface,

@@ -15,7 +15,7 @@
 
 .confirm-action-modal {
   background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border: 2px solid rgba(245, 158, 11, 0.35);
+  border: 2px solid rgba(139, 92, 246, 0.35);
   border-radius: 16px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   max-width: 95vw;
@@ -27,7 +27,7 @@
   margin: 0 0 12px 0;
   font-size: 1.15rem;
   font-weight: 700;
-  color: #fbbf24;
+  color: #a78bfa;
 }
 
 .confirm-action-message {
@@ -65,13 +65,13 @@
 }
 
 .confirm-action-confirm-btn {
-  background: rgba(245, 158, 11, 0.2);
-  border-color: rgba(245, 158, 11, 0.5);
-  color: #fbbf24;
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #a78bfa;
 }
 
 .confirm-action-confirm-btn:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.3);
+  background: rgba(139, 92, 246, 0.3);
 }
 
 .confirm-action-cancel-btn:disabled,

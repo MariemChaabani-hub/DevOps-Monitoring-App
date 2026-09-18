@@ -71,10 +71,14 @@ class BackupCronService {
       );
 
       // One aggregated email for the whole run, instead of one per server
-      // (see simulateServerBackup — it no longer sends its own).
+      // (see simulateServerBackup — it no longer sends its own). The
+      // global-config backup is still performed and logged above like any
+      // other entry — just excluded from the email itself, which reports
+      // on monitored servers, not on the app's own internal config dump.
+      const emailResults = backupResults.filter(r => r.serverId !== GLOBAL_CONFIG_SERVER_ID);
       try {
         const emailResult = await EmailService.sendBackupSummaryEmail({
-          results: backupResults,
+          results: emailResults,
           timestamp: new Date()
         });
         console.log('[Backup Cron] Summary email result:', emailResult);

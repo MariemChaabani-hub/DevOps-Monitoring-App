@@ -37,6 +37,9 @@ const QUICK_FILTERS: { key: 'all' | 'active' | 'stopped' | 'failed'; label: stri
   { key: 'failed', label: 'En échec' },
 ];
 
+// Same cadence as the dashboard — see its own POLL_INTERVAL_MS comment.
+const POLL_INTERVAL_MS = 15000;
+
 export default function RemoteActionsScreen() {
   const [servers, setServers] = useState<any[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
@@ -46,12 +49,24 @@ export default function RemoteActionsScreen() {
   const [quickFilter, setQuickFilter] = useState<'all' | 'active' | 'stopped' | 'failed'>('all');
   const [visibleCount, setVisibleCount] = useState(SERVICES_PAGE_SIZE);
   const [alertConfig, setAlertConfig] = useState<{ title: string; message?: string; buttons: AlertButton[] } | null>(null);
+  const [loading, setLoading] = useState(true);
   // Server list search (level 1) and service search (level 2) are
   // independent — selecting a server doesn't carry the server search text
   // into the service list, and vice versa.
   const [serverSearch, setServerSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
   const burstTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const isFetchingServersRef = useRef(false);
+  // Guards setState calls below against firing after unmount — a
+  // background poll or an in-flight action's finally can resolve after
+  // the user has already navigated away from this screen.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Alert.alert() replacement (see AlertModal.tsx) — react-native-web
   // doesn't render Alert.alert at all. Defaults to a single dismiss button
@@ -106,15 +121,28 @@ export default function RemoteActionsScreen() {
     (s.name || '').toLowerCase().includes(serverSearch.toLowerCase())
   );
 
-  const fetchServers = useCallback(() => {
-    apiService
-      .getServers()
-      .then((data) => setServers(data || []))
-      .catch((error: any) => showAlert('Erreur', error.message || 'Impossible de charger les serveurs'));
+  const fetchServers = useCallback(async () => {
+    if (isFetchingServersRef.current) return;
+    isFetchingServersRef.current = true;
+    try {
+      const data = await apiService.getServers();
+      if (!isMountedRef.current) return;
+      setServers(data || []);
+    } catch (error: any) {
+      // Silent on a background poll — an alert popup every 15s while
+      // offline would be far worse than just keeping the last known data
+      // on screen, which is what the empty catch here achieves.
+      console.warn('[RemoteActions] fetch servers error', error);
+    } finally {
+      isFetchingServersRef.current = false;
+      if (isMountedRef.current) setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     fetchServers();
+    const interval = setInterval(fetchServers, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [fetchServers]);
 
   const fetchStatus = useCallback(async (serverId: string) => {
@@ -217,11 +245,14 @@ export default function RemoteActionsScreen() {
             try {
               const result = await apiService.restartServer(selectedServer.server_id, 30);
               showAlert('Succès', result.message);
-              fetchServers();
             } catch (error: any) {
               showAlert('Erreur', error.message || 'Impossible de redémarrer le serveur');
             } finally {
               setServerActionBusy(null);
+              // Refresh right away instead of waiting for the next poll
+              // tick — regardless of outcome: a failed action can still
+              // have left the server in a different state than before.
+              fetchServers();
             }
           },
         },
@@ -244,11 +275,11 @@ export default function RemoteActionsScreen() {
             try {
               const result = await apiService.shutdownServer(selectedServer.server_id, 60, 'Maintenance planifiée');
               showAlert('Succès', result.message);
-              fetchServers();
             } catch (error: any) {
               showAlert('Erreur', error.message || "Impossible d'arrêter le serveur");
             } finally {
               setServerActionBusy(null);
+              fetchServers();
             }
           },
         },
@@ -269,9 +300,13 @@ export default function RemoteActionsScreen() {
     // on a locked service like k3s/monitoring-agent) or disabled-but-
     // visible (invites a tap the backend then rejects). Same rule as web.
     const criticality = live?.criticality || 'none';
-    const canStart = statusKnown && criticality !== 'locked' && subState !== 'running';
-    const canRestart = statusKnown && criticality !== 'locked';
-    const canStop = statusKnown && criticality === 'none';
+    const isRunning = subState === 'running';
+    // Running → Redémarrer/Arrêter only. Stopped (dead/exited/anything
+    // else not running) → Démarrer only. Criticality gating unchanged:
+    // 'locked' still hides everything, 'restart_only' still hides Arrêter.
+    const canStart = statusKnown && criticality !== 'locked' && !isRunning;
+    const canRestart = statusKnown && criticality !== 'locked' && isRunning;
+    const canStop = statusKnown && criticality === 'none' && isRunning;
 
     const startKey = `${service.name}_start`;
     const restartKey = `${service.name}_restart`;
@@ -366,6 +401,16 @@ export default function RemoteActionsScreen() {
       </View>
     );
   };
+
+  // Full-screen spinner only on the very first load — loading only ever
+  // goes true→false once, so background polls never hit this again.
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Theme.colors.accent} />
+      </View>
+    );
+  }
 
   // ---- Level 1: server list ----
   if (!selectedServerId) {
@@ -471,6 +516,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Theme.colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingHorizontal: Theme.spacing.lg,
