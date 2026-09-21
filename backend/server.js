@@ -196,11 +196,12 @@ function broadcastUpdate(data) {
   });
 }
 
-// Serves the Clediss logo as a public URL for email templates —
-// cid: inline attachments render inconsistently across mail clients
-// (confirmed: Gmail web showed a broken-image icon, logo only visible as
-// a downloadable attachment). A plain <img src> pointing here works
-// everywhere. See services/emailService.js's LOGO_URL.
+// Serves the Clediss logo as a standalone public asset. Not used by the
+// email templates anymore — those embed the logo as a base64 data URI
+// instead (see services/emailService.js's LOGO_DATA_URI), since this route
+// depends on the deployed backend actually including it, which broke once
+// already after a stale image was left running for days. Kept as a plain
+// static asset endpoint in case something else wants to link the logo.
 app.get('/logo.jpg', (req, res) => {
   res.sendFile(path.join(__dirname, 'assets', 'logo-clediss.jpg'));
 });

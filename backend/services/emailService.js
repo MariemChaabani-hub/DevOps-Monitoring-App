@@ -21,15 +21,27 @@
 
 const nodemailer = require('nodemailer');
 const fs = require('fs');
+const path = require('path');
 
-// Served by the backend itself (see server.js's GET /logo.jpg) rather than
-// attached inline via cid: — cid support is inconsistent across mail
-// clients (confirmed broken in Gmail web here: attachment visible/
-// downloadable, but not rendered inline, a broken-image icon in its place).
-// A plain <img src> pointing at a public URL works everywhere. Requires
-// PUBLIC_BASE_URL to be set to the backend's externally reachable address
-// in production; falls back to the known OVH NodePort for this deployment.
-const LOGO_URL = `${process.env.PUBLIC_BASE_URL || 'http://141.227.129.194:30300'}/logo.jpg`;
+// Embedded as a base64 data URI directly in the HTML, not linked via
+// cid: (confirmed broken in Gmail web: attachment downloadable but not
+// rendered inline) nor via a public URL to GET /logo.jpg (depends on the
+// deployed backend image actually including that route — confirmed 404 in
+// production after a stale image was left running for days). A data URI
+// has no such dependency: it's part of the email itself, so it renders
+// the moment the email is opened, regardless of what's deployed or
+// reachable at send time. Read once at module load — this file is tiny
+// (~5KB) and never changes at runtime, so there's no reason to re-read it
+// on every send.
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo-clediss.jpg');
+let LOGO_DATA_URI = null;
+try {
+  const logoBuffer = fs.readFileSync(LOGO_PATH);
+  LOGO_DATA_URI = `data:image/jpeg;base64,${logoBuffer.toString('base64')}`;
+} catch (error) {
+  console.warn('[Email] Could not load logo for inline embedding:', error.message);
+}
+
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const DEFAULT_RESEND_FROM = 'onboarding@resend.dev';
 
@@ -82,8 +94,9 @@ class EmailService {
    * Sends via the Resend HTTP API. Translates nodemailer-style
    * mailOptions (the shape every method below already builds) into
    * Resend's payload, including attachments — {filename, path, cid} becomes
-   * base64 content plus content_id. Unused by the logo now (served via a
-   * public URL, see LOGO_URL), kept generic for any future real attachment.
+   * base64 content plus content_id. Unused by the logo now (embedded as a
+   * data URI directly in the HTML, see LOGO_DATA_URI), kept generic for
+   * any future real attachment.
    */
   async _sendViaResend(mailOptions) {
     const payload = {
@@ -144,9 +157,11 @@ class EmailService {
             <h1 style="margin: 0; font-size: 17px; color: white; font-weight: 600;">${title}</h1>
             <p style="margin: 2px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.9);">${subtitle}</p>
           </td>
+          ${LOGO_DATA_URI ? `
           <td width="1" style="padding: 18px 24px 18px 0; vertical-align: middle; text-align: right; white-space: nowrap;">
-            <img src="${LOGO_URL}" alt="Clediss" style="height: 40px; width: auto; border-radius: 4px; background: white; padding: 2px; display: block;" />
+            <img src="${LOGO_DATA_URI}" alt="Clediss" style="height: 40px; width: auto; border-radius: 4px; background: white; padding: 2px; display: block;" />
           </td>
+          ` : ''}
         </tr>
       </table>`;
   }
