@@ -51,7 +51,25 @@ const execSshRaw = async (server, command) => {
       password: server.ssh_password,
       port: server.ssh_port || 22
     });
-    const result = await ssh.execCommand(command);
+
+    // A plain `sudo <cmd>` needs a TTY to prompt for a password — node-ssh
+    // runs commands without one, so on any host whose sudoers file doesn't
+    // grant this user NOPASSWD for the command, sudo refuses outright
+    // ("a terminal is required to read the password"). Confirmed: works on
+    // vm-virtualbox (NOPASSWD configured there) but fails the same way on
+    // vm-monitoring-2 (it isn't). `sudo -S` reads the password from stdin
+    // instead of a TTY, so piping it in here works regardless of NOPASSWD
+    // — no per-host sudoers setup required. Assumes the SSH login password
+    // doubles as this user's sudo password, true for every server this app
+    // manages today (one admin-level user per VM, single credential).
+    let finalCommand = command;
+    const execOptions = {};
+    if (/\bsudo\b/.test(command) && !/\bsudo\s+-S\b/.test(command)) {
+      finalCommand = command.replace(/\bsudo\b/, 'sudo -S');
+      execOptions.stdin = `${server.ssh_password}\n`;
+    }
+
+    const result = await ssh.execCommand(finalCommand, execOptions);
     await ssh.dispose();
     return result; // { stdout, stderr, code, signal }
   } catch (err) {
@@ -472,7 +490,12 @@ router.post('/:server_id/restart',
         console.log(`[Remote Action] Connexion SSH établie avec ${server.ip_address}`);
 
         // Exécuter la commande de redémarrage
-        const result = await ssh.execCommand(`sleep ${delay} && sudo reboot`);
+        // sudo -S + stdin: see execSshRaw's comment on the same pattern —
+        // without it, this fails on any host without NOPASSWD sudo
+        // ("a terminal is required to read the password").
+        const result = await ssh.execCommand(`sleep ${delay} && sudo -S reboot`, {
+          stdin: `${server.ssh_password}\n`
+        });
 
         console.log(`[Remote Action] Commande reboot envoyée - stdout: ${result.stdout}, stderr: ${result.stderr}, code: ${result.code}`);
 
@@ -628,7 +651,11 @@ router.post('/:server_id/shutdown',
         // cut immediately after the command was accepted, which is
         // exactly what a real shutdown looks like from here. Treated as a
         // probable success, not a failure — see the plan discussed above.
-        const sshResult = await ssh.execCommand(`sleep ${delay} && sudo shutdown -h now`);
+        // sudo -S + stdin: see execSshRaw's comment on the same pattern —
+        // without it, this fails on any host without NOPASSWD sudo.
+        const sshResult = await ssh.execCommand(`sleep ${delay} && sudo -S shutdown -h now`, {
+          stdin: `${server.ssh_password}\n`
+        });
         console.log(`[Remote Action] Commande shutdown envoyée - stdout: ${sshResult.stdout}, stderr: ${sshResult.stderr}, code: ${sshResult.code}`);
 
         try {
